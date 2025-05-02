@@ -153,7 +153,13 @@ const PatientSearchPage: React.FC = () => {
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
-                    Actions
+                    Patient Details
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Summary Care Records
                   </th>
                 </tr>
               </thead>
@@ -182,10 +188,18 @@ const PatientSearchPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link
-                        to={`/patient/${patient.id}`}
+                        to={`/patient/${patient.id}/details`}
                         className="text-blue-600 hover:text-blue-900"
                       >
                         View Details
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <Link
+                        to={`/patient/${patient.id}`}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        View Summary
                       </Link>
                     </td>
                   </tr>

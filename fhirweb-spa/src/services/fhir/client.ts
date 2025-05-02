@@ -439,6 +439,49 @@ export const fhirApi = createApi({
       },
       providesTags: ['Location'],
     }),
+    // New specific patient mutations
+    createPatient: builder.mutation<Patient, Patient>({
+      queryFn: async (patient) => {
+        try {
+          const client = createFHIRClient();
+          const result = await client.create({
+            resourceType: 'Patient',
+            body: patient,
+          });
+          return { data: result as Patient };
+        } catch (error) {
+          return {
+            error: { status: 'FETCH_ERROR', error: String(error) },
+          };
+        }
+      },
+      invalidatesTags: ['Patient'],
+    }),
+
+    updatePatient: builder.mutation<Patient, Patient>({
+      queryFn: async (patient) => {
+        try {
+          if (!patient.id) {
+            throw new Error('Patient ID is required for updates');
+          }
+
+          const client = createFHIRClient();
+          const result = await client.update({
+            resourceType: 'Patient',
+            id: patient.id,
+            body: patient,
+          });
+          return { data: result as Patient };
+        } catch (error) {
+          return {
+            error: { status: 'FETCH_ERROR', error: String(error) },
+          };
+        }
+      },
+      invalidatesTags: (_result, _error, patient) => [
+        { type: 'Patient', id: patient.id },
+      ],
+    }),
   }),
 });
 
@@ -455,6 +498,9 @@ export const {
   useUpdateResourceMutation,
   useDeleteResourceMutation,
   useGetResourceByIdQuery,
+  // New patient-specific mutations
+  useCreatePatientMutation,
+  useUpdatePatientMutation,
   // Export new hooks
   useGetPractitionersQuery,
   useGetOrganizationsQuery,
