@@ -648,6 +648,7 @@ const PatientCrudPage: React.FC = () => {
                     })
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Patient active status"
                 >
                   <option value="true">Yes</option>
                   <option value="false">No</option>
@@ -668,6 +669,7 @@ const PatientCrudPage: React.FC = () => {
                   value={formData.gender || 'unknown'}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Patient gender"
                 >
                   <option value="male">Male</option>
                   <option value="female">Female</option>
@@ -697,6 +699,9 @@ const PatientCrudPage: React.FC = () => {
                   value={formData.birthDate || ''}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Birth Date"
+                  placeholder="YYYY-MM-DD"
+                  title="Enter patient's birth date"
                 />
               ) : (
                 <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -762,6 +767,9 @@ const PatientCrudPage: React.FC = () => {
                     value={name.text || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter display name"
+                    title="Full display name for the patient"
+                    aria-label={`Patient display name ${index + 1}`}
                   />
                 ) : (
                   <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -802,6 +810,7 @@ const PatientCrudPage: React.FC = () => {
                     value={identifier.system || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    aria-label={`Identifier system ${index + 1}`}
                   >
                     <option value="">Select a system</option>
                     {commonIdentifierSystems.map((system) => (
@@ -831,6 +840,9 @@ const PatientCrudPage: React.FC = () => {
                     value={identifier.value || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter identifier value"
+                    title="Value of the patient identifier"
+                    aria-label={`Identifier value ${index + 1}`}
                   />
                 ) : (
                   <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -885,6 +897,7 @@ const PatientCrudPage: React.FC = () => {
                     value={telecom.system || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    aria-label={`Contact system ${index + 1}`}
                   >
                     <option value="">Select a system</option>
                     <option value="phone">Phone</option>
@@ -915,6 +928,13 @@ const PatientCrudPage: React.FC = () => {
                     value={telecom.value || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={`Enter ${
+                      telecom.system || 'contact'
+                    } information`}
+                    title={`Enter ${
+                      telecom.system || 'contact'
+                    } information value`}
+                    aria-label={`Contact value ${index + 1}`}
                   />
                 ) : (
                   <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -932,6 +952,7 @@ const PatientCrudPage: React.FC = () => {
                     value={telecom.use || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    aria-label={`Contact use ${index + 1}`}
                   >
                     <option value="">Select a use</option>
                     <option value="home">Home</option>
@@ -997,6 +1018,9 @@ const PatientCrudPage: React.FC = () => {
                       value={address.line?.[0] || ''}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter address line"
+                      title="Street address, apartment, suite, etc."
+                      aria-label={`Address line ${index + 1}`}
                     />
                   ) : (
                     <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -1015,6 +1039,9 @@ const PatientCrudPage: React.FC = () => {
                       value={address.city || ''}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter city name"
+                      title="City for this address"
+                      aria-label={`City for address ${index + 1}`}
                     />
                   ) : (
                     <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -1033,6 +1060,9 @@ const PatientCrudPage: React.FC = () => {
                       value={address.state || ''}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter state or province"
+                      title="State or province for this address"
+                      aria-label={`State for address ${index + 1}`}
                     />
                   ) : (
                     <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -1051,6 +1081,9 @@ const PatientCrudPage: React.FC = () => {
                       value={address.postalCode || ''}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter postal code"
+                      title="Postal or zip code for this address"
+                      aria-label={`Postal code for address ${index + 1}`}
                     />
                   ) : (
                     <div className="py-2 px-3 bg-gray-50 rounded-md">
@@ -1068,6 +1101,7 @@ const PatientCrudPage: React.FC = () => {
                       value={address.country || ''}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      aria-label={`Address country ${index + 1}`}
                     >
                       <option value="">Select a country</option>
                       {countryCodes.map((country) => (
@@ -1096,6 +1130,7 @@ const PatientCrudPage: React.FC = () => {
                       value={address.use || ''}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      aria-label={`Address use ${index + 1}`}
                     >
                       <option value="">Select a use</option>
                       <option value="home">Home</option>
