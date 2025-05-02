@@ -266,121 +266,108 @@ function isSimpleSubPath(path, baseResourceType) {
   return false;
 }
 
-// Organize elements into logical groups
+// Organize elements into logical groups based on FHIR structure
 function organizeElementsIntoGroups(resourceType, elements) {
-  // Define common group categories and the elements that belong to each
-  const groupCategories = {
-    identification: ['id', 'identifier', 'status', 'code', 'category', 'title'],
-    timing: [
-      'issued',
-      'effective[x]',
-      'period',
-      'date',
-      'created',
-      'authoredOn',
-      'time',
-      'occurrence[x]',
-    ],
-    clinical: [
-      'value[x]',
-      'dataAbsentReason',
-      'interpretation',
-      'note',
-      'bodySite',
-      'bodyStructure',
-      'method',
-      'goal',
-      'outcome',
-      'activity',
-      'addresses',
-      'reason',
-      'dosage',
-      'site',
-      'route',
-    ],
-    subject: [
-      'subject',
-      'patient',
-      'focus',
-      'encounter',
-      'performer',
-      'participant',
-    ],
-    relationshipsAndReferences: [
-      'basedOn',
-      'partOf',
-      'hasMember',
-      'derivedFrom',
-      'device',
-      'specimen',
-      'referenceRange',
-      'related',
-      'supportingInfo',
-      'instantiates[x]',
-      'definition',
-    ],
-    components: ['component'],
-  };
-
   // Create the groups structure
   const groups = [];
-
-  // Map to track which elements have been assigned to groups
+  
+  // Track which elements have been assigned to groups
   const assignedElements = new Set();
-
-  // First, distribute elements to their appropriate groups
-  Object.entries(groupCategories).forEach(([groupId, patterns]) => {
-    const groupElements = [];
-
-    elements.forEach((element) => {
-      const elementName = element.path.split('.').pop();
-
-      // Check if element matches any pattern for this group
-      if (
-        patterns.some((pattern) => {
-          // Handle [x] elements which match different patterns
-          if (pattern.includes('[x]')) {
-            const baseName = pattern.replace('[x]', '');
-            return (
-              elementName.startsWith(baseName) &&
-              elementName.length > baseName.length &&
-              elementName[baseName.length] ===
-                elementName[baseName.length].toUpperCase()
-            );
-          }
-          return elementName === pattern;
-        })
-      ) {
-        groupElements.push(element.path.split('.').pop());
-        assignedElements.add(element.path);
-      }
+  
+  // First, identify all backbone elements to create groups
+  const backboneGroups = new Map();
+  const backboneElements = elements.filter(element => {
+    const types = element.type || [];
+    return types.some(type => type.code === 'BackboneElement');
+  });
+  
+  // Create a group for each backbone element
+  backboneElements.forEach(backbone => {
+    const pathParts = backbone.path.split('.');
+    const elementName = pathParts[pathParts.length - 1];
+    
+    // Format the group title (e.g., "admission" -> "Admission Details")
+    const groupTitle = elementName.charAt(0).toUpperCase() + 
+                       elementName.slice(1) + ' Details';
+    
+    backboneGroups.set(backbone.path, {
+      id: elementName.toLowerCase(),
+      title: groupTitle,
+      elements: [],
+      path: backbone.path
     });
-
-    // Only create the group if it has elements
-    if (groupElements.length > 0) {
-      groups.push({
-        id: groupId,
-        title: formatGroupTitle(groupId),
-        elements: groupElements,
-      });
+  });
+  
+  // Create an "Overview" group for top-level elements
+  const overviewGroup = {
+    id: 'overview',
+    title: 'Overview',
+    elements: []
+  };
+  
+  // Assign elements to their respective groups
+  elements.forEach(element => {
+    const path = element.path;
+    const pathParts = path.split('.');
+    
+    // Skip backbone elements themselves
+    if (element.type && element.type.some(type => type.code === 'BackboneElement')) {
+      assignedElements.add(path);
+      return;
+    }
+    
+    // If this is a direct child of the resource type (i.e., path has only 2 parts)
+    if (pathParts.length === 2) {
+      overviewGroup.elements.push(pathParts[1]);
+      assignedElements.add(path);
+      return;
+    }
+    
+    // Find the backbone parent for this element
+    for (const [backbonePath, group] of backboneGroups.entries()) {
+      if (path.startsWith(backbonePath + '.')) {
+        // Get the element name relative to its backbone parent
+        const elementName = pathParts[pathParts.length - 1];
+        group.elements.push(elementName);
+        assignedElements.add(path);
+        return;
+      }
     }
   });
-
-  // Add any remaining elements to an "other" group
-  const otherElements = elements
-    .filter((element) => !assignedElements.has(element.path))
-    .map((element) => element.path.split('.').pop());
-
-  if (otherElements.length > 0) {
+  
+  // Add the overview group if it has elements
+  if (overviewGroup.elements.length > 0) {
+    groups.push(overviewGroup);
+  }
+  
+  // Add backbone groups in the order they appear in the structure definition
+  const sortedBackboneGroups = Array.from(backboneGroups.values())
+    .sort((a, b) => {
+      // Find the index of these elements in the original elements array
+      const indexA = elements.findIndex(e => e.path === a.path);
+      const indexB = elements.findIndex(e => e.path === b.path);
+      return indexA - indexB;
+    });
+  
+  groups.push(...sortedBackboneGroups);
+  
+  // Check if any elements were not assigned to a group
+  const unassignedElements = elements
+    .filter(element => !assignedElements.has(element.path))
+    .map(element => {
+      const pathParts = element.path.split('.');
+      return pathParts[pathParts.length - 1];
+    });
+  
+  if (unassignedElements.length > 0) {
     groups.push({
       id: 'other',
       title: 'Other Information',
-      elements: otherElements,
+      elements: unassignedElements
     });
   }
-
-  // Add resource-specific groups and customizations
-  return customizeGroupsForResourceType(resourceType, groups);
+  
+  return groups;
 }
 
 // Format a group ID into a readable title

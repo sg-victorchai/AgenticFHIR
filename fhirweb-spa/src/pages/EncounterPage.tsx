@@ -46,7 +46,7 @@ const EncounterPage: React.FC = () => {
 
           // Extract class display
           const classCoding = resource.class?.[0]?.coding?.[0];
-          const classDisplay = classCoding?.display || 'Unknown Class';
+          const classDisplay = classCoding?.display || '';
 
           // Extract service provider name
           const serviceProviderDisplay =

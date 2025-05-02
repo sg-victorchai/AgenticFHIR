@@ -8,11 +8,12 @@ import CarePlanPage from './pages/CarePlanPage';
 import ObservationPage from './pages/ObservationPage';
 import MedicationRequestPage from './pages/MedicationRequestPage';
 import EncounterPage from './pages/EncounterPage';
-// Fix import paths for the CRUD components
+// CRUD components
 import CarePlanCrudPage from './pages/crud/CarePlanCrudPage';
 import ObservationCrudPage from './pages/crud/ObservationCrudPage';
 import MedicationRequestCrudPage from './pages/crud/MedicationRequestCrudPage';
 import EncounterCrudPage from './pages/crud/EncounterCrudPage';
+import PatientCrudPage from './pages/crud/PatientCrudPage';
 import NotFound from './pages/NotFound';
 
 const AppRoutes: React.FC = () => {
@@ -21,6 +22,8 @@ const AppRoutes: React.FC = () => {
       <Route path="/launch" element={<LaunchPage />} />
       <Route path="/" element={<HomePage />} />
       <Route path="/patients" element={<PatientSearchPage />} />
+      <Route path="/patient/new" element={<PatientCrudPage />} />
+      <Route path="/patient/:id/details" element={<PatientCrudPage />} />
       <Route path="/patient/:id" element={<PatientPage />}>
         {/* CarePlan becomes a nested route under patient */}
         <Route path="careplan" element={<CarePlanPage />} />
