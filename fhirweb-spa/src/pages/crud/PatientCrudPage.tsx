@@ -27,6 +27,9 @@ const PatientCrudPage: React.FC = () => {
     identifier: [],
   });
 
+  // Add state for showing error messages
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
   // Queries and mutations
   // Use the correct id for the query - for /patient/:id/details paths, we need to extract the ID
   const patientId = isNew ? '' : id;
@@ -464,18 +467,51 @@ const PatientCrudPage: React.FC = () => {
     }
   };
 
-  // Handle save
-  const handleSave = async () => {
+  // Form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
     try {
+      // Create a deep clone of form data
+      const rawData = JSON.parse(JSON.stringify(formData));
+
+      // Clean and transform the data for submission
+      const cleanedFormData: Patient = {
+        ...rawData,
+        resourceType: 'Patient',
+      };
+
+      let result;
       if (isNew) {
-        await createPatient(formData).unwrap();
-        navigate('/patients');
+        // Create new resource
+        result = await createPatient(cleanedFormData).unwrap();
       } else {
-        await updatePatient(formData).unwrap();
-        setMode('view');
+        // Update existing resource
+        result = await updatePatient(cleanedFormData).unwrap();
       }
-    } catch (error) {
-      console.error('Failed to save patient', error);
+
+      // Only navigate back if operation was successful
+      navigate('/patients');
+    } catch (error: any) {
+      console.error('Error saving patient:', error);
+
+      // Set error message to display on the UI
+      let errorMsg = 'Failed to save patient. Please try again.';
+
+      // Extract more detailed error if available
+      if (error.data?.issue?.[0]?.details?.text) {
+        errorMsg = `Error: ${error.data.issue[0].details.text}`;
+      } else if (error.data?.message) {
+        errorMsg = `Error: ${error.data.message}`;
+      } else if (error.message) {
+        errorMsg = `Error: ${error.message}`;
+      }
+
+      // Update state to show error message
+      setErrorMessage(errorMsg);
+
+      // Show alert for backward compatibility, but we'll also display it in the UI
+      alert(errorMsg);
     }
   };
 
@@ -611,7 +647,7 @@ const PatientCrudPage: React.FC = () => {
           ) : (
             <>
               <button
-                onClick={handleSave}
+                onClick={handleSubmit}
                 className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
                 disabled={isUpdating || isCreating}
               >
@@ -627,6 +663,12 @@ const PatientCrudPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="p-4 bg-red-100 text-red-700 border border-red-400 rounded mb-4">
+          <p>{errorMessage}</p>
+        </div>
+      )}
 
       <div className="bg-white shadow-md rounded-lg p-6">
         {/* Overview Group */}

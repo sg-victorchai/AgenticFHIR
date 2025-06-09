@@ -239,14 +239,18 @@ function organizeElementsIntoGroups(resourceType: string, elements: any[]) {
     });
   }
 
-  // Apply resource-specific customizations
-  return customizeGroupsForResourceType(resourceType, groups);
+  // Apply resource-specific customizations - pass elements as argument
+  return customizeGroupsForResourceType(resourceType, groups, elements);
 }
 
 /**
  * Add resource-specific customizations to the groups
  */
-function customizeGroupsForResourceType(resourceType: string, groups: any[]) {
+function customizeGroupsForResourceType(
+  resourceType: string,
+  groups: any[],
+  elements: any[] = [],
+) {
   switch (resourceType) {
     case 'Observation':
       // For Observation, ensure component is in its own group

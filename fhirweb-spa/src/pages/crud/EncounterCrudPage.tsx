@@ -338,19 +338,30 @@ interface CustomEncounter extends Omit<Encounter, 'diagnosis'> {
       }>;
     };
   }>;
-  reasonCode?: Array<{
-    coding: Array<{
-      system?: string;
-      code?: string;
-      display?: string;
-    }>;
-    text?: string;
+  reason?: Array<{
+    use?: {
+      coding?: Array<{
+        system?: string;
+        code?: string;
+        display?: string;
+      }>;
+    };
+    value?: {
+      concept?: {
+        text?: string;
+        coding?: Array<{
+          system?: string;
+          code?: string;
+          display?: string;
+        }>;
+      };
+      reference?: {
+        reference?: string;
+        display?: string;
+      };
+    };
   }>;
-  reasonReference?: Array<{
-    reference: string;
-    display: string;
-  }>;
-  hospitalization?: {
+  admission?: {
     preAdmissionIdentifier?: {
       value?: string;
       system?: string;
@@ -433,7 +444,7 @@ const EncounterCrudPage: React.FC = () => {
     {
       id: 'reason',
       title: 'Reason',
-      elements: ['reasonCode', 'reasonReference'],
+      elements: ['reason'],
       description: 'Reason for the encounter',
     },
     {
@@ -445,7 +456,7 @@ const EncounterCrudPage: React.FC = () => {
     {
       id: 'admission',
       title: 'Admission',
-      elements: ['hospitalization'],
+      elements: ['admission'],
       description: 'Details about the admission to a healthcare service',
     },
   ]);
@@ -500,6 +511,9 @@ const EncounterCrudPage: React.FC = () => {
     ReferenceOption[]
   >([]);
   const [locationOptions, setLocationOptions] = useState<ReferenceOption[]>([]);
+
+  // State for showing error message
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Fetch existing resource if editing
   const { data: existingResource, isLoading: isLoadingResource } =
@@ -986,7 +1000,7 @@ const EncounterCrudPage: React.FC = () => {
     });
   };
 
-  // Function to handle origin selection in hospitalization
+  // Function to handle origin selection in admission
   const handleOriginReferenceChange = (value: string) => {
     const selectedOption = locationOptions.find(
       (option) => option.reference === value,
@@ -994,8 +1008,8 @@ const EncounterCrudPage: React.FC = () => {
 
     setFormData((prev) => ({
       ...prev,
-      hospitalization: {
-        ...prev.hospitalization,
+      admission: {
+        ...prev.admission,
         origin: {
           reference: value,
           display: selectedOption?.display || '',
@@ -1004,7 +1018,7 @@ const EncounterCrudPage: React.FC = () => {
     }));
   };
 
-  // Function to handle destination selection in hospitalization
+  // Function to handle destination selection in admission
   const handleDestinationReferenceChange = (value: string) => {
     const selectedOption = locationOptions.find(
       (option) => option.reference === value,
@@ -1012,8 +1026,8 @@ const EncounterCrudPage: React.FC = () => {
 
     setFormData((prev) => ({
       ...prev,
-      hospitalization: {
-        ...prev.hospitalization,
+      admission: {
+        ...prev.admission,
         destination: {
           reference: value,
           display: selectedOption?.display || '',
@@ -1030,10 +1044,10 @@ const EncounterCrudPage: React.FC = () => {
 
     setFormData((prev) => ({
       ...prev,
-      hospitalization: {
-        ...prev.hospitalization,
+      admission: {
+        ...prev.admission,
         preAdmissionIdentifier: {
-          ...prev.hospitalization?.preAdmissionIdentifier,
+          ...prev.admission?.preAdmissionIdentifier,
           system: selectedOption?.system || '',
         },
       },
@@ -1141,9 +1155,6 @@ const EncounterCrudPage: React.FC = () => {
     }));
   };
 
-  // This function is used in the view mode to display reason code text
-  // Removing the unused function to fix the error
-
   // Function to handle location form type selection
   const handleLocationFormChange = (index: number, code: string) => {
     const selectedOption = LOCATION_FORM_OPTIONS.find(
@@ -1236,58 +1247,66 @@ const EncounterCrudPage: React.FC = () => {
     },
   ];
 
-  // Re-admission options
-  const READMISSION_OPTIONS = [
-    {
-      code: 'R',
-      display: 'Re-admission',
-      system: 'http://terminology.hl7.org/CodeSystem/v2-0092',
-    },
-    {
-      code: 'UR',
-      display: 'Unscheduled re-admission',
-      system: 'http://terminology.hl7.org/CodeSystem/v2-0092',
-    },
-  ];
+  // Function to handle type coding selection change
+  const handleTypeCodingChange = (index: number, code: string) => {
+    const selectedOption = PARTICIPANT_TYPE_OPTIONS.find(
+      (option) => option.code === code,
+    );
 
-  // Discharge disposition options
-  const DISCHARGE_DISPOSITION_OPTIONS = [
-    {
-      code: 'home',
-      display: 'Home',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-    {
-      code: 'alt-home',
-      display: 'Alternative home',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-    {
-      code: 'other-hcf',
-      display: 'Other healthcare facility',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-    {
-      code: 'hosp',
-      display: 'Hospice',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-    {
-      code: 'long',
-      display: 'Long-term care',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-    {
-      code: 'snf',
-      display: 'Skilled nursing facility',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-    {
-      code: 'oth',
-      display: 'Other',
-      system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-    },
-  ];
+    setFormData((prev) => {
+      const updatedParticipants = [...(prev.participant || [])];
+
+      if (!updatedParticipants[index]) {
+        updatedParticipants[index] = {};
+      }
+
+      if (!updatedParticipants[index].type) {
+        updatedParticipants[index].type = [{}];
+      }
+
+      updatedParticipants[index].type[0] = {
+        ...updatedParticipants[index].type[0],
+        coding: [
+          {
+            system:
+              selectedOption?.system ||
+              'http://terminology.hl7.org/CodeSystem/v3-ParticipationType',
+            code,
+            display: selectedOption?.display || '',
+          },
+        ],
+        text: selectedOption?.display || '',
+      };
+
+      return {
+        ...prev,
+        participant: updatedParticipants,
+      };
+    });
+  };
+
+  // Function to handle location status selection
+  const handleLocationStatusChange = (index: number, status: string) => {
+    setFormData((prev) => {
+      const updatedLocations = [...(prev.location || [])];
+
+      if (!updatedLocations[index]) {
+        updatedLocations[index] = {
+          location: { display: '' },
+        };
+      }
+
+      updatedLocations[index] = {
+        ...updatedLocations[index],
+        status: status as 'planned' | 'active' | 'reserved' | 'completed',
+      };
+
+      return {
+        ...prev,
+        location: updatedLocations,
+      };
+    });
+  };
 
   // Function to handle admission source selection
   const handleAdmitSourceChange = (code: string) => {
@@ -1297,8 +1316,8 @@ const EncounterCrudPage: React.FC = () => {
 
     setFormData((prev) => ({
       ...prev,
-      hospitalization: {
-        ...prev.hospitalization,
+      admission: {
+        ...prev.admission,
         admitSource: {
           coding: [
             {
@@ -1322,8 +1341,8 @@ const EncounterCrudPage: React.FC = () => {
 
     setFormData((prev) => ({
       ...prev,
-      hospitalization: {
-        ...prev.hospitalization,
+      admission: {
+        ...prev.admission,
         dischargeDisposition: {
           coding: [
             {
@@ -1347,8 +1366,8 @@ const EncounterCrudPage: React.FC = () => {
 
     setFormData((prev) => ({
       ...prev,
-      hospitalization: {
-        ...prev.hospitalization,
+      admission: {
+        ...prev.admission,
         reAdmission: {
           coding: [
             {
@@ -1520,25 +1539,68 @@ const EncounterCrudPage: React.FC = () => {
         }
       });
 
+      let result;
       if (resourceId) {
         // Update existing resource
-        await updateResource({
+        result = await updateResource({
           resourceType: 'Encounter',
           id: resourceId,
           resource: cleanedFormData as Encounter,
-        });
+        }).unwrap();
       } else {
         // Create new resource
-        await createResource({
+        result = await createResource({
           resourceType: 'Encounter',
           resource: cleanedFormData as Encounter,
-        });
+        }).unwrap();
       }
-      // Navigate back to list view after successful operation
+
+      // Only navigate back if operation was successful
       navigate(`/patient/${patientId}/encounter`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving encounter:', error);
-      alert('Failed to save encounter. Please try again.');
+
+      // Initialize error information
+      let errorMsg = 'Failed to save encounter. Please try again.';
+      let statusCode = '';
+      let operationOutcome = null;
+
+      // Extract HTTP status code if available
+      if (error.status) {
+        statusCode = `HTTP ${error.status}`;
+      }
+
+      // Check for OperationOutcome resource in the error response
+      if (
+        error.data?.resourceType === 'OperationOutcome' &&
+        error.data?.issue
+      ) {
+        operationOutcome = error.data;
+        // Extract the first issue's details if available
+        if (error.data.issue[0]?.details?.text) {
+          errorMsg = error.data.issue[0].details.text;
+        } else if (error.data.issue[0]?.diagnostics) {
+          errorMsg = error.data.issue[0].diagnostics;
+        }
+      } else if (error.data?.message) {
+        errorMsg = error.data.message;
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+
+      // Construct detailed error message
+      const detailedError = `${statusCode ? `${statusCode}: ` : ''}${errorMsg}`;
+
+      // Update state with error details
+      setErrorMessage(detailedError);
+
+      // Store the OperationOutcome object for display
+      if (operationOutcome) {
+        console.log('Operation Outcome:', operationOutcome);
+      }
+
+      // Show alert for backward compatibility
+      alert(detailedError);
     }
   };
 
@@ -1677,6 +1739,16 @@ const EncounterCrudPage: React.FC = () => {
 
   // Render a group for view mode
   const renderViewGroup = (group: FormGroup) => {
+    // Don't render diagnosis section if no data exists
+    if (
+      group.id === 'diagnosis' &&
+      (!formData.diagnosis ||
+        formData.diagnosis.length === 0 ||
+        !formData.diagnosis[0]?.condition?.reference)
+    ) {
+      return null;
+    }
+
     return (
       <div key={group.id} className="border-b border-gray-200 pb-4">
         <h3 className="text-lg font-medium text-gray-900 mb-3">
@@ -1740,36 +1812,48 @@ const EncounterCrudPage: React.FC = () => {
           )}
 
           {group.id === 'diagnosis' && (
-            <>
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">
-                  Condition
+            <div className="sm:col-span-2">
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Diagnoses
+              </p>
+              {formData.diagnosis && formData.diagnosis.length > 0 ? (
+                <div className="space-y-3">
+                  {formData.diagnosis.map((diagnosis, index) => (
+                    <div
+                      key={index}
+                      className="pl-3 border-l-2 border-gray-200"
+                    >
+                      <p className="text-gray-900">
+                        <span className="font-medium">Condition:</span>{' '}
+                        {diagnosis.condition?.display || '-'}
+                      </p>
+                      <p className="text-gray-900">
+                        <span className="font-medium">Use:</span>{' '}
+                        {diagnosis.use?.coding?.[0]?.code
+                          ? (() => {
+                              const code = diagnosis.use.coding[0].code;
+                              const useMap: Record<string, string> = {
+                                AD: 'Admission Diagnosis',
+                                DD: 'Discharge Diagnosis',
+                                CC: 'Chief Complaint',
+                                CM: 'Comorbidity',
+                                'pre-op': 'Pre-operative Diagnosis',
+                                'post-op': 'Post-operative Diagnosis',
+                                billing: 'Billing Diagnosis',
+                              };
+                              return useMap[code] || code;
+                            })()
+                          : '-'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">
+                  No diagnoses recorded.
                 </p>
-                <p className="text-gray-900">
-                  {formData.diagnosis?.[0]?.condition?.display || '-'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">Use</p>
-                <p className="text-gray-900">
-                  {formData.diagnosis?.[0]?.use?.coding?.[0]?.code
-                    ? (() => {
-                        const code = formData.diagnosis[0].use.coding[0].code;
-                        const useMap: Record<string, string> = {
-                          AD: 'Admission Diagnosis',
-                          DD: 'Discharge Diagnosis',
-                          CC: 'Chief Complaint',
-                          CM: 'Comorbidity',
-                          'pre-op': 'Pre-operative Diagnosis',
-                          'post-op': 'Post-operative Diagnosis',
-                          billing: 'Billing Diagnosis',
-                        };
-                        return useMap[code] || code;
-                      })()
-                    : '-'}
-                </p>
-              </div>
-            </>
+              )}
+            </div>
           )}
 
           {group.id === 'participant' && (
@@ -1815,484 +1899,353 @@ const EncounterCrudPage: React.FC = () => {
 
           {group.id === 'reason' && (
             <div className="sm:col-span-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {/* Reason Code - Similar to Participant Type */}
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Reason Information
+                </h4>
                 <div>
-                  <div className="flex justify-between items-center">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Reason Code
-                    </label>
-                    {!formData.reasonCode?.length && (
-                      <button
-                        type="button"
-                        onClick={addReasonCode}
-                        className="px-2 py-1 text-xs font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 focus:outline-none"
-                      >
-                        Add Reason
-                      </button>
-                    )}
-                  </div>
-
-                  {formData.reasonCode && formData.reasonCode.length > 0 ? (
-                    <>
-                      <input
-                        type="text"
-                        name="reasonCode.0.text"
-                        id="reasonCode.0.text-view"
-                        value={formData.reasonCode[0].text || ''}
-                        onChange={(e) => {
-                          setFormData((prev) => ({
-                            ...prev,
-                            reasonCode: [
-                              {
-                                ...prev.reasonCode?.[0],
-                                text: e.target.value,
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        reason: [
+                          ...(prev.reason || []),
+                          {
+                            use: {
+                              coding: [
+                                {
+                                  system:
+                                    'http://terminology.hl7.org/CodeSystem/v3-ActReason',
+                                  code: '',
+                                  display: '',
+                                },
+                              ],
+                            },
+                            value: {
+                              concept: {
+                                text: '',
                                 coding: [
                                   {
-                                    system:
-                                      prev.reasonCode?.[0]?.coding?.[0]
-                                        ?.system || 'http://snomed.info/sct',
-                                    code:
-                                      prev.reasonCode?.[0]?.coding?.[0]?.code ||
-                                      '',
-                                    display: e.target.value,
+                                    system: 'http://snomed.info/sct',
+                                    code: '',
+                                    display: '',
                                   },
                                 ],
                               },
-                            ],
-                          }));
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 mb-2"
-                        placeholder="Custom reason description"
-                      />
-
-                      <select
-                        value={formData.reasonCode[0]?.coding?.[0]?.code || ''}
-                        onChange={(e) => handleReasonCodeChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        aria-label="Select a reason code"
-                        disabled
-                      >
-                        <option value="">Select reason code</option>
-                        {REASON_CODE_OPTIONS.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">
-                      No reason code added.
-                    </p>
-                  )}
-                </div>
-
-                {/* Reason Reference - Similar to Actor */}
-                <div>
-                  <label
-                    htmlFor="reasonReference.0.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Reason Reference
-                  </label>
-                  <select
-                    name="reasonReference.0.reference"
-                    id="reasonReference.0.reference"
-                    value={formData.reasonReference?.[0]?.reference || ''}
-                    onChange={handleReferenceChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Select a reason reference</option>
-                    {conditionOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {group.id === 'location' && (
-            <div className="sm:col-span-2">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Locations
-                </label>
-                <button
-                  type="button"
-                  onClick={addLocation}
-                  className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Add Location
-                </button>
-              </div>
-
-              {(formData.location || []).map((location, index) => (
-                <div
-                  key={index}
-                  className="border border-gray-200 p-3 rounded-md mb-3"
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {/* Location name/description */}
-                    <div>
-                      <label
-                        htmlFor={`location.${index}.location.reference`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Location Reference *
-                      </label>
-                      <select
-                        name={`location.${index}.location.reference`}
-                        id={`location.${index}.location.reference`}
-                        value={location.location?.reference || ''}
-                        onChange={(e) =>
-                          handleLocationReferenceChange(index, e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                        disabled
-                      >
-                        <option value="">Select a location</option>
-                        {locationOptions.map((option) => (
-                          <option
-                            key={option.reference}
-                            value={option.reference}
-                          >
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Location status */}
-                    <div>
-                      <label
-                        htmlFor={`location.${index}.status`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Status
-                      </label>
-                      <select
-                        name={`location.${index}.status`}
-                        id={`location.${index}.status`}
-                        value={location.status || 'active'}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        disabled
-                      >
-                        {LOCATION_STATUS_OPTIONS.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Location form (physical type) */}
-                    <div>
-                      <label
-                        id={`location-${index}-form-label`}
-                        htmlFor={`location.${index}.form`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Physical Type
-                      </label>
-                      <select
-                        id={`location.${index}.form`}
-                        name={`location.${index}.form`}
-                        aria-labelledby={`location-${index}-form-label`}
-                        value={location.form?.coding?.[0]?.code || ''}
-                        onChange={(e) =>
-                          handleLocationFormChange(index, e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        disabled
-                      >
-                        <option value="">Select location type</option>
-                        {LOCATION_FORM_OPTIONS.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Location period */}
-                    <div>
-                      <label
-                        htmlFor={`location.${index}.period.start`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Start Time
-                      </label>
-                      <input
-                        type="datetime-local"
-                        name={`location.${index}.period.start`}
-                        id={`location.${index}.period.start`}
-                        value={formatDateForInput(location.period?.start)}
-                        onChange={handleChange}
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md mb-2"
-                        disabled
-                      />
-
-                      <label
-                        htmlFor={`location.${index}.period.end`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        End Time
-                      </label>
-                      <input
-                        type="datetime-local"
-                        name={`location.${index}.period.end`}
-                        id={`location.${index}.period.end`}
-                        value={formatDateForInput(location.period?.end)}
-                        onChange={handleChange}
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        disabled
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => removeLocation(index)}
-                      className="px-2 py-1 text-xs font-medium text-red-600 border border-red-600 rounded-md hover:bg-red-50 focus:outline-none"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {!formData.location?.length && (
-                <p className="text-sm text-gray-500 italic">
-                  No locations added yet.
-                </p>
-              )}
-            </div>
-          )}
-
-          {group.id === 'admission' && (
-            <div className="sm:col-span-2">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Pre-admission identifier - system first, then value */}
-                <div>
-                  <label
-                    id="pre-admission-system-label"
-                    htmlFor="hospitalization.preAdmissionIdentifier.system"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Pre-admission Identifier System
-                  </label>
-                  <select
-                    id="hospitalization.preAdmissionIdentifier.system"
-                    aria-labelledby="pre-admission-system-label"
-                    value={(() => {
-                      const systemUrl =
-                        formData.hospitalization?.preAdmissionIdentifier
-                          ?.system || '';
-                      const option = IDENTIFIER_SYSTEM_OPTIONS.find(
-                        (opt) => opt.system === systemUrl,
-                      );
-                      return option?.code || '';
-                    })()}
-                    onChange={(e) =>
-                      handlePreAdmissionSystemChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Select identifier system</option>
-                    {IDENTIFIER_SYSTEM_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="hospitalization.preAdmissionIdentifier.value"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Pre-admission Identifier Value
-                  </label>
-                  <input
-                    type="text"
-                    name="hospitalization.preAdmissionIdentifier.value"
-                    id="hospitalization.preAdmissionIdentifier.value"
-                    value={
-                      formData.hospitalization?.preAdmissionIdentifier?.value ||
-                      ''
-                    }
-                    onChange={(e) => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        hospitalization: {
-                          ...prev.hospitalization,
-                          preAdmissionIdentifier: {
-                            ...prev.hospitalization?.preAdmissionIdentifier,
-                            value: e.target.value,
+                              reference: {
+                                reference: '',
+                                display: '',
+                              },
+                            },
                           },
-                        },
+                        ],
                       }));
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Pre-admission ID"
-                    disabled
-                  />
+                    className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Add Reason
+                  </button>
                 </div>
+              </div>
 
-                {/* Origin */}
-                <div>
-                  <label
-                    htmlFor="hospitalization.origin.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Origin (Location/Organization)
-                  </label>
-                  <select
-                    name="hospitalization.origin.reference"
-                    id="hospitalization.origin.reference"
-                    value={formData.hospitalization?.origin?.reference || ''}
-                    onChange={(e) =>
-                      handleOriginReferenceChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Select origin</option>
-                    {locationOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="mb-4">
+                <h5 className="text-sm font-medium text-gray-700 mb-2">
+                  Reasons
+                </h5>
+                {(formData.reason || []).length > 0 ? (
+                  <div className="space-y-4">
+                    {formData.reason.map((reason, index) => (
+                      <div
+                        key={index}
+                        className="border border-gray-200 p-3 rounded-md"
+                      >
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label
+                              htmlFor={`reason.${index}.use.coding.0.code`}
+                              className="block text-sm font-medium text-gray-700 mb-1"
+                            >
+                              Use
+                            </label>
+                            <select
+                              name={`reason.${index}.use.coding.0.code`}
+                              id={`reason.${index}.use.coding.0.code`}
+                              value={reason.use?.coding?.[0]?.code || ''}
+                              onChange={(e) => {
+                                const selectedCode = e.target.value;
+                                const useDisplay = (() => {
+                                  const useMap: Record<string, string> = {
+                                    TREAT: 'Treatment',
+                                    DIAG: 'Diagnosis',
+                                    SYMP: 'Symptom',
+                                    COMPLNT: 'Complaint',
+                                    FINDING: 'Finding',
+                                    MONITOR: 'Monitoring',
+                                  };
+                                  return useMap[selectedCode] || selectedCode;
+                                })();
 
-                {/* Admit Source */}
-                <div>
-                  <label
-                    id="admit-source-label"
-                    htmlFor="hospitalization.admitSource"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Admit Source
-                  </label>
-                  <select
-                    id="hospitalization.admitSource"
-                    aria-labelledby="admit-source-label"
-                    value={
-                      formData.hospitalization?.admitSource?.coding?.[0]
-                        ?.code || ''
-                    }
-                    onChange={(e) => handleAdmitSourceChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Select admit source</option>
-                    {ADMIT_SOURCE_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                                setFormData((prev) => {
+                                  const updatedReasons = [
+                                    ...(prev.reason || []),
+                                  ];
+                                  updatedReasons[index] = {
+                                    ...updatedReasons[index],
+                                    use: {
+                                      coding: [
+                                        {
+                                          system:
+                                            'http://terminology.hl7.org/CodeSystem/v3-ActReason',
+                                          code: selectedCode,
+                                          display: useDisplay,
+                                        },
+                                      ],
+                                    },
+                                  };
+                                  return {
+                                    ...prev,
+                                    reason: updatedReasons,
+                                  };
+                                });
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select reason use</option>
+                              <option value="TREAT">Treatment</option>
+                              <option value="DIAG">Diagnosis</option>
+                              <option value="SYMP">Symptom</option>
+                              <option value="COMPLNT">Complaint</option>
+                              <option value="FINDING">Finding</option>
+                              <option value="MONITOR">Monitoring</option>
+                            </select>
+                          </div>
+                        </div>
 
-                {/* Re-admission */}
-                <div>
-                  <label
-                    id="readmission-label"
-                    htmlFor="hospitalization.reAdmission"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Re-admission
-                  </label>
-                  <select
-                    id="hospitalization.reAdmission"
-                    aria-labelledby="readmission-label"
-                    value={
-                      formData.hospitalization?.reAdmission?.coding?.[0]
-                        ?.code || ''
-                    }
-                    onChange={(e) => handleReadmissionChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Not a re-admission</option>
-                    {READMISSION_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                        <div className="mb-3">
+                          <h6 className="text-sm font-medium text-gray-700 mb-2">
+                            Value
+                          </h6>
+                          <div className="border-l-2 border-gray-200 pl-3">
+                            <div className="mb-3">
+                              <h6 className="text-sm font-medium text-gray-700 mb-2">
+                                Concept
+                              </h6>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label
+                                    htmlFor={`reason.${index}.value.concept.text`}
+                                    className="block text-sm font-medium text-gray-700 mb-1"
+                                  >
+                                    Description
+                                  </label>
+                                  <input
+                                    type="text"
+                                    name={`reason.${index}.value.concept.text`}
+                                    id={`reason.${index}.value.concept.text`}
+                                    value={reason.value?.concept?.text || ''}
+                                    onChange={(e) => {
+                                      setFormData((prev) => {
+                                        const updatedReasons = [
+                                          ...(prev.reason || []),
+                                        ];
+                                        updatedReasons[index] = {
+                                          ...updatedReasons[index],
+                                          value: {
+                                            ...updatedReasons[index].value,
+                                            concept: {
+                                              ...updatedReasons[index].value
+                                                ?.concept,
+                                              text: e.target.value,
+                                              coding: [
+                                                {
+                                                  ...(updatedReasons[index]
+                                                    .value?.concept
+                                                    ?.coding?.[0] || {}),
+                                                  system:
+                                                    updatedReasons[index].value
+                                                      ?.concept?.coding?.[0]
+                                                      ?.system ||
+                                                    'http://snomed.info/sct',
+                                                  display: e.target.value,
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        };
+                                        return {
+                                          ...prev,
+                                          reason: updatedReasons,
+                                        };
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Custom reason description"
+                                  />
+                                </div>
+                                <div>
+                                  <label
+                                    htmlFor={`reason.${index}.value.concept.coding.0.code`}
+                                    className="block text-sm font-medium text-gray-700 mb-1"
+                                  >
+                                    Code
+                                  </label>
+                                  <select
+                                    name={`reason.${index}.value.concept.coding.0.code`}
+                                    id={`reason.${index}.value.concept.coding.0.code`}
+                                    value={
+                                      reason.value?.concept?.coding?.[0]
+                                        ?.code || ''
+                                    }
+                                    onChange={(e) => {
+                                      const selectedCode = e.target.value;
+                                      const selectedOption =
+                                        REASON_CODE_OPTIONS.find(
+                                          (option) =>
+                                            option.code === selectedCode,
+                                        );
 
-                {/* Destination */}
-                <div>
-                  <label
-                    htmlFor="hospitalization.destination.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Destination
-                  </label>
-                  <select
-                    name="hospitalization.destination.reference"
-                    id="hospitalization.destination.reference"
-                    value={
-                      formData.hospitalization?.destination?.reference || ''
-                    }
-                    onChange={(e) =>
-                      handleDestinationReferenceChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Select destination</option>
-                    {locationOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                                      setFormData((prev) => {
+                                        const updatedReasons = [
+                                          ...(prev.reason || []),
+                                        ];
+                                        updatedReasons[index] = {
+                                          ...updatedReasons[index],
+                                          value: {
+                                            ...updatedReasons[index].value,
+                                            concept: {
+                                              text:
+                                                selectedOption?.display || '',
+                                              coding: [
+                                                {
+                                                  system:
+                                                    selectedOption?.system ||
+                                                    'http://snomed.info/sct',
+                                                  code: selectedCode,
+                                                  display:
+                                                    selectedOption?.display ||
+                                                    '',
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        };
+                                        return {
+                                          ...prev,
+                                          reason: updatedReasons,
+                                        };
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="">Select reason code</option>
+                                    {REASON_CODE_OPTIONS.map((option) => (
+                                      <option
+                                        key={option.code}
+                                        value={option.code}
+                                      >
+                                        {option.display}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
 
-                {/* Discharge Disposition */}
-                <div>
-                  <label
-                    id="discharge-disposition-label"
-                    htmlFor="hospitalization.dischargeDisposition"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Discharge Disposition
-                  </label>
-                  <select
-                    id="hospitalization.dischargeDisposition"
-                    name="hospitalization.dischargeDisposition"
-                    aria-labelledby="discharge-disposition-label"
-                    value={
-                      formData.hospitalization?.dischargeDisposition
-                        ?.coding?.[0]?.code || ''
-                    }
-                    onChange={(e) =>
-                      handleDischargeDispositionChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled
-                  >
-                    <option value="">Select discharge disposition</option>
-                    {DISCHARGE_DISPOSITION_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
+                            <div>
+                              <h6 className="text-sm font-medium text-gray-700 mb-2">
+                                Reference
+                              </h6>
+                              <div>
+                                <label
+                                  htmlFor={`reason.${index}.value.reference.reference`}
+                                  className="block text-sm font-medium text-gray-700 mb-1"
+                                >
+                                  Referenced Condition
+                                </label>
+                                <select
+                                  name={`reason.${index}.value.reference.reference`}
+                                  id={`reason.${index}.value.reference.reference`}
+                                  value={
+                                    reason.value?.reference?.reference || ''
+                                  }
+                                  onChange={(e) => {
+                                    // Find the selected option to get both reference and display
+                                    const selectedOption =
+                                      conditionOptions.find(
+                                        (option) =>
+                                          option.reference === e.target.value,
+                                      );
+
+                                    setFormData((prev) => {
+                                      const updatedReasons = [
+                                        ...(prev.reason || []),
+                                      ];
+                                      updatedReasons[index] = {
+                                        ...updatedReasons[index],
+                                        value: {
+                                          ...updatedReasons[index].value,
+                                          reference: {
+                                            reference: e.target.value,
+                                            display:
+                                              selectedOption?.display || '',
+                                          },
+                                        },
+                                      };
+                                      return {
+                                        ...prev,
+                                        reason: updatedReasons,
+                                      };
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="">
+                                    Select a reason reference
+                                  </option>
+                                  {conditionOptions.map((option) => (
+                                    <option
+                                      key={option.reference}
+                                      value={option.reference}
+                                    >
+                                      {option.display}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => {
+                                const updatedReasons = [...(prev.reason || [])];
+                                updatedReasons.splice(index, 1);
+                                return {
+                                  ...prev,
+                                  reason:
+                                    updatedReasons.length > 0
+                                      ? updatedReasons
+                                      : undefined,
+                                };
+                              });
+                            }}
+                            className="px-2 py-1 text-xs font-medium text-red-600 border border-red-600 rounded-md hover:bg-red-50 focus:outline-none"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </select>
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">
+                    No reasons added. Click "Add Reason" to add one.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -2350,7 +2303,7 @@ const EncounterCrudPage: React.FC = () => {
                 >
                   <option value="planned">Planned</option>
                   <option value="in-progress">In Progress</option>
-                  <option value="finished">Finished</option>
+                  <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                   <option value="entered-in-error">Entered in Error</option>
                   <option value="unknown">Unknown</option>
@@ -2457,56 +2410,198 @@ const EncounterCrudPage: React.FC = () => {
 
           {group.id === 'diagnosis' && (
             <div className="sm:col-span-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="diagnosis.0.condition.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Condition
-                  </label>
-                  <select
-                    name="diagnosis.0.condition.reference"
-                    id="diagnosis.0.condition.reference"
-                    value={formData.diagnosis?.[0]?.condition?.reference || ''}
-                    onChange={handleReferenceChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a condition</option>
-                    {conditionOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor="diagnosis.0.use.coding.0.code"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Use
-                  </label>
-                  <select
-                    name="diagnosis.0.use.coding.0.code"
-                    id="diagnosis.0.use.coding.0.code"
-                    value={
-                      formData.diagnosis?.[0]?.use?.coding?.[0]?.code || ''
-                    }
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select diagnosis use</option>
-                    <option value="AD">Admission Diagnosis</option>
-                    <option value="DD">Discharge Diagnosis</option>
-                    <option value="CC">Chief Complaint</option>
-                    <option value="CM">Comorbidity</option>
-                    <option value="pre-op">Pre-operative Diagnosis</option>
-                    <option value="post-op">Post-operative Diagnosis</option>
-                    <option value="billing">Billing Diagnosis</option>
-                  </select>
-                </div>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Diagnosis Information
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      diagnosis: [
+                        ...(prev.diagnosis || []),
+                        {
+                          condition: {
+                            reference: '',
+                            display: '',
+                          },
+                          use: {
+                            coding: [
+                              {
+                                system:
+                                  'http://terminology.hl7.org/CodeSystem/diagnosis-role',
+                                code: 'AD',
+                                display: 'Admission Diagnosis',
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    }));
+                  }}
+                  className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Add Diagnosis
+                </button>
               </div>
+
+              {formData.diagnosis && formData.diagnosis.length > 0 ? (
+                <div className="space-y-4">
+                  {formData.diagnosis.map((diagnosis, index) => (
+                    <div
+                      key={index}
+                      className="border border-gray-200 p-3 rounded-md"
+                    >
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <label
+                            htmlFor={`diagnosis.${index}.condition.reference`}
+                            className="block text-sm font-medium text-gray-700 mb-1"
+                          >
+                            Condition
+                          </label>
+                          <select
+                            name={`diagnosis.${index}.condition.reference`}
+                            id={`diagnosis.${index}.condition.reference`}
+                            value={diagnosis.condition?.reference || ''}
+                            onChange={(e) => {
+                              // Find the selected option to get both reference and display
+                              const selectedOption = conditionOptions.find(
+                                (option) => option.reference === e.target.value,
+                              );
+
+                              setFormData((prev) => {
+                                const updatedDiagnoses = [
+                                  ...(prev.diagnosis || []),
+                                ];
+                                updatedDiagnoses[index] = {
+                                  ...updatedDiagnoses[index],
+                                  condition: {
+                                    reference: e.target.value,
+                                    display: selectedOption?.display || '',
+                                  },
+                                };
+                                return {
+                                  ...prev,
+                                  diagnosis: updatedDiagnoses,
+                                };
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select a condition</option>
+                            {conditionOptions.map((option) => (
+                              <option
+                                key={option.reference}
+                                value={option.reference}
+                              >
+                                {option.display}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label
+                            htmlFor={`diagnosis.${index}.use.coding.0.code`}
+                            className="block text-sm font-medium text-gray-700 mb-1"
+                          >
+                            Use
+                          </label>
+                          <select
+                            name={`diagnosis.${index}.use.coding.0.code`}
+                            id={`diagnosis.${index}.use.coding.0.code`}
+                            value={diagnosis.use?.coding?.[0]?.code || ''}
+                            onChange={(e) => {
+                              setFormData((prev) => {
+                                const updatedDiagnoses = [
+                                  ...(prev.diagnosis || []),
+                                ];
+                                updatedDiagnoses[index] = {
+                                  ...updatedDiagnoses[index],
+                                  use: {
+                                    coding: [
+                                      {
+                                        system:
+                                          'http://terminology.hl7.org/CodeSystem/diagnosis-role',
+                                        code: e.target.value,
+                                        display: (() => {
+                                          const useMap: Record<string, string> =
+                                            {
+                                              AD: 'Admission Diagnosis',
+                                              DD: 'Discharge Diagnosis',
+                                              CC: 'Chief Complaint',
+                                              CM: 'Comorbidity',
+                                              'pre-op':
+                                                'Pre-operative Diagnosis',
+                                              'post-op':
+                                                'Post-operative Diagnosis',
+                                              billing: 'Billing Diagnosis',
+                                            };
+                                          return (
+                                            useMap[e.target.value] ||
+                                            e.target.value
+                                          );
+                                        })(),
+                                      },
+                                    ],
+                                  },
+                                };
+                                return {
+                                  ...prev,
+                                  diagnosis: updatedDiagnoses,
+                                };
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select diagnosis use</option>
+                            <option value="AD">Admission Diagnosis</option>
+                            <option value="DD">Discharge Diagnosis</option>
+                            <option value="CC">Chief Complaint</option>
+                            <option value="CM">Comorbidity</option>
+                            <option value="pre-op">
+                              Pre-operative Diagnosis
+                            </option>
+                            <option value="post-op">
+                              Post-operative Diagnosis
+                            </option>
+                            <option value="billing">Billing Diagnosis</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev) => {
+                              const updatedDiagnoses = [
+                                ...(prev.diagnosis || []),
+                              ];
+                              updatedDiagnoses.splice(index, 1);
+                              return {
+                                ...prev,
+                                diagnosis:
+                                  updatedDiagnoses.length > 0
+                                    ? updatedDiagnoses
+                                    : undefined,
+                              };
+                            });
+                          }}
+                          className="px-2 py-1 text-xs font-medium text-red-600 border border-red-600 rounded-md hover:bg-red-50 focus:outline-none"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">
+                  No diagnosis added yet. Click the "Add Diagnosis" button to
+                  add one.
+                </p>
+              )}
             </div>
           )}
 
@@ -2746,470 +2841,353 @@ const EncounterCrudPage: React.FC = () => {
 
           {group.id === 'reason' && (
             <div className="sm:col-span-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {/* Reason Code - Similar to Participant Type */}
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Reason Information
+                </h4>
                 <div>
-                  <div className="flex justify-between items-center">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Reason Code
-                    </label>
-                    {!formData.reasonCode?.length && (
-                      <button
-                        type="button"
-                        onClick={addReasonCode}
-                        className="px-2 py-1 text-xs font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 focus:outline-none"
-                      >
-                        Add Reason
-                      </button>
-                    )}
-                  </div>
-
-                  {formData.reasonCode && formData.reasonCode.length > 0 ? (
-                    <>
-                      <input
-                        type="text"
-                        name="reasonCode.0.text"
-                        id="reasonCode.0.text"
-                        value={formData.reasonCode[0].text || ''}
-                        onChange={(e) => {
-                          setFormData((prev) => ({
-                            ...prev,
-                            reasonCode: [
-                              {
-                                ...prev.reasonCode?.[0],
-                                text: e.target.value,
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        reason: [
+                          ...(prev.reason || []),
+                          {
+                            use: {
+                              coding: [
+                                {
+                                  system:
+                                    'http://terminology.hl7.org/CodeSystem/v3-ActReason',
+                                  code: '',
+                                  display: '',
+                                },
+                              ],
+                            },
+                            value: {
+                              concept: {
+                                text: '',
                                 coding: [
                                   {
-                                    system:
-                                      prev.reasonCode?.[0]?.coding?.[0]
-                                        ?.system || 'http://snomed.info/sct',
-                                    code:
-                                      prev.reasonCode?.[0]?.coding?.[0]?.code ||
-                                      '',
-                                    display: e.target.value,
+                                    system: 'http://snomed.info/sct',
+                                    code: '',
+                                    display: '',
                                   },
                                 ],
                               },
-                            ],
-                          }));
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 mb-2"
-                        placeholder="Custom reason description"
-                      />
-
-                      <select
-                        value={formData.reasonCode[0]?.coding?.[0]?.code || ''}
-                        onChange={(e) => handleReasonCodeChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        aria-label="Select a reason code"
-                      >
-                        <option value="">Select reason code</option>
-                        {REASON_CODE_OPTIONS.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">
-                      No reason code added.
-                    </p>
-                  )}
-                </div>
-
-                {/* Reason Reference - Similar to Actor */}
-                <div>
-                  <label
-                    htmlFor="reasonReference.0.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Reason Reference
-                  </label>
-                  <select
-                    name="reasonReference.0.reference"
-                    id="reasonReference.0.reference"
-                    value={formData.reasonReference?.[0]?.reference || ''}
-                    onChange={handleReferenceChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a reason reference</option>
-                    {conditionOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {group.id === 'location' && (
-            <div className="sm:col-span-2">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Locations
-                </label>
-                <button
-                  type="button"
-                  onClick={addLocation}
-                  className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Add Location
-                </button>
-              </div>
-
-              {(formData.location || []).map((location, index) => (
-                <div
-                  key={index}
-                  className="border border-gray-200 p-3 rounded-md mb-3"
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {/* Location name/description */}
-                    <div>
-                      <label
-                        htmlFor={`location.${index}.location.reference`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Location Reference *
-                      </label>
-                      <select
-                        name={`location.${index}.location.reference`}
-                        id={`location.${index}.location.reference`}
-                        value={location.location?.reference || ''}
-                        onChange={(e) =>
-                          handleLocationReferenceChange(index, e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      >
-                        <option value="">Select a location</option>
-                        {locationOptions.map((option) => (
-                          <option
-                            key={option.reference}
-                            value={option.reference}
-                          >
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Location status */}
-                    <div>
-                      <label
-                        htmlFor={`location.${index}.status`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Status
-                      </label>
-                      <select
-                        name={`location.${index}.status`}
-                        id={`location.${index}.status`}
-                        value={location.status || 'active'}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        {LOCATION_STATUS_OPTIONS.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Location form (physical type) */}
-                    <div>
-                      <label
-                        id={`location-${index}-form-label`}
-                        htmlFor={`location.${index}.form`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Physical Type
-                      </label>
-                      <select
-                        id={`location.${index}.form`}
-                        name={`location.${index}.form`}
-                        aria-labelledby={`location-${index}-form-label`}
-                        value={location.form?.coding?.[0]?.code || ''}
-                        onChange={(e) =>
-                          handleLocationFormChange(index, e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select location type</option>
-                        {LOCATION_FORM_OPTIONS.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Location period */}
-                    <div>
-                      <label
-                        htmlFor={`location.${index}.period.start`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Start Time
-                      </label>
-                      <input
-                        type="datetime-local"
-                        name={`location.${index}.period.start`}
-                        id={`location.${index}.period.start`}
-                        value={formatDateForInput(location.period?.start)}
-                        onChange={handleChange}
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md mb-2"
-                      />
-
-                      <label
-                        htmlFor={`location.${index}.period.end`}
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        End Time
-                      </label>
-                      <input
-                        type="datetime-local"
-                        name={`location.${index}.period.end`}
-                        id={`location.${index}.period.end`}
-                        value={formatDateForInput(location.period?.end)}
-                        onChange={handleChange}
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => removeLocation(index)}
-                      className="px-2 py-1 text-xs font-medium text-red-600 border border-red-600 rounded-md hover:bg-red-50 focus:outline-none"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {!formData.location?.length && (
-                <p className="text-sm text-gray-500 italic">
-                  No locations added yet.
-                </p>
-              )}
-            </div>
-          )}
-
-          {group.id === 'admission' && (
-            <div className="sm:col-span-2">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Pre-admission identifier - system first, then value */}
-                <div>
-                  <label
-                    id="pre-admission-system-label"
-                    htmlFor="hospitalization.preAdmissionIdentifier.system"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Pre-admission Identifier System
-                  </label>
-                  <select
-                    id="hospitalization.preAdmissionIdentifier.system"
-                    aria-labelledby="pre-admission-system-label"
-                    value={(() => {
-                      const systemUrl =
-                        formData.hospitalization?.preAdmissionIdentifier
-                          ?.system || '';
-                      const option = IDENTIFIER_SYSTEM_OPTIONS.find(
-                        (opt) => opt.system === systemUrl,
-                      );
-                      return option?.code || '';
-                    })()}
-                    onChange={(e) =>
-                      handlePreAdmissionSystemChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select identifier system</option>
-                    {IDENTIFIER_SYSTEM_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="hospitalization.preAdmissionIdentifier.value"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Pre-admission Identifier Value
-                  </label>
-                  <input
-                    type="text"
-                    name="hospitalization.preAdmissionIdentifier.value"
-                    id="hospitalization.preAdmissionIdentifier.value"
-                    value={
-                      formData.hospitalization?.preAdmissionIdentifier?.value ||
-                      ''
-                    }
-                    onChange={(e) => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        hospitalization: {
-                          ...prev.hospitalization,
-                          preAdmissionIdentifier: {
-                            ...prev.hospitalization?.preAdmissionIdentifier,
-                            value: e.target.value,
+                              reference: {
+                                reference: '',
+                                display: '',
+                              },
+                            },
                           },
-                        },
+                        ],
                       }));
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Pre-admission ID"
-                  />
+                    className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Add Reason
+                  </button>
                 </div>
+              </div>
 
-                {/* Origin */}
-                <div>
-                  <label
-                    htmlFor="hospitalization.origin.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Origin (Location/Organization)
-                  </label>
-                  <select
-                    name="hospitalization.origin.reference"
-                    id="hospitalization.origin.reference"
-                    value={formData.hospitalization?.origin?.reference || ''}
-                    onChange={(e) =>
-                      handleOriginReferenceChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select origin</option>
-                    {locationOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="mb-4">
+                <h5 className="text-sm font-medium text-gray-700 mb-2">
+                  Reasons
+                </h5>
+                {(formData.reason || []).length > 0 ? (
+                  <div className="space-y-4">
+                    {formData.reason.map((reason, index) => (
+                      <div
+                        key={index}
+                        className="border border-gray-200 p-3 rounded-md"
+                      >
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label
+                              htmlFor={`reason.${index}.use.coding.0.code`}
+                              className="block text-sm font-medium text-gray-700 mb-1"
+                            >
+                              Use
+                            </label>
+                            <select
+                              name={`reason.${index}.use.coding.0.code`}
+                              id={`reason.${index}.use.coding.0.code`}
+                              value={reason.use?.coding?.[0]?.code || ''}
+                              onChange={(e) => {
+                                const selectedCode = e.target.value;
+                                const useDisplay = (() => {
+                                  const useMap: Record<string, string> = {
+                                    TREAT: 'Treatment',
+                                    DIAG: 'Diagnosis',
+                                    SYMP: 'Symptom',
+                                    COMPLNT: 'Complaint',
+                                    FINDING: 'Finding',
+                                    MONITOR: 'Monitoring',
+                                  };
+                                  return useMap[selectedCode] || selectedCode;
+                                })();
 
-                {/* Admit Source */}
-                <div>
-                  <label
-                    id="admit-source-label"
-                    htmlFor="hospitalization.admitSource"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Admit Source
-                  </label>
-                  <select
-                    id="hospitalization.admitSource"
-                    aria-labelledby="admit-source-label"
-                    value={
-                      formData.hospitalization?.admitSource?.coding?.[0]
-                        ?.code || ''
-                    }
-                    onChange={(e) => handleAdmitSourceChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select admit source</option>
-                    {ADMIT_SOURCE_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                                setFormData((prev) => {
+                                  const updatedReasons = [
+                                    ...(prev.reason || []),
+                                  ];
+                                  updatedReasons[index] = {
+                                    ...updatedReasons[index],
+                                    use: {
+                                      coding: [
+                                        {
+                                          system:
+                                            'http://terminology.hl7.org/CodeSystem/v3-ActReason',
+                                          code: selectedCode,
+                                          display: useDisplay,
+                                        },
+                                      ],
+                                    },
+                                  };
+                                  return {
+                                    ...prev,
+                                    reason: updatedReasons,
+                                  };
+                                });
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select reason use</option>
+                              <option value="TREAT">Treatment</option>
+                              <option value="DIAG">Diagnosis</option>
+                              <option value="SYMP">Symptom</option>
+                              <option value="COMPLNT">Complaint</option>
+                              <option value="FINDING">Finding</option>
+                              <option value="MONITOR">Monitoring</option>
+                            </select>
+                          </div>
+                        </div>
 
-                {/* Re-admission */}
-                <div>
-                  <label
-                    id="readmission-label"
-                    htmlFor="hospitalization.reAdmission"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Re-admission
-                  </label>
-                  <select
-                    id="hospitalization.reAdmission"
-                    aria-labelledby="readmission-label"
-                    value={
-                      formData.hospitalization?.reAdmission?.coding?.[0]
-                        ?.code || ''
-                    }
-                    onChange={(e) => handleReadmissionChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Not a re-admission</option>
-                    {READMISSION_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                        <div className="mb-3">
+                          <h6 className="text-sm font-medium text-gray-700 mb-2">
+                            Value
+                          </h6>
+                          <div className="border-l-2 border-gray-200 pl-3">
+                            <div className="mb-3">
+                              <h6 className="text-sm font-medium text-gray-700 mb-2">
+                                Concept
+                              </h6>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label
+                                    htmlFor={`reason.${index}.value.concept.text`}
+                                    className="block text-sm font-medium text-gray-700 mb-1"
+                                  >
+                                    Description
+                                  </label>
+                                  <input
+                                    type="text"
+                                    name={`reason.${index}.value.concept.text`}
+                                    id={`reason.${index}.value.concept.text`}
+                                    value={reason.value?.concept?.text || ''}
+                                    onChange={(e) => {
+                                      setFormData((prev) => {
+                                        const updatedReasons = [
+                                          ...(prev.reason || []),
+                                        ];
+                                        updatedReasons[index] = {
+                                          ...updatedReasons[index],
+                                          value: {
+                                            ...updatedReasons[index].value,
+                                            concept: {
+                                              ...updatedReasons[index].value
+                                                ?.concept,
+                                              text: e.target.value,
+                                              coding: [
+                                                {
+                                                  ...(updatedReasons[index]
+                                                    .value?.concept
+                                                    ?.coding?.[0] || {}),
+                                                  system:
+                                                    updatedReasons[index].value
+                                                      ?.concept?.coding?.[0]
+                                                      ?.system ||
+                                                    'http://snomed.info/sct',
+                                                  display: e.target.value,
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        };
+                                        return {
+                                          ...prev,
+                                          reason: updatedReasons,
+                                        };
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Custom reason description"
+                                  />
+                                </div>
+                                <div>
+                                  <label
+                                    htmlFor={`reason.${index}.value.concept.coding.0.code`}
+                                    className="block text-sm font-medium text-gray-700 mb-1"
+                                  >
+                                    Code
+                                  </label>
+                                  <select
+                                    name={`reason.${index}.value.concept.coding.0.code`}
+                                    id={`reason.${index}.value.concept.coding.0.code`}
+                                    value={
+                                      reason.value?.concept?.coding?.[0]
+                                        ?.code || ''
+                                    }
+                                    onChange={(e) => {
+                                      const selectedCode = e.target.value;
+                                      const selectedOption =
+                                        REASON_CODE_OPTIONS.find(
+                                          (option) =>
+                                            option.code === selectedCode,
+                                        );
 
-                {/* Destination */}
-                <div>
-                  <label
-                    htmlFor="hospitalization.destination.reference"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Destination
-                  </label>
-                  <select
-                    name="hospitalization.destination.reference"
-                    id="hospitalization.destination.reference"
-                    value={
-                      formData.hospitalization?.destination?.reference || ''
-                    }
-                    onChange={(e) =>
-                      handleDestinationReferenceChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select destination</option>
-                    {locationOptions.map((option) => (
-                      <option key={option.reference} value={option.reference}>
-                        {option.display}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                                      setFormData((prev) => {
+                                        const updatedReasons = [
+                                          ...(prev.reason || []),
+                                        ];
+                                        updatedReasons[index] = {
+                                          ...updatedReasons[index],
+                                          value: {
+                                            ...updatedReasons[index].value,
+                                            concept: {
+                                              text:
+                                                selectedOption?.display || '',
+                                              coding: [
+                                                {
+                                                  system:
+                                                    selectedOption?.system ||
+                                                    'http://snomed.info/sct',
+                                                  code: selectedCode,
+                                                  display:
+                                                    selectedOption?.display ||
+                                                    '',
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        };
+                                        return {
+                                          ...prev,
+                                          reason: updatedReasons,
+                                        };
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="">Select reason code</option>
+                                    {REASON_CODE_OPTIONS.map((option) => (
+                                      <option
+                                        key={option.code}
+                                        value={option.code}
+                                      >
+                                        {option.display}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
 
-                {/* Discharge Disposition */}
-                <div>
-                  <label
-                    id="discharge-disposition-label"
-                    htmlFor="hospitalization.dischargeDisposition"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Discharge Disposition
-                  </label>
-                  <select
-                    id="hospitalization.dischargeDisposition"
-                    name="hospitalization.dischargeDisposition"
-                    aria-labelledby="discharge-disposition-label"
-                    value={
-                      formData.hospitalization?.dischargeDisposition
-                        ?.coding?.[0]?.code || ''
-                    }
-                    onChange={(e) =>
-                      handleDischargeDispositionChange(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select discharge disposition</option>
-                    {DISCHARGE_DISPOSITION_OPTIONS.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.display}
-                      </option>
+                            <div>
+                              <h6 className="text-sm font-medium text-gray-700 mb-2">
+                                Reference
+                              </h6>
+                              <div>
+                                <label
+                                  htmlFor={`reason.${index}.value.reference.reference`}
+                                  className="block text-sm font-medium text-gray-700 mb-1"
+                                >
+                                  Referenced Condition
+                                </label>
+                                <select
+                                  name={`reason.${index}.value.reference.reference`}
+                                  id={`reason.${index}.value.reference.reference`}
+                                  value={
+                                    reason.value?.reference?.reference || ''
+                                  }
+                                  onChange={(e) => {
+                                    // Find the selected option to get both reference and display
+                                    const selectedOption =
+                                      conditionOptions.find(
+                                        (option) =>
+                                          option.reference === e.target.value,
+                                      );
+
+                                    setFormData((prev) => {
+                                      const updatedReasons = [
+                                        ...(prev.reason || []),
+                                      ];
+                                      updatedReasons[index] = {
+                                        ...updatedReasons[index],
+                                        value: {
+                                          ...updatedReasons[index].value,
+                                          reference: {
+                                            reference: e.target.value,
+                                            display:
+                                              selectedOption?.display || '',
+                                          },
+                                        },
+                                      };
+                                      return {
+                                        ...prev,
+                                        reason: updatedReasons,
+                                      };
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="">
+                                    Select a reason reference
+                                  </option>
+                                  {conditionOptions.map((option) => (
+                                    <option
+                                      key={option.reference}
+                                      value={option.reference}
+                                    >
+                                      {option.display}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => {
+                                const updatedReasons = [...(prev.reason || [])];
+                                updatedReasons.splice(index, 1);
+                                return {
+                                  ...prev,
+                                  reason:
+                                    updatedReasons.length > 0
+                                      ? updatedReasons
+                                      : undefined,
+                                };
+                              });
+                            }}
+                            className="px-2 py-1 text-xs font-medium text-red-600 border border-red-600 rounded-md hover:bg-red-50 focus:outline-none"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </select>
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">
+                    No reasons added. Click "Add Reason" to add one.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -3292,6 +3270,13 @@ const EncounterCrudPage: React.FC = () => {
           className="space-y-6 bg-white p-6 rounded-lg shadow-sm border border-gray-200"
         >
           {formGroups.map(renderEditGroup)}
+
+          {/* Display error message if exists */}
+          {errorMessage && (
+            <div className="text-red-600 text-sm font-medium mb-4">
+              {errorMessage}
+            </div>
+          )}
 
           {/* Form Actions */}
           <div className="flex justify-between pt-4">
