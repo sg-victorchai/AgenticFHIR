@@ -389,10 +389,8 @@ const EncounterCrudPage: React.FC = () => {
   );
 
   // Mutations
-  const [createResource, { isLoading: isCreating }] =
-    useCreateResourceMutation();
-  const [updateResource, { isLoading: isUpdating }] =
-    useUpdateResourceMutation();
+  const [, { isLoading: isCreating }] = useCreateResourceMutation();
+  const [, { isLoading: isUpdating }] = useUpdateResourceMutation();
   const [deleteResource, { isLoading: isDeleting }] =
     useDeleteResourceMutation();
 
