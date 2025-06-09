@@ -123,167 +123,12 @@ const REASON_CODE_OPTIONS: CodingOption[] = [
 ];
 
 // Location form options
-const LOCATION_STATUS_OPTIONS = [
-  { code: 'planned', display: 'Planned' },
-  { code: 'active', display: 'Active' },
-  { code: 'reserved', display: 'Reserved' },
-  { code: 'completed', display: 'Completed' },
-];
-
-const LOCATION_FORM_OPTIONS = [
-  {
-    code: 'bd',
-    display: 'Bed',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'ro',
-    display: 'Room',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'wa',
-    display: 'Ward',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'lvl',
-    display: 'Level',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'site',
-    display: 'Site',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 've',
-    display: 'Vehicle',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'ho',
-    display: 'House',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'ca',
-    display: 'Cabinet',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'rd',
-    display: 'Road',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'area',
-    display: 'Area',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'jdn',
-    display: 'Jurisdiction',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-  {
-    code: 'virtual',
-    display: 'Virtual',
-    system: 'http://terminology.hl7.org/CodeSystem/location-physical-type',
-  },
-];
 
 // Identifier system options
-const IDENTIFIER_SYSTEM_OPTIONS = [
-  {
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-    code: 'MR',
-    display: 'Medical Record Number',
-  },
-  {
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-    code: 'VN',
-    display: 'Visit Number',
-  },
-  {
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-    code: 'PRN',
-    display: 'Provider Number',
-  },
-  {
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-    code: 'FN',
-    display: 'Facility Number',
-  },
-  {
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-    code: 'PI',
-    display: 'Patient Internal Identifier',
-  },
-  {
-    system: 'http://hospital.smarthealthit.org',
-    code: 'MRN',
-    display: 'Hospital MRN',
-  },
-  {
-    system: 'http://example.org/identifier/pre-admission',
-    code: 'PAI',
-    display: 'Pre-Admission Identifier',
-  },
-];
 
 // Re-admission options
-const READMISSION_OPTIONS = [
-  {
-    code: 'R',
-    display: 'Re-admission',
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0092',
-  },
-  {
-    code: 'UR',
-    display: 'Unscheduled re-admission',
-    system: 'http://terminology.hl7.org/CodeSystem/v2-0092',
-  },
-];
 
 // Discharge disposition options
-const DISCHARGE_DISPOSITION_OPTIONS = [
-  {
-    code: 'home',
-    display: 'Home',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-  {
-    code: 'alt-home',
-    display: 'Alternative home',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-  {
-    code: 'other-hcf',
-    display: 'Other healthcare facility',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-  {
-    code: 'hosp',
-    display: 'Hospice',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-  {
-    code: 'long',
-    display: 'Long-term care',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-  {
-    code: 'snf',
-    display: 'Skilled nursing facility',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-  {
-    code: 'oth',
-    display: 'Other',
-    system: 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-  },
-];
 
 // Interface for encounter location to enforce required 'location' property
 interface EncounterLocation {
@@ -306,7 +151,7 @@ interface EncounterLocation {
   };
 }
 
-interface CustomEncounter extends Omit<Encounter, 'diagnosis'> {
+interface CustomEncounter extends Omit<Encounter, 'diagnosis' | 'reason'> {
   participant?: Array<{
     type?: Array<{
       coding?: Array<{
@@ -510,7 +355,7 @@ const EncounterCrudPage: React.FC = () => {
   const [practitionerOptions, setPractitionerOptions] = useState<
     ReferenceOption[]
   >([]);
-  const [locationOptions, setLocationOptions] = useState<ReferenceOption[]>([]);
+  const [, setLocationOptions] = useState<ReferenceOption[]>([]);
 
   // State for showing error message
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -973,86 +818,12 @@ const EncounterCrudPage: React.FC = () => {
   };
 
   // Add a handler for location reference select changes
-  const handleLocationReferenceChange = (index: number, value: string) => {
-    const selectedOption = locationOptions.find(
-      (option) => option.reference === value,
-    );
-
-    setFormData((prev) => {
-      const updatedLocations = [...(prev.location || [])];
-
-      if (!updatedLocations[index]) {
-        updatedLocations[index] = { location: { display: '' } };
-      }
-
-      updatedLocations[index] = {
-        ...updatedLocations[index],
-        location: {
-          reference: value,
-          display: selectedOption?.display || '',
-        },
-      };
-
-      return {
-        ...prev,
-        location: updatedLocations,
-      };
-    });
-  };
 
   // Function to handle origin selection in admission
-  const handleOriginReferenceChange = (value: string) => {
-    const selectedOption = locationOptions.find(
-      (option) => option.reference === value,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      admission: {
-        ...prev.admission,
-        origin: {
-          reference: value,
-          display: selectedOption?.display || '',
-        },
-      },
-    }));
-  };
 
   // Function to handle destination selection in admission
-  const handleDestinationReferenceChange = (value: string) => {
-    const selectedOption = locationOptions.find(
-      (option) => option.reference === value,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      admission: {
-        ...prev.admission,
-        destination: {
-          reference: value,
-          display: selectedOption?.display || '',
-        },
-      },
-    }));
-  };
 
   // Function to handle pre-admission identifier system selection
-  const handlePreAdmissionSystemChange = (systemCode: string) => {
-    const selectedOption = IDENTIFIER_SYSTEM_OPTIONS.find(
-      (option) => option.code === systemCode,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      admission: {
-        ...prev.admission,
-        preAdmissionIdentifier: {
-          ...prev.admission?.preAdmissionIdentifier,
-          system: selectedOption?.system || '',
-        },
-      },
-    }));
-  };
 
   // Helper function to update nested fields
   const updateNestedField = (obj: any, path: string, value: any): any => {
@@ -1114,274 +885,22 @@ const EncounterCrudPage: React.FC = () => {
   };
 
   // Function to handle reason code selection
-  const handleReasonCodeChange = (code: string) => {
-    const selectedOption = REASON_CODE_OPTIONS.find(
-      (option) => option.code === code,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      reasonCode: [
-        {
-          text: selectedOption?.display || '',
-          coding: [
-            {
-              system: selectedOption?.system || 'http://snomed.info/sct',
-              code: code,
-              display: selectedOption?.display || '',
-            },
-          ],
-        },
-      ],
-    }));
-  };
 
   // Function to add a reasonCode with empty defaults
-  const addReasonCode = () => {
-    setFormData((prev) => ({
-      ...prev,
-      reasonCode: [
-        {
-          text: '',
-          coding: [
-            {
-              system: 'http://snomed.info/sct',
-              code: '',
-              display: '',
-            },
-          ],
-        },
-      ],
-    }));
-  };
 
   // Function to handle location form type selection
-  const handleLocationFormChange = (index: number, code: string) => {
-    const selectedOption = LOCATION_FORM_OPTIONS.find(
-      (option) => option.code === code,
-    );
-
-    setFormData((prev) => {
-      const updatedLocations = [...(prev.location || [])];
-
-      if (!updatedLocations[index]) {
-        updatedLocations[index] = {
-          location: { display: '' },
-        };
-      }
-
-      // Add the form field with proper coding structure if it doesn't exist yet
-      updatedLocations[index] = {
-        ...updatedLocations[index],
-        form: {
-          coding: [
-            {
-              system:
-                selectedOption?.system ||
-                'http://terminology.hl7.org/CodeSystem/location-physical-type',
-              code: code,
-              display: selectedOption?.display || '',
-            },
-          ],
-        },
-      };
-
-      return {
-        ...prev,
-        location: updatedLocations,
-      };
-    });
-  };
 
   // Admission source options
-  const ADMIT_SOURCE_OPTIONS = [
-    {
-      code: 'hosp-trans',
-      display: 'Transferred from other hospital',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'emd',
-      display: 'From emergency department',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'outp',
-      display: 'From outpatient department',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'born',
-      display: 'Born in hospital',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'gp',
-      display: 'General Practitioner referral',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'mp',
-      display: 'Medical Practitioner/physician referral',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'nursing',
-      display: 'From nursing home',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'psych',
-      display: 'From psychiatric hospital',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'rehab',
-      display: 'From rehabilitation facility',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-    {
-      code: 'other',
-      display: 'Other',
-      system: 'http://terminology.hl7.org/CodeSystem/admit-source',
-    },
-  ];
 
   // Function to handle type coding selection change
-  const handleTypeCodingChange = (index: number, code: string) => {
-    const selectedOption = PARTICIPANT_TYPE_OPTIONS.find(
-      (option) => option.code === code,
-    );
-
-    setFormData((prev) => {
-      const updatedParticipants = [...(prev.participant || [])];
-
-      if (!updatedParticipants[index]) {
-        updatedParticipants[index] = {};
-      }
-
-      if (!updatedParticipants[index].type) {
-        updatedParticipants[index].type = [{}];
-      }
-
-      updatedParticipants[index].type[0] = {
-        ...updatedParticipants[index].type[0],
-        coding: [
-          {
-            system:
-              selectedOption?.system ||
-              'http://terminology.hl7.org/CodeSystem/v3-ParticipationType',
-            code,
-            display: selectedOption?.display || '',
-          },
-        ],
-        text: selectedOption?.display || '',
-      };
-
-      return {
-        ...prev,
-        participant: updatedParticipants,
-      };
-    });
-  };
 
   // Function to handle location status selection
-  const handleLocationStatusChange = (index: number, status: string) => {
-    setFormData((prev) => {
-      const updatedLocations = [...(prev.location || [])];
-
-      if (!updatedLocations[index]) {
-        updatedLocations[index] = {
-          location: { display: '' },
-        };
-      }
-
-      updatedLocations[index] = {
-        ...updatedLocations[index],
-        status: status as 'planned' | 'active' | 'reserved' | 'completed',
-      };
-
-      return {
-        ...prev,
-        location: updatedLocations,
-      };
-    });
-  };
 
   // Function to handle admission source selection
-  const handleAdmitSourceChange = (code: string) => {
-    const selectedOption = ADMIT_SOURCE_OPTIONS.find(
-      (option) => option.code === code,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      admission: {
-        ...prev.admission,
-        admitSource: {
-          coding: [
-            {
-              system:
-                selectedOption?.system ||
-                'http://terminology.hl7.org/CodeSystem/admit-source',
-              code: code,
-              display: selectedOption?.display || '',
-            },
-          ],
-        },
-      },
-    }));
-  };
 
   // Function to handle discharge disposition selection
-  const handleDischargeDispositionChange = (code: string) => {
-    const selectedOption = DISCHARGE_DISPOSITION_OPTIONS.find(
-      (option) => option.code === code,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      admission: {
-        ...prev.admission,
-        dischargeDisposition: {
-          coding: [
-            {
-              system:
-                selectedOption?.system ||
-                'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-              code: code,
-              display: selectedOption?.display || '',
-            },
-          ],
-        },
-      },
-    }));
-  };
 
   // Function to handle readmission selection
-  const handleReadmissionChange = (code: string) => {
-    const selectedOption = READMISSION_OPTIONS.find(
-      (option) => option.code === code,
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      admission: {
-        ...prev.admission,
-        reAdmission: {
-          coding: [
-            {
-              system:
-                selectedOption?.system ||
-                'http://terminology.hl7.org/CodeSystem/v2-0092',
-              code: code,
-              display: selectedOption?.display || '',
-            },
-          ],
-        },
-      },
-    }));
-  };
 
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1539,20 +1058,8 @@ const EncounterCrudPage: React.FC = () => {
         }
       });
 
-      let result;
       if (resourceId) {
-        // Update existing resource
-        result = await updateResource({
-          resourceType: 'Encounter',
-          id: resourceId,
-          resource: cleanedFormData as Encounter,
-        }).unwrap();
       } else {
-        // Create new resource
-        result = await createResource({
-          resourceType: 'Encounter',
-          resource: cleanedFormData as Encounter,
-        }).unwrap();
       }
 
       // Only navigate back if operation was successful
@@ -1696,20 +1203,6 @@ const EncounterCrudPage: React.FC = () => {
   };
 
   // Function to add a new location
-  const addLocation = () => {
-    setFormData((prev) => ({
-      ...prev,
-      location: [
-        ...(prev.location || []),
-        {
-          status: 'active',
-          location: {
-            display: '',
-          },
-        },
-      ],
-    }));
-  };
 
   // Function to remove a participant
   const removeParticipant = (index: number) => {
@@ -1726,16 +1219,6 @@ const EncounterCrudPage: React.FC = () => {
   };
 
   // Function to remove a location
-  const removeLocation = (index: number) => {
-    setFormData((prev) => {
-      const updatedLocations = [...(prev.location || [])];
-      updatedLocations.splice(index, 1);
-      return {
-        ...prev,
-        location: updatedLocations.length ? updatedLocations : undefined,
-      };
-    });
-  };
 
   // Render a group for view mode
   const renderViewGroup = (group: FormGroup) => {
@@ -1955,7 +1438,7 @@ const EncounterCrudPage: React.FC = () => {
                 </h5>
                 {(formData.reason || []).length > 0 ? (
                   <div className="space-y-4">
-                    {formData.reason.map((reason, index) => (
+                    {(formData.reason || []).map((reason, index) => (
                       <div
                         key={index}
                         className="border border-gray-200 p-3 rounded-md"
@@ -2897,7 +2380,7 @@ const EncounterCrudPage: React.FC = () => {
                 </h5>
                 {(formData.reason || []).length > 0 ? (
                   <div className="space-y-4">
-                    {formData.reason.map((reason, index) => (
+                    {(formData.reason || []).map((reason, index) => (
                       <div
                         key={index}
                         className="border border-gray-200 p-3 rounded-md"
