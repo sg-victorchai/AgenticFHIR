@@ -1,7 +1,45 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  getPatientContext,
+  isSMARTContext,
+} from '../services/fhir/smartClient';
+import { useFHIR } from '../contexts/FHIRContext';
 
 const HomePage: React.FC = () => {
+  const navigate = useNavigate();
+  const { client, isLoading: clientLoading } = useFHIR();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  useEffect(() => {
+    const loadPatientContext = async () => {
+      // Only auto-redirect if we're in a SMART context and client is ready
+      if (!isSMARTContext() || !client) {
+        return;
+      }
+
+      setIsRedirecting(true);
+      try {
+        const { patientId } = await getPatientContext();
+        navigate(`/patient/${patientId}`);
+      } catch (error) {
+        console.error('Error loading patient context:', error);
+        setIsRedirecting(false);
+      }
+    };
+
+    loadPatientContext();
+  }, [navigate, client]);
+
+  if (clientLoading || isRedirecting) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <p className="ml-4">Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4">
       <h1 className="text-3xl font-bold mb-6">FHIR Web Application</h1>

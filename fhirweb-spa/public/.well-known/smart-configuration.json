@@ -1,0 +1,14 @@
+{
+  "authorization_endpoint": "https://launch.smarthealthit.org/authorize",
+  "token_endpoint": "https://launch.smarthealthit.org/token",
+  "capabilities": [
+    "launch-ehr",
+    "launch-standalone",
+    "client-public",
+    "client-confidential-symmetric",
+    "sso-openid-connect",
+    "context-ehr-patient",
+    "permission-patient",
+    "permission-offline"
+  ]
+}

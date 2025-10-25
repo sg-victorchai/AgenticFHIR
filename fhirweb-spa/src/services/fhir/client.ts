@@ -1,4 +1,5 @@
 import Client from 'fhir-kit-client';
+import { createAuthenticatedFHIRClient, isSMARTContext } from './smartClient';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import {
   Patient,
@@ -31,19 +32,25 @@ const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
 
 // Create FHIR client
-export const createFHIRClient = (): Client => {
+export const createFHIRClient = async (): Promise<Client> => {
+  // Check if running in SMART context
+  if (isSMARTContext()) {
+    // Use SMART authenticated client
+    return await createAuthenticatedFHIRClient();
+  }
+
   return new Client({
     baseUrl: FHIR_BASE_URL,
     customHeaders: {
       'x-api-key': API_KEY,
-    }
+    },
   });
 };
 
 // Get SMART auth metadata
 export const getSMARTAuthMetadata = async () => {
   try {
-    const client = createFHIRClient();
+    const client = await createFHIRClient();
     const metadata = await client.smartAuthMetadata();
     return metadata;
   } catch (error) {
@@ -73,7 +80,7 @@ export const fhirApi = createApi({
     getPatient: builder.query<Patient, string>({
       queryFn: async (patientId, _apiState) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const patient = await client.read({
             resourceType: 'Patient',
             id: patientId,
@@ -81,22 +88,24 @@ export const fhirApi = createApi({
           return { data: patient as Patient };
         } catch (error: any) {
           console.error('Error fetching patient:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       providesTags: (_result, _error, id) => [{ type: 'Patient', id }],
     }),
-    
+
     searchPatients: builder.query<Bundle<Patient>, Record<string, string>>({
       queryFn: async (searchParams, _apiState) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Patient',
             searchParams,
@@ -104,22 +113,24 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Patient> };
         } catch (error: any) {
           console.error('Error searching patients:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       providesTags: ['Patient'],
     }),
-    
+
     getCarePlans: builder.query<Bundle<CarePlan>, string>({
       queryFn: async (patientId, _apiState) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'CarePlan',
             searchParams: {
@@ -129,12 +140,14 @@ export const fhirApi = createApi({
           return { data: results as Bundle<CarePlan> };
         } catch (error: any) {
           console.error('Error fetching care plans:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -142,26 +155,26 @@ export const fhirApi = createApi({
         { type: 'CarePlan', id: patientId },
       ],
     }),
-    
+
     getObservations: builder.query<
       Bundle<Observation>,
       { patientId: string; code?: string; date?: string }
     >({
       queryFn: async ({ patientId, code, date }, _api) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const searchParams: Record<string, string> = {
             patient: patientId,
           };
-          
+
           if (code) {
             searchParams.code = code;
           }
-          
+
           if (date) {
             searchParams.date = date;
           }
-          
+
           const results = await client.search({
             resourceType: 'Observation',
             searchParams,
@@ -169,12 +182,14 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Observation> };
         } catch (error: any) {
           console.error('Error fetching observations:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -182,11 +197,11 @@ export const fhirApi = createApi({
         { type: 'Observation', id: arg.patientId },
       ],
     }),
-    
+
     getEncounters: builder.query<Bundle<Encounter>, string>({
       queryFn: async (patientId) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Encounter',
             searchParams: {
@@ -196,12 +211,14 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Encounter> };
         } catch (error: any) {
           console.error('Error fetching encounters:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -209,11 +226,11 @@ export const fhirApi = createApi({
         { type: 'Encounter', id: patientId },
       ],
     }),
-    
+
     getMedications: builder.query<Bundle<MedicationRequest>, string>({
       queryFn: async (patientId) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'MedicationRequest',
             searchParams: {
@@ -223,12 +240,14 @@ export const fhirApi = createApi({
           return { data: results as Bundle<MedicationRequest> };
         } catch (error: any) {
           console.error('Error fetching medications:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -236,52 +255,56 @@ export const fhirApi = createApi({
         { type: 'MedicationRequest', id: patientId },
       ],
     }),
-    
+
     getNextPage: builder.query<Bundle<Resource>, Bundle<Resource>>({
       queryFn: async (bundle) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.nextPage({ bundle });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
           console.error('Error fetching next page:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
     }),
-    
+
     getPreviousPage: builder.query<Bundle<Resource>, Bundle<Resource>>({
       queryFn: async (bundle) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.prevPage({ bundle });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
           console.error('Error fetching previous page:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
     }),
-    
+
     createResource: builder.mutation<
       Resource,
       { resourceType: string; resource: Resource }
     >({
       queryFn: async ({ resourceType, resource }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const result = await client.create({
             resourceType,
             body: resource,
@@ -289,12 +312,14 @@ export const fhirApi = createApi({
           return { data: result as Resource };
         } catch (error: any) {
           console.error('Error creating resource:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -308,14 +333,14 @@ export const fhirApi = createApi({
         return [tagType];
       },
     }),
-    
+
     updateResource: builder.mutation<
       Resource,
       { resourceType: string; id: string; resource: Resource }
     >({
       queryFn: async ({ resourceType, id, resource }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const result = await client.update({
             resourceType,
             id,
@@ -324,12 +349,14 @@ export const fhirApi = createApi({
           return { data: result as Resource };
         } catch (error: any) {
           console.error('Error updating resource:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -343,14 +370,14 @@ export const fhirApi = createApi({
         return [{ type: tagType, id }];
       },
     }),
-    
+
     deleteResource: builder.mutation<
       void,
       { resourceType: string; id: string }
     >({
       queryFn: async ({ resourceType, id }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           await client.delete({
             resourceType,
             id,
@@ -358,12 +385,14 @@ export const fhirApi = createApi({
           return { data: undefined };
         } catch (error: any) {
           console.error('Error deleting resource:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -376,14 +405,14 @@ export const fhirApi = createApi({
         return [{ type: tagType, id }, tagType];
       },
     }),
-    
+
     getResourceById: builder.query<
       Resource,
       { resourceType: string; id: string }
     >({
       queryFn: async ({ resourceType, id }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const resource = await client.read({
             resourceType,
             id,
@@ -391,12 +420,14 @@ export const fhirApi = createApi({
           return { data: resource as Resource };
         } catch (error: any) {
           console.error('Error fetching resource by ID:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -404,7 +435,7 @@ export const fhirApi = createApi({
         { type: resourceType as any, id },
       ],
     }),
-    
+
     getPractitioners: builder.query<
       Bundle<Resource>,
       { searchParams?: Record<string, string> }
@@ -413,7 +444,7 @@ export const fhirApi = createApi({
         searchParams = { _count: '100', _sort: 'family' },
       }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Practitioner',
             searchParams,
@@ -421,25 +452,27 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
           console.error('Error fetching practitioners:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       providesTags: ['Practitioner'],
     }),
-    
+
     getOrganizations: builder.query<
       Bundle<Resource>,
       { searchParams?: Record<string, string> }
     >({
       queryFn: async ({ searchParams = { _count: '100', _sort: 'name' } }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Organization',
             searchParams,
@@ -447,25 +480,27 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
           console.error('Error fetching organizations:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       providesTags: ['Organization'],
     }),
-    
+
     getConditions: builder.query<
       Bundle<Resource>,
       { patientId: string; searchParams?: Record<string, string> }
     >({
       queryFn: async ({ patientId, searchParams = { _count: '100' } }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Condition',
             searchParams: {
@@ -476,12 +511,14 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
           console.error('Error fetching conditions:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
@@ -489,11 +526,11 @@ export const fhirApi = createApi({
         { type: 'Condition', id: patientId },
       ],
     }),
-    
+
     getPractitionerById: builder.query<Resource, string>({
       queryFn: async (id) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const resource = await client.read({
             resourceType: 'Practitioner',
             id,
@@ -501,25 +538,27 @@ export const fhirApi = createApi({
           return { data: resource as Resource };
         } catch (error: any) {
           console.error('Error fetching practitioner by ID:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       providesTags: (_result, _error, id) => [{ type: 'Practitioner', id }],
     }),
-    
+
     getLocations: builder.query<
       Bundle<Resource>,
       { searchParams?: Record<string, string> }
     >({
       queryFn: async ({ searchParams = { _count: '100', _sort: 'name' } }) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Location',
             searchParams,
@@ -527,22 +566,24 @@ export const fhirApi = createApi({
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
           console.error('Error fetching locations:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       providesTags: ['Location'],
     }),
-    
+
     createPatient: builder.mutation<Patient, Patient>({
       queryFn: async (patient) => {
         try {
-          const client = createFHIRClient();
+          const client = await createFHIRClient();
           const result = await client.create({
             resourceType: 'Patient',
             body: patient,
@@ -550,26 +591,28 @@ export const fhirApi = createApi({
           return { data: result as Patient };
         } catch (error: any) {
           console.error('Error creating patient:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },
       invalidatesTags: ['Patient'],
     }),
-    
+
     updatePatient: builder.mutation<Patient, Patient>({
       queryFn: async (patient) => {
         try {
           if (!patient.id) {
             throw new Error('Patient ID is required for updates');
           }
-          
-          const client = createFHIRClient();
+
+          const client = await createFHIRClient();
           const result = await client.update({
             resourceType: 'Patient',
             id: patient.id,
@@ -578,12 +621,14 @@ export const fhirApi = createApi({
           return { data: result as Patient };
         } catch (error: any) {
           console.error('Error updating patient:', error);
-          return { 
+          return {
             error: {
               status: error.response?.status || 'FETCH_ERROR',
               data: error.response?.data || null,
-              error: `HTTP ${error.response?.status || 'ERROR'}: ${error.message || 'Unknown error'}`
-            }
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
           };
         }
       },

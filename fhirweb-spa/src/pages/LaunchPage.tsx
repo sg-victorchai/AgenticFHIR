@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import FHIR from 'fhirclient';
 
 const LaunchPage: React.FC = () => {
   const navigate = useNavigate();
@@ -9,17 +10,20 @@ const LaunchPage: React.FC = () => {
     // SMART on FHIR launch sequence would go here
     const handleLaunch = async () => {
       try {
-        // Placeholder for actual SMART launch logic
-        console.log('Processing FHIR launch sequence...');
-
-        // After successful authorization, redirect to the home page
-        // In a real implementation, you would handle the OAuth2 flow
-        setTimeout(() => {
-          navigate('/');
-        }, 2000);
+        // SMART on FHIR authorization with EHR launch
+        await FHIR.oauth2.authorize({
+          clientId: import.meta.env.VITE_SMART_CLIENT_ID || 'your-client-id',
+          scope: 'launch launch/patient patient/*.read openid fhirUser',
+          redirectUri: window.location.origin + '/smartapp',
+          iss:
+            new URLSearchParams(window.location.search).get('iss') || undefined,
+          launch:
+            new URLSearchParams(window.location.search).get('launch') ||
+            undefined,
+        });
       } catch (error) {
-        console.error('Launch error:', error);
-        setLaunchError('Failed to initialize FHIR client. Please try again.');
+        console.error('SMART launch error:', error);
+        setLaunchError('Failed to initialize SMART on FHIR. Please try again.');
       }
     };
 
