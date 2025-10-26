@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import FHIR from 'fhirclient';
-import {
-  getPatientContext,
-  isSMARTContext,
-} from '../services/fhir/smartClient';
 import { useFHIR } from '../contexts/FHIRContext';
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { client, isLoading: clientLoading, reinitializeClient } = useFHIR();
+  const { isLoading: clientLoading, reinitializeClient } = useFHIR();
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {

@@ -282,7 +282,6 @@ function customizeGroupsForResourceType(
 
     case 'CarePlan':
       // For CarePlan, ensure activities have their own group
-      let activityFound = false;
       for (let i = 0; i < groups.length; i++) {
         const activityIndex = groups[i].elements.indexOf('activity');
         if (activityIndex >= 0) {

@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import Client from 'fhir-kit-client';
 import { createFHIRClient } from '../services/fhir/client';
-import { isSMARTContext } from '../services/fhir/smartClient';
 
 interface FHIRContextType {
   client: Client | null;

@@ -36,7 +36,7 @@ interface Patient {
 }
 
 const MedicationRequestPage: React.FC = () => {
-  const patient = useOutletContext<Patient>();
+  useOutletContext<Patient>();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -53,14 +53,11 @@ const MedicationRequestPage: React.FC = () => {
         const resource = entry.resource as FHIRMedicationRequest;
 
         // Handle different medication property structures
-        let medicationInfo = resource.medicationCodeableConcept;
+        let medicationInfo = null;
 
-        // Check if medication is in the resource.medication structure (FHIR R5 format)
-        if (
-          !medicationInfo &&
-          resource.medication &&
-          'concept' in resource.medication
-        ) {
+        if (resource.medicationCodeableConcept) {
+          medicationInfo = resource.medicationCodeableConcept;
+        } else if (resource.medication && 'concept' in resource.medication) {
           medicationInfo = resource.medication.concept;
         }
 

@@ -481,13 +481,12 @@ const PatientCrudPage: React.FC = () => {
         resourceType: 'Patient',
       };
 
-      let result;
       if (isNew) {
         // Create new resource
-        result = await createPatient(cleanedFormData).unwrap();
+        await createPatient(cleanedFormData).unwrap();
       } else {
         // Update existing resource
-        result = await updatePatient(cleanedFormData).unwrap();
+        await updatePatient(cleanedFormData).unwrap();
       }
 
       // Only navigate back if operation was successful
