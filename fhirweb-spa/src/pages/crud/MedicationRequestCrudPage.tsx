@@ -288,12 +288,19 @@ const MedicationRequestCrudPage: React.FC = () => {
 
   // Helper function to get medication text
   const getMedicationText = () => {
-    if (formData.medication && 'concept' in formData.medication && formData.medication.concept) {
+    if (
+      formData.medication &&
+      'concept' in formData.medication &&
+      formData.medication.concept
+    ) {
       // Return text if available, otherwise try to use the display from coding
-      if (formData.medication.concept.text && formData.medication.concept.text.trim() !== '') {
+      if (
+        formData.medication.concept.text &&
+        formData.medication.concept.text.trim() !== ''
+      ) {
         return formData.medication.concept.text;
       } else if (
-        formData.medication.concept.coding && 
+        formData.medication.concept.coding &&
         formData.medication.concept.coding.length > 0 &&
         formData.medication.concept.coding[0].display
       ) {
