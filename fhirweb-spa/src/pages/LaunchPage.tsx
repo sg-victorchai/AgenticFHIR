@@ -14,7 +14,7 @@ const LaunchPage: React.FC = () => {
         await FHIR.oauth2.authorize({
           clientId: import.meta.env.VITE_SMART_CLIENT_ID || 'your-client-id',
           scope: 'launch launch/patient patient/*.read openid fhirUser',
-          redirectUri: window.location.origin + '/smartapp',
+          redirectUri: window.location.origin + '/smartapp/',
           iss:
             new URLSearchParams(window.location.search).get('iss') || undefined,
           launch:

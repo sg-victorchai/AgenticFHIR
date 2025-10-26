@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import FHIR from 'fhirclient';
 import {
   getPatientContext,
   isSMARTContext,
@@ -8,28 +9,43 @@ import { useFHIR } from '../contexts/FHIRContext';
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { client, isLoading: clientLoading } = useFHIR();
+  const { client, isLoading: clientLoading, reinitializeClient } = useFHIR();
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    const loadPatientContext = async () => {
-      // Only auto-redirect if we're in a SMART context and client is ready
-      if (!isSMARTContext() || !client) {
-        return;
-      }
+    const handleOAuthCallback = async () => {
+      // Check if this is an OAuth callback (has state parameter)
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('state')) {
+        console.log('SmartOnFHIR - Detected OAuth callback');
+        setIsRedirecting(true);
 
-      setIsRedirecting(true);
-      try {
-        const { patientId } = await getPatientContext();
-        navigate(`/patient/${patientId}`);
-      } catch (error) {
-        console.error('Error loading patient context:', error);
-        setIsRedirecting(false);
+        try {
+          // Complete the OAuth flow and get the SMART client
+          console.log('SmartOnFHIR - Calling FHIR.oauth2.ready()');
+          const smartClient = await FHIR.oauth2.ready();
+          console.log(
+            'SmartOnFHIR - OAuth ready, server:',
+            smartClient.state.serverUrl,
+          );
+
+          // Now reinitialize the FHIR client with SMART credentials
+          console.log('SmartOnFHIR - Reinitializing FHIR client');
+          await reinitializeClient();
+
+          // Get patient context and navigate
+          const patientId = smartClient.patient.id;
+          console.log('SmartOnFHIR - Redirecting to patient:', patientId);
+          navigate(`/patient/${patientId}`);
+        } catch (error) {
+          console.error('Error handling OAuth callback:', error);
+          setIsRedirecting(false);
+        }
       }
     };
 
-    loadPatientContext();
-  }, [navigate, client]);
+    handleOAuthCallback();
+  }, [navigate, reinitializeClient]);
 
   if (clientLoading || isRedirecting) {
     return (

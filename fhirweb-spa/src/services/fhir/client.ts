@@ -36,9 +36,11 @@ export const createFHIRClient = async (): Promise<Client> => {
   // Check if running in SMART context
   if (isSMARTContext()) {
     // Use SMART authenticated client
+    console.log('SmartOnFHIR: Creating SMART authenticated FHIR client');
     return await createAuthenticatedFHIRClient();
   }
 
+  console.log('Creating non-SMART FHIR client');
   return new Client({
     baseUrl: FHIR_BASE_URL,
     customHeaders: {

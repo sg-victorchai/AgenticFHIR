@@ -3,17 +3,41 @@ import Client from 'fhir-kit-client';
 
 // Check if we're in a SMART context
 export const isSMARTContext = (): boolean => {
-  // Check if we have SMART state in session storage
-  const smartKey = sessionStorage.getItem('SMART_KEY');
-  if (smartKey) {
+  // Check URL parameters - if we have 'state' param, we're returning from OAuth
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasStateParam = urlParams.has('state');
+
+  console.log('Checking SMART context - has state param:', hasStateParam);
+  console.log('Current URL:', window.location.href);
+
+  if (hasStateParam) {
     return true;
   }
 
-  // Check if we have launch parameters
-  const urlParams = new URLSearchParams(window.location.search);
-  return (
-    urlParams.has('iss') || urlParams.has('launch') || urlParams.has('code')
-  );
+  // Also check if SMART state exists in sessionStorage
+  // The fhirclient library stores state with a specific pattern
+  try {
+    const keys = Object.keys(sessionStorage);
+    console.log('SessionStorage keys:', keys);
+
+    for (const key of keys) {
+      const value = sessionStorage.getItem(key);
+      if (value) {
+        try {
+          const parsed = JSON.parse(value);
+          // Check if this looks like SMART state
+          if (parsed && (parsed.serverUrl || parsed.tokenResponse)) {
+            console.log('Found SMART state in sessionStorage:', key);
+            return true;
+          }
+        } catch {}
+      }
+    }
+  } catch (error) {
+    console.error('Error checking sessionStorage:', error);
+  }
+
+  return false;
 };
 
 // Get the SMART client instance
@@ -31,7 +55,7 @@ export const getSMARTClient = async () => {
 export const createAuthenticatedFHIRClient = async (): Promise<Client> => {
   const smartClient = await getSMARTClient();
   const accessToken = smartClient.state.tokenResponse?.access_token;
-
+  console.log('SmartOnFHIR: serverUrl', smartClient.state.serverUrl);
   return new Client({
     baseUrl: smartClient.state.serverUrl,
     customHeaders: {
