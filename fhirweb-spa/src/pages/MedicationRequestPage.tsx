@@ -1,7 +1,6 @@
 import React from 'react';
 import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
 import { useGetMedicationsQuery } from '../services/fhir/client';
-import { MedicationRequest as FHIRMedicationRequest } from 'fhir/r5';
 
 interface MedicationRequest {
   id: string;
@@ -50,7 +49,7 @@ const MedicationRequestPage: React.FC = () => {
     return data.entry
       .filter((entry) => entry.resource)
       .map((entry) => {
-        const resource = entry.resource as FHIRMedicationRequest;
+        const resource = entry.resource as any;
 
         // Handle different medication property structures
         let medicationInfo = null;
@@ -65,7 +64,7 @@ const MedicationRequestPage: React.FC = () => {
           id: resource.id || '',
           status: resource.status || 'unknown',
           medicationCodeableConcept: medicationInfo,
-          dosageInstruction: resource.dosageInstruction,
+          dosageInstruction: resource.dosageInstruction as any,
           authoredOn: resource.authoredOn,
         };
       });

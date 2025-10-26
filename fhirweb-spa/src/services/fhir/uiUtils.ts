@@ -146,7 +146,7 @@ function organizeElementsIntoGroups(resourceType: string, elements: any[]) {
   const backboneGroups = new Map<string, any>();
   const backboneElements = elements.filter((element) => {
     const types = element.type || [];
-    return types.some((type) => type.code === 'BackboneElement');
+    return types.some((type: any) => type.code === 'BackboneElement');
   });
 
   // Create a group for each backbone element
@@ -170,7 +170,7 @@ function organizeElementsIntoGroups(resourceType: string, elements: any[]) {
   const overviewGroup = {
     id: 'overview',
     title: 'Overview',
-    elements: [],
+    elements: [] as string[],
   };
 
   // Assign elements to their respective groups
@@ -190,7 +190,7 @@ function organizeElementsIntoGroups(resourceType: string, elements: any[]) {
     // If this is a direct child of the resource type (i.e., path has only 2 parts)
     if (pathParts.length === 2) {
       overviewGroup.elements.push(pathParts[1]);
-      assignedElements.add(path);
+      (assignedElements as any).add(path);
       return;
     }
 
@@ -287,7 +287,6 @@ function customizeGroupsForResourceType(
         if (activityIndex >= 0) {
           // Remove activity from current group
           groups[i].elements.splice(activityIndex, 1);
-          activityFound = true;
 
           // Add activities group if it doesn't exist yet
           if (!groups.some((g) => g.id === 'activities')) {

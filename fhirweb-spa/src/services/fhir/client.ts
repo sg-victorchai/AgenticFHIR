@@ -11,19 +11,6 @@ import {
   Encounter,
 } from 'fhir/r5';
 
-// Define TypeScript interface for Vite environment variables
-interface ImportMetaEnv {
-  readonly VITE_FHIR_BASE_URL?: string;
-  readonly VITE_API_KEY?: string;
-}
-
-// Augment the ImportMeta interface
-declare global {
-  interface ImportMeta {
-    readonly env: ImportMetaEnv;
-  }
-}
-
 // FHIR server configuration from environment variables
 const FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL ||
