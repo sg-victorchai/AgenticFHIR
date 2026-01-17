@@ -30,7 +30,10 @@ export const isSMARTContext = (): boolean => {
             console.log('Found SMART state in sessionStorage:', key);
             return true;
           }
-        } catch {}
+        } catch (parseError) {
+          // Silently continue - not all sessionStorage items are JSON
+          // This is expected behavior when checking all storage keys
+        }
       }
     }
   } catch (error) {
