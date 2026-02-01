@@ -152,20 +152,6 @@ npm run dev
 | **SearchParameter**     | Searchable fields, filter definitions     | [Spec](https://hl7.org/fhir/R5/searchparameter.html)     |
 | **OperationDefinition** | Custom operations, input/output           | [Spec](https://hl7.org/fhir/R5/operationdefinition.html) |
 
----
-
-## 📸 Screenshots
-
-### Patient Search & Records
-
-![Home Page](./FHIR%20Web%20GenAI%20POC-1.png)
-
-### Auto-Generated Resource Views
-
-![Patient Records Page](./FHIR%20Web%20GenAI%20POC-2.png)
-
----
-
 ## 🎯 Key Takeaways
 
 1. **AI + Metadata = Acceleration**: GitHub Copilot + FHIR metadata = 10x faster development
