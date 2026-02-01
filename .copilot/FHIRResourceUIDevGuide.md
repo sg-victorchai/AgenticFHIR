@@ -154,6 +154,242 @@ Generate a responsive table component to display FHIR {ResourceType} resources w
 The component should be designed to work with any FHIR resource type by simply changing the resourceType property.
 ```
 
+## Pagination Implementation
+
+All resource listing pages should include server-side pagination to handle large result sets efficiently. The pagination pattern uses the FHIR Bundle's built-in `link` array for navigation.
+
+### Pagination Component
+
+A reusable `Pagination` component is available at `src/components/common/Pagination.tsx` that handles:
+
+- Display of current page information (e.g., "Showing 1-20 of 150 results")
+- Previous/Next navigation buttons with loading states
+- Disabled states when no previous/next links exist
+- Responsive design for mobile and desktop
+- Accessibility features (keyboard navigation, ARIA labels)
+
+### Implementation Pattern
+
+For any resource listing page, follow this pattern:
+
+#### 1. Import Required Dependencies
+
+```typescript
+import React, { useState, useEffect } from 'react';
+import { Bundle, ResourceType as FHIRResourceType } from 'fhir/r5';
+import {
+  useGetResourceQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+} from '../services/fhir/client';
+import { Pagination } from '../components/common/Pagination';
+```
+
+#### 2. Add State Management for Bundle
+
+```typescript
+const [currentBundle, setCurrentBundle] = useState<
+  Bundle<FHIRResourceType> | undefined
+>();
+
+// Query hook for initial data
+const { data, isLoading, error } = useGetResourceQuery(queryParams);
+
+// Update current bundle when data changes
+useEffect(() => {
+  if (data) {
+    setCurrentBundle(data);
+  }
+}, [data]);
+```
+
+#### 3. Implement Pagination Handlers
+
+```typescript
+// Pagination hooks (using mutations for manual triggering)
+const [triggerNextPage, { isLoading: isLoadingNext }] =
+  useGetNextPageMutation();
+const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+  useGetPreviousPageMutation();
+
+const handleNextPage = async () => {
+  if (currentBundle) {
+    const result = await triggerNextPage(currentBundle);
+    if ('data' in result) {
+      setCurrentBundle(result.data as Bundle<FHIRResourceType>);
+    }
+  }
+};
+
+const handlePreviousPage = async () => {
+  if (currentBundle) {
+    const result = await triggerPreviousPage(currentBundle);
+    if ('data' in result) {
+      setCurrentBundle(result.data as Bundle<FHIRResourceType>);
+    }
+  }
+};
+```
+
+#### 4. Use currentBundle Instead of data
+
+Process resources from `currentBundle` instead of the original `data`:
+
+```typescript
+// Process resources from current bundle
+const resources = useMemo(() => {
+  if (!currentBundle || !currentBundle.entry) return [];
+
+  return currentBundle.entry
+    .filter((entry) => entry.resource)
+    .map((entry) => {
+      // Process resource...
+      return processedResource;
+    });
+}, [currentBundle]);
+```
+
+#### 5. Add Pagination Component to JSX
+
+Place the Pagination component at **both the top and bottom** of your table or card list for better UX:
+
+```tsx
+{/* For tables */}
+<div className="overflow-x-auto">
+  {/* Pagination at top */}
+  <Pagination
+    bundle={currentBundle}
+    onNextPage={handleNextPage}
+    onPreviousPage={handlePreviousPage}
+    isLoadingNext={isLoadingNext}
+    isLoadingPrevious={isLoadingPrevious}
+    position="top"
+  />
+
+  <table className="min-w-full divide-y divide-gray-200">
+    {/* Table content */}
+  </table>
+
+  {/* Pagination at bottom */}
+  <Pagination
+    bundle={currentBundle}
+    onNextPage={handleNextPage}
+    onPreviousPage={handlePreviousPage}
+    isLoadingNext={isLoadingNext}
+    isLoadingPrevious={isLoadingPrevious}
+    position="bottom"
+  />
+</div>
+
+{/* For card layouts */}
+{/* Pagination at top */}
+<Pagination
+  bundle={currentBundle}
+  onNextPage={handleNextPage}
+  onPreviousPage={handlePreviousPage}
+  isLoadingNext={isLoadingNext}
+  isLoadingPrevious={isLoadingPrevious}
+  position="top"
+/>
+
+<div className="space-y-4">
+  {/* Cards */}
+</div>
+
+{/* Pagination at bottom */}
+<div className="mt-6">
+  <Pagination
+    bundle={currentBundle}
+    onNextPage={handleNextPage}
+    onPreviousPage={handlePreviousPage}
+    isLoadingNext={isLoadingNext}
+    isLoadingPrevious={isLoadingPrevious}
+    position="bottom"
+  />
+</div>
+```
+
+### Enhanced Pagination Features
+
+The pagination component includes:
+
+- **Previous/Next Navigation**: Buttons to navigate between pages
+- **Page Information**: Shows current range (e.g., "Showing 1-20 of 150 results (Page 1 of 8)")
+- **Jump to Page**: Input field and "Go" button to jump directly to any page number
+- **Top and Bottom Placement**: Pagination controls at both top and bottom for easy access
+- **Loading States**: Visual feedback during page transitions
+- **Disabled States**: Buttons are appropriately disabled when no more pages exist
+onPreviousPage={handlePreviousPage}
+isLoadingNext={isLoadingNext}
+isLoadingPrevious={isLoadingPrevious}
+/>
+</div>
+
+````
+
+### FHIR Client Query Configuration
+
+All FHIR queries that return resource lists should include both `_count` and `_offset` parameters to enable proper pagination:
+
+```typescript
+// In fhir/client.ts
+const results = await client.search({
+  resourceType: 'ResourceType',
+  searchParams: {
+    patient: patientId,
+    _count: '20',  // Returns 20 results per page
+    _offset: '0',  // Start at first result (enables offset-based pagination)
+    // Other search parameters...
+  },
+});
+```
+
+The standard page size is **20 results per page**. The `_offset` parameter is crucial for:
+- Tracking current position in result set
+- Enabling next/previous navigation even when FHIR server doesn't provide pagination links
+- Supporting jump-to-page functionality
+
+### Automatic Pagination Fallback
+
+The pagination implementation automatically handles two scenarios:
+
+1. **FHIR server provides pagination links**: Uses standard `nextPage`/`prevPage` methods
+2. **FHIR server doesn't provide links**: Automatically calculates and constructs offset-based queries
+
+This ensures pagination works reliably regardless of FHIR server capabilities.
+
+### Client-Side Filtering with Pagination
+
+When implementing client-side filters (e.g., status, category), note that:
+
+- Filters only apply to the current page of results
+- Users may need to navigate to other pages to find filtered items
+- Consider moving frequently-used filters to server-side query parameters when possible
+
+Example with client-side filtering:
+
+```typescript
+// Server-side date filter (in query)
+const { data } = useGetObservationsQuery({
+  patientId: id || '',
+  date: dateFilter || undefined, // Server-side filter
+});
+
+// Client-side category filter (on current page only)
+const filteredResources = selectedCategory
+  ? resources.filter((res) => res.category === selectedCategory)
+  : resources;
+```
+
+### Complete Example References
+
+See these files for complete implementations:
+
+- **Table with pagination**: `src/pages/MedicationRequestPage.tsx`
+- **Search with pagination**: `src/pages/PatientSearchPage.tsx`
+- **Client-side filtering**: `src/pages/EncounterPage.tsx`
+- **Card layout**: `src/pages/CarePlanPage.tsx`
+
 ## Detail/Edit/Create View
 
 The detail/edit/create view should provide a comprehensive interface for viewing and managing all elements of a FHIR resource.
@@ -270,59 +506,62 @@ function isSimpleSubPath(path, baseResourceType) {
 function organizeElementsIntoGroups(resourceType, elements) {
   // Create the groups structure
   const groups = [];
-  
+
   // Track which elements have been assigned to groups
   const assignedElements = new Set();
-  
+
   // First, identify all backbone elements to create groups
   const backboneGroups = new Map();
-  const backboneElements = elements.filter(element => {
+  const backboneElements = elements.filter((element) => {
     const types = element.type || [];
-    return types.some(type => type.code === 'BackboneElement');
+    return types.some((type) => type.code === 'BackboneElement');
   });
-  
+
   // Create a group for each backbone element
-  backboneElements.forEach(backbone => {
+  backboneElements.forEach((backbone) => {
     const pathParts = backbone.path.split('.');
     const elementName = pathParts[pathParts.length - 1];
-    
+
     // Format the group title (e.g., "admission" -> "Admission Details")
-    const groupTitle = elementName.charAt(0).toUpperCase() + 
-                       elementName.slice(1) + ' Details';
-    
+    const groupTitle =
+      elementName.charAt(0).toUpperCase() + elementName.slice(1) + ' Details';
+
     backboneGroups.set(backbone.path, {
       id: elementName.toLowerCase(),
       title: groupTitle,
       elements: [],
-      path: backbone.path
+      path: backbone.path,
     });
   });
-  
+
   // Create an "Overview" group for top-level elements
   const overviewGroup = {
     id: 'overview',
     title: 'Overview',
-    elements: []
+    elements: [],
   };
-  
+
   // Assign elements to their respective groups
-  elements.forEach(element => {
+  elements.forEach((element) => {
     const path = element.path;
     const pathParts = path.split('.');
-    
+
     // Skip backbone elements themselves
-    if (element.type && element.type.some(type => type.code === 'BackboneElement')) {
+    if (
+      element.type &&
+      element.type.some((type) => type.code === 'BackboneElement')
+    ) {
       assignedElements.add(path);
       return;
     }
-    
+
     // If this is a direct child of the resource type (i.e., path has only 2 parts)
     if (pathParts.length === 2) {
       overviewGroup.elements.push(pathParts[1]);
       assignedElements.add(path);
       return;
     }
-    
+
     // Find the backbone parent for this element
     for (const [backbonePath, group] of backboneGroups.entries()) {
       if (path.startsWith(backbonePath + '.')) {
@@ -334,39 +573,40 @@ function organizeElementsIntoGroups(resourceType, elements) {
       }
     }
   });
-  
+
   // Add the overview group if it has elements
   if (overviewGroup.elements.length > 0) {
     groups.push(overviewGroup);
   }
-  
+
   // Add backbone groups in the order they appear in the structure definition
-  const sortedBackboneGroups = Array.from(backboneGroups.values())
-    .sort((a, b) => {
+  const sortedBackboneGroups = Array.from(backboneGroups.values()).sort(
+    (a, b) => {
       // Find the index of these elements in the original elements array
-      const indexA = elements.findIndex(e => e.path === a.path);
-      const indexB = elements.findIndex(e => e.path === b.path);
+      const indexA = elements.findIndex((e) => e.path === a.path);
+      const indexB = elements.findIndex((e) => e.path === b.path);
       return indexA - indexB;
-    });
-  
+    },
+  );
+
   groups.push(...sortedBackboneGroups);
-  
+
   // Check if any elements were not assigned to a group
   const unassignedElements = elements
-    .filter(element => !assignedElements.has(element.path))
-    .map(element => {
+    .filter((element) => !assignedElements.has(element.path))
+    .map((element) => {
       const pathParts = element.path.split('.');
       return pathParts[pathParts.length - 1];
     });
-  
+
   if (unassignedElements.length > 0) {
     groups.push({
       id: 'other',
       title: 'Other Information',
-      elements: unassignedElements
+      elements: unassignedElements,
     });
   }
-  
+
   return groups;
 }
 
@@ -825,7 +1065,6 @@ const ReferenceDisplay = ({ reference }) => {
 ## Best Practices
 
 1. **Structure Definition Integration**: Always read and parse the FHIR structure definition for each resource type to understand:
-
    - Required fields
    - Data types and constraints
    - Elements with isSummary=true for listing views
@@ -920,3 +1159,4 @@ function formatReferenceByResourceType(resource) {
   }
 }
 ```
+````

@@ -97,7 +97,10 @@ export const fhirApi = createApi({
           const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Patient',
-            searchParams,
+            searchParams: {
+              ...searchParams,
+              _offset: searchParams._offset || '0',
+            },
           });
           return { data: results as Bundle<Patient> };
         } catch (error: any) {
@@ -124,6 +127,8 @@ export const fhirApi = createApi({
             resourceType: 'CarePlan',
             searchParams: {
               patient: patientId,
+              _count: '20',
+              _offset: '0',
             },
           });
           return { data: results as Bundle<CarePlan> };
@@ -164,6 +169,9 @@ export const fhirApi = createApi({
             searchParams.date = date;
           }
 
+          searchParams._count = '20';
+          searchParams._offset = '0';
+
           const results = await client.search({
             resourceType: 'Observation',
             searchParams,
@@ -195,6 +203,8 @@ export const fhirApi = createApi({
             resourceType: 'Encounter',
             searchParams: {
               patient: patientId,
+              _count: '20',
+              _offset: '0',
             },
           });
           return { data: results as Bundle<Encounter> };
@@ -224,6 +234,8 @@ export const fhirApi = createApi({
             resourceType: 'MedicationRequest',
             searchParams: {
               patient: patientId,
+              _count: '20',
+              _offset: '0',
             },
           });
           return { data: results as Bundle<MedicationRequest> };
@@ -245,12 +257,65 @@ export const fhirApi = createApi({
       ],
     }),
 
-    getNextPage: builder.query<Bundle<Resource>, Bundle<Resource>>({
+    getNextPage: builder.mutation<Bundle<Resource>, Bundle<Resource>>({
       queryFn: async (bundle) => {
         try {
           const client = await createFHIRClient();
-          const results = await client.nextPage({ bundle });
-          return { data: results as Bundle<Resource> };
+
+          // Check if bundle has next link
+          const nextLink = bundle.link?.find(
+            (link) => link.relation === 'next',
+          );
+
+          if (nextLink) {
+            // Use standard nextPage if link exists
+            const results = await client.nextPage({ bundle });
+            return { data: results as Bundle<Resource> };
+          } else {
+            // Fallback: manually construct next page query using offset
+            const selfLink = bundle.link?.find(
+              (link) => link.relation === 'self',
+            );
+            if (!selfLink?.url) {
+              throw new Error('Cannot paginate: no self link in bundle');
+            }
+
+            const url = new URL(selfLink.url, 'http://dummy.com');
+            const params = new URLSearchParams(url.search);
+
+            const currentOffset = parseInt(params.get('_offset') || '0', 10);
+            const pageSize = parseInt(params.get('_count') || '20', 10);
+            const total = bundle.total || 0;
+
+            const nextOffset = currentOffset + pageSize;
+
+            if (nextOffset >= total) {
+              throw new Error('No more pages available');
+            }
+
+            params.set('_offset', nextOffset.toString());
+
+            // Extract resource type from URL
+            const pathMatch = url.pathname.match(/\/([^/]+)$/);
+            const resourceType = pathMatch?.[1];
+
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from URL');
+            }
+
+            // Convert params back to object
+            const searchParams: Record<string, string> = {};
+            params.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
+
+            return { data: results as Bundle<Resource> };
+          }
         } catch (error: any) {
           console.error('Error fetching next page:', error);
           return {
@@ -266,12 +331,64 @@ export const fhirApi = createApi({
       },
     }),
 
-    getPreviousPage: builder.query<Bundle<Resource>, Bundle<Resource>>({
+    getPreviousPage: builder.mutation<Bundle<Resource>, Bundle<Resource>>({
       queryFn: async (bundle) => {
         try {
           const client = await createFHIRClient();
-          const results = await client.prevPage({ bundle });
-          return { data: results as Bundle<Resource> };
+
+          // Check if bundle has previous link
+          const prevLink = bundle.link?.find(
+            (link) => link.relation === 'previous',
+          );
+
+          if (prevLink) {
+            // Use standard prevPage if link exists
+            const results = await client.prevPage({ bundle });
+            return { data: results as Bundle<Resource> };
+          } else {
+            // Fallback: manually construct previous page query using offset
+            const selfLink = bundle.link?.find(
+              (link) => link.relation === 'self',
+            );
+            if (!selfLink?.url) {
+              throw new Error('Cannot paginate: no self link in bundle');
+            }
+
+            const url = new URL(selfLink.url, 'http://dummy.com');
+            const params = new URLSearchParams(url.search);
+
+            const currentOffset = parseInt(params.get('_offset') || '0', 10);
+            const pageSize = parseInt(params.get('_count') || '20', 10);
+
+            const prevOffset = Math.max(0, currentOffset - pageSize);
+
+            if (currentOffset === 0) {
+              throw new Error('Already on first page');
+            }
+
+            params.set('_offset', prevOffset.toString());
+
+            // Extract resource type from URL
+            const pathMatch = url.pathname.match(/\/([^/]+)$/);
+            const resourceType = pathMatch?.[1];
+
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from URL');
+            }
+
+            // Convert params back to object
+            const searchParams: Record<string, string> = {};
+            params.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
+
+            return { data: results as Bundle<Resource> };
+          }
         } catch (error: any) {
           console.error('Error fetching previous page:', error);
           return {
@@ -635,8 +752,8 @@ export const {
   useGetObservationsQuery,
   useGetEncountersQuery,
   useGetMedicationsQuery,
-  useGetNextPageQuery,
-  useGetPreviousPageQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
   useCreateResourceMutation,
   useUpdateResourceMutation,
   useDeleteResourceMutation,

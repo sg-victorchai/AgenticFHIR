@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useOutletContext, Link } from 'react-router-dom';
-import { useGetObservationsQuery } from '../services/fhir/client';
-import { Observation as FHIRObservation } from 'fhir/r5';
+import { Bundle, Observation as FHIRObservation } from 'fhir/r5';
+import {
+  useGetObservationsQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+} from '../services/fhir/client';
+import { Pagination } from '../components/common/Pagination';
 
 interface Observation {
   id: string;
@@ -17,6 +22,9 @@ const ObservationPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const patientContext = useOutletContext<any>();
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [currentBundle, setCurrentBundle] = useState<
+    Bundle<FHIRObservation> | undefined
+  >();
 
   // Filter states
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -37,10 +45,41 @@ const ObservationPage: React.FC = () => {
     },
   );
 
+  // Pagination hooks
+  const [triggerNextPage, { isLoading: isLoadingNext }] =
+    useGetNextPageMutation();
+  const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+    useGetPreviousPageMutation();
+
+  const handleNextPage = async () => {
+    if (currentBundle) {
+      const result = await triggerNextPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRObservation>);
+      }
+    }
+  };
+
+  const handlePreviousPage = async () => {
+    if (currentBundle) {
+      const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRObservation>);
+      }
+    }
+  };
+
+  // Update current bundle when data changes
+  useEffect(() => {
+    if (observationBundle) {
+      setCurrentBundle(observationBundle);
+    }
+  }, [observationBundle]);
+
   useEffect(() => {
     // Process the FHIR Observation resources into our app's format
-    if (observationBundle && observationBundle.entry) {
-      const processedObservations: Observation[] = observationBundle.entry
+    if (currentBundle && currentBundle.entry) {
+      const processedObservations: Observation[] = currentBundle.entry
         .filter((entry) => entry.resource)
         .map((entry) => {
           const resource = entry.resource as FHIRObservation;
@@ -80,7 +119,7 @@ const ObservationPage: React.FC = () => {
 
       setObservations(processedObservations);
     }
-  }, [observationBundle]);
+  }, [currentBundle]);
 
   // Get unique categories for filtering
   const categories = Array.from(
@@ -147,8 +186,8 @@ const ObservationPage: React.FC = () => {
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="sm:w-1/3">
-          <label 
-            htmlFor="category-filter" 
+          <label
+            htmlFor="category-filter"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Filter by Category:
@@ -170,8 +209,8 @@ const ObservationPage: React.FC = () => {
         </div>
 
         <div className="sm:w-1/3">
-          <label 
-            htmlFor="date-filter" 
+          <label
+            htmlFor="date-filter"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Filter by Date:
@@ -188,6 +227,16 @@ const ObservationPage: React.FC = () => {
       </div>
 
       <div className="overflow-x-auto">
+        {/* Pagination at top */}
+        <Pagination
+          bundle={currentBundle}
+          onNextPage={handleNextPage}
+          onPreviousPage={handlePreviousPage}
+          isLoadingNext={isLoadingNext}
+          isLoadingPrevious={isLoadingPrevious}
+          position="top"
+        />
+
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -235,14 +284,14 @@ const ObservationPage: React.FC = () => {
                       observation.status === 'final'
                         ? 'green'
                         : observation.status === 'preliminary'
-                        ? 'yellow'
-                        : 'gray'
+                          ? 'yellow'
+                          : 'gray'
                     }-100 text-${
                       observation.status === 'final'
                         ? 'green'
                         : observation.status === 'preliminary'
-                        ? 'yellow'
-                        : 'gray'
+                          ? 'yellow'
+                          : 'gray'
                     }-800`}
                   >
                     {observation.status}
@@ -260,6 +309,16 @@ const ObservationPage: React.FC = () => {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination at bottom */}
+        <Pagination
+          bundle={currentBundle}
+          onNextPage={handleNextPage}
+          onPreviousPage={handlePreviousPage}
+          isLoadingNext={isLoadingNext}
+          isLoadingPrevious={isLoadingPrevious}
+          position="bottom"
+        />
       </div>
     </div>
   );

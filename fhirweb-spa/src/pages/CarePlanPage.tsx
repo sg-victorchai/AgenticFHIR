@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { useGetCarePlansQuery } from '../services/fhir/client';
-import { CarePlan as FHIRCarePlan } from 'fhir/r5';
+import { Bundle, CarePlan as FHIRCarePlan } from 'fhir/r5';
+import {
+  useGetCarePlansQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+} from '../services/fhir/client';
+import { Pagination } from '../components/common/Pagination';
 
 interface CarePlan {
   id: string;
@@ -18,6 +23,9 @@ const CarePlanPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const patientContext = useOutletContext<any>();
   const [carePlans, setCarePlans] = useState<CarePlan[]>([]);
+  const [currentBundle, setCurrentBundle] = useState<
+    Bundle<FHIRCarePlan> | undefined
+  >();
   const navigate = useNavigate();
 
   // Use the RTK Query hook to fetch care plans
@@ -29,10 +37,41 @@ const CarePlanPage: React.FC = () => {
     skip: !id,
   });
 
+  // Pagination hooks
+  const [triggerNextPage, { isLoading: isLoadingNext }] =
+    useGetNextPageMutation();
+  const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+    useGetPreviousPageMutation();
+
+  const handleNextPage = async () => {
+    if (currentBundle) {
+      const result = await triggerNextPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRCarePlan>);
+      }
+    }
+  };
+
+  const handlePreviousPage = async () => {
+    if (currentBundle) {
+      const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRCarePlan>);
+      }
+    }
+  };
+
+  // Update current bundle when data changes
+  useEffect(() => {
+    if (carePlanBundle) {
+      setCurrentBundle(carePlanBundle);
+    }
+  }, [carePlanBundle]);
+
   useEffect(() => {
     // Process the FHIR CarePlan resources into our app's format
-    if (carePlanBundle && carePlanBundle.entry) {
-      const processedCarePlans: CarePlan[] = carePlanBundle.entry
+    if (currentBundle && currentBundle.entry) {
+      const processedCarePlans: CarePlan[] = currentBundle.entry
         .filter((entry) => entry.resource)
         .map((entry) => {
           const resource = entry.resource as FHIRCarePlan;
@@ -52,7 +91,7 @@ const CarePlanPage: React.FC = () => {
 
       setCarePlans(processedCarePlans);
     }
-  }, [carePlanBundle]);
+  }, [currentBundle]);
 
   const handleViewDetails = (carePlanId: string) => {
     if (id) {
@@ -128,6 +167,16 @@ const CarePlanPage: React.FC = () => {
         </h2>
       </div>
 
+      {/* Pagination at top */}
+      <Pagination
+        bundle={currentBundle}
+        onNextPage={handleNextPage}
+        onPreviousPage={handlePreviousPage}
+        isLoadingNext={isLoadingNext}
+        isLoadingPrevious={isLoadingPrevious}
+        position="top"
+      />
+
       <div className="space-y-4">
         {carePlans.map((plan) => (
           <div
@@ -148,7 +197,7 @@ const CarePlanPage: React.FC = () => {
             </div>
 
             <div className="mt-3 pt-3 border-t border-gray-100">
-              <button 
+              <button
                 className="text-sm text-blue-600 hover:text-blue-800"
                 onClick={() => handleViewDetails(plan.id)}
               >
@@ -157,6 +206,18 @@ const CarePlanPage: React.FC = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Pagination at bottom */}
+      <div className="mt-6">
+        <Pagination
+          bundle={currentBundle}
+          onNextPage={handleNextPage}
+          onPreviousPage={handlePreviousPage}
+          isLoadingNext={isLoadingNext}
+          isLoadingPrevious={isLoadingPrevious}
+          position="bottom"
+        />
       </div>
     </div>
   );

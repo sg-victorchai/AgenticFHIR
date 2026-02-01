@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useOutletContext, Link } from 'react-router-dom';
-import { useGetEncountersQuery } from '../services/fhir/client';
-import { Encounter as FHIREncounter } from 'fhir/r5';
+import { Bundle, Encounter as FHIREncounter } from 'fhir/r5';
+import {
+  useGetEncountersQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+} from '../services/fhir/client';
+import { Pagination } from '../components/common/Pagination';
 
 interface Encounter {
   id: string;
@@ -17,6 +22,9 @@ const EncounterPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const patientContext = useOutletContext<any>();
   const [encounters, setEncounters] = useState<Encounter[]>([]);
+  const [currentBundle, setCurrentBundle] = useState<
+    Bundle<FHIREncounter> | undefined
+  >();
 
   // Filter states
   const [selectedType, setSelectedType] = useState<string>('');
@@ -32,10 +40,41 @@ const EncounterPage: React.FC = () => {
     skip: !id,
   });
 
+  // Pagination hooks
+  const [triggerNextPage, { isLoading: isLoadingNext }] =
+    useGetNextPageMutation();
+  const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+    useGetPreviousPageMutation();
+
+  const handleNextPage = async () => {
+    if (currentBundle) {
+      const result = await triggerNextPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIREncounter>);
+      }
+    }
+  };
+
+  const handlePreviousPage = async () => {
+    if (currentBundle) {
+      const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIREncounter>);
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Update current bundle when data changes
+    if (encounterBundle) {
+      setCurrentBundle(encounterBundle);
+    }
+  }, [encounterBundle]);
+
   useEffect(() => {
     // Process the FHIR Encounter resources into our app's format
-    if (encounterBundle && encounterBundle.entry) {
-      const processedEncounters: Encounter[] = encounterBundle.entry
+    if (currentBundle && currentBundle.entry) {
+      const processedEncounters: Encounter[] = currentBundle.entry
         .filter((entry) => entry.resource)
         .map((entry) => {
           const resource = entry.resource as FHIREncounter;
@@ -65,7 +104,7 @@ const EncounterPage: React.FC = () => {
 
       setEncounters(processedEncounters);
     }
-  }, [encounterBundle]);
+  }, [currentBundle]);
 
   // Get unique types and statuses for filtering
   const types = Array.from(new Set(encounters.map((enc) => enc.type)));
@@ -215,6 +254,16 @@ const EncounterPage: React.FC = () => {
       </div>
 
       <div className="overflow-x-auto">
+        {/* Pagination at top */}
+        <Pagination
+          bundle={currentBundle}
+          onNextPage={handleNextPage}
+          onPreviousPage={handlePreviousPage}
+          isLoadingNext={isLoadingNext}
+          isLoadingPrevious={isLoadingPrevious}
+          position="top"
+        />
+
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -288,6 +337,16 @@ const EncounterPage: React.FC = () => {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination at bottom */}
+        <Pagination
+          bundle={currentBundle}
+          onNextPage={handleNextPage}
+          onPreviousPage={handlePreviousPage}
+          isLoadingNext={isLoadingNext}
+          isLoadingPrevious={isLoadingPrevious}
+          position="bottom"
+        />
       </div>
     </div>
   );

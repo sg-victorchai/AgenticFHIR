@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSearchPatientsQuery } from '../services/fhir/client';
-import { Patient } from 'fhir/r5';
+import { Bundle, Patient as FHIRPatient } from 'fhir/r5';
+import {
+  useSearchPatientsQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+} from '../services/fhir/client';
+import { Pagination } from '../components/common/Pagination';
 
 interface PatientResult {
   id: string;
@@ -15,6 +20,9 @@ const PatientSearchPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [shouldSearch, setShouldSearch] = useState(false);
   const [searchParams, setSearchParams] = useState<Record<string, string>>({});
+  const [currentBundle, setCurrentBundle] = useState<
+    Bundle<FHIRPatient> | undefined
+  >();
 
   // Only trigger the query when shouldSearch is true and we have search parameters
   const {
@@ -25,16 +33,47 @@ const PatientSearchPage: React.FC = () => {
     skip: !shouldSearch || Object.keys(searchParams).length === 0,
   });
 
+  // Update current bundle when search results change
+  React.useEffect(() => {
+    if (searchResults) {
+      setCurrentBundle(searchResults);
+    }
+  }, [searchResults]);
+
+  // Pagination hooks
+  const [triggerNextPage, { isLoading: isLoadingNext }] =
+    useGetNextPageMutation();
+  const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+    useGetPreviousPageMutation();
+
+  const handleNextPage = async () => {
+    if (currentBundle) {
+      const result = await triggerNextPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRPatient>);
+      }
+    }
+  };
+
+  const handlePreviousPage = async () => {
+    if (currentBundle) {
+      const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRPatient>);
+      }
+    }
+  };
+
   // Convert FHIR patients to our simplified PatientResult format
   const patientResults: PatientResult[] = React.useMemo(() => {
-    if (!searchResults || !searchResults.entry) return [];
+    if (!currentBundle || !currentBundle.entry) return [];
 
-    return searchResults.entry
+    return currentBundle.entry
       .filter(
         (entry) => entry.resource && entry.resource.resourceType === 'Patient',
       )
       .map((entry) => {
-        const patient = entry.resource as Patient;
+        const patient = entry.resource as FHIRPatient;
 
         // Extract the full name from the complex name structure
         const nameObj = patient.name?.[0];
@@ -68,7 +107,7 @@ const PatientSearchPage: React.FC = () => {
           identifier: primaryIdentifier,
         };
       });
-  }, [searchResults]);
+  }, [currentBundle]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +161,16 @@ const PatientSearchPage: React.FC = () => {
 
         {patientResults.length > 0 ? (
           <div className="overflow-x-auto">
+            {/* Pagination at top */}
+            <Pagination
+              bundle={currentBundle}
+              onNextPage={handleNextPage}
+              onPreviousPage={handlePreviousPage}
+              isLoadingNext={isLoadingNext}
+              isLoadingPrevious={isLoadingPrevious}
+              position="top"
+            />
+
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -206,6 +255,16 @@ const PatientSearchPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination at bottom */}
+            <Pagination
+              bundle={currentBundle}
+              onNextPage={handleNextPage}
+              onPreviousPage={handlePreviousPage}
+              isLoadingNext={isLoadingNext}
+              isLoadingPrevious={isLoadingPrevious}
+              position="bottom"
+            />
           </div>
         ) : (
           shouldSearch &&

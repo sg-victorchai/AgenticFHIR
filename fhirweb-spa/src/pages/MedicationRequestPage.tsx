@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { useGetMedicationsQuery } from '../services/fhir/client';
+import { Bundle, MedicationRequest as FHIRMedicationRequest } from 'fhir/r5';
+import {
+  useGetMedicationsQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+} from '../services/fhir/client';
+import { Pagination } from '../components/common/Pagination';
 
 interface MedicationRequest {
   id: string;
@@ -39,12 +45,54 @@ const MedicationRequestPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  // State to manage current bundle for pagination
+  const [currentBundle, setCurrentBundle] = useState<
+    Bundle<FHIRMedicationRequest> | undefined
+  >();
+
   // Use the FHIR client hook to fetch medication requests
-  const { data, isLoading, error: apiError } = useGetMedicationsQuery(id || '');
+  const {
+    data,
+    isLoading,
+    error: apiError,
+  } = useGetMedicationsQuery(id || '', {
+    skip: !id,
+  });
+
+  // Update current bundle when data changes
+  React.useEffect(() => {
+    if (data) {
+      setCurrentBundle(data);
+    }
+  }, [data]);
+
+  // Pagination hooks
+  const [triggerNextPage, { isLoading: isLoadingNext }] =
+    useGetNextPageMutation();
+  const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+    useGetPreviousPageMutation();
+
+  const handleNextPage = async () => {
+    if (currentBundle) {
+      const result = await triggerNextPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data);
+      }
+    }
+  };
+
+  const handlePreviousPage = async () => {
+    if (currentBundle) {
+      const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data);
+      }
+    }
+  };
 
   // Format medication requests from the API response
   const medications: MedicationRequest[] = React.useMemo(() => {
-    if (!data || !data.entry) return [];
+    if (!currentBundle || !currentBundle.entry) return [];
 
     return data.entry
       .filter((entry) => entry.resource)
@@ -68,7 +116,7 @@ const MedicationRequestPage: React.FC = () => {
           authoredOn: resource.authoredOn,
         };
       });
-  }, [data]);
+  }, [currentBundle]);
 
   // Handle error state
   const error = apiError ? 'Failed to load medication data' : null;
@@ -111,6 +159,16 @@ const MedicationRequestPage: React.FC = () => {
         </p>
       ) : (
         <div className="overflow-x-auto">
+          {/* Pagination at top */}
+          <Pagination
+            bundle={currentBundle}
+            onNextPage={handleNextPage}
+            onPreviousPage={handlePreviousPage}
+            isLoadingNext={isLoadingNext}
+            isLoadingPrevious={isLoadingPrevious}
+            position="top"
+          />
+
           <table className="min-w-full bg-white border border-gray-200">
             <thead>
               <tr className="bg-gray-100">
@@ -185,6 +243,16 @@ const MedicationRequestPage: React.FC = () => {
               ))}
             </tbody>
           </table>
+
+          {/* Pagination at bottom */}
+          <Pagination
+            bundle={currentBundle}
+            onNextPage={handleNextPage}
+            onPreviousPage={handlePreviousPage}
+            isLoadingNext={isLoadingNext}
+            isLoadingPrevious={isLoadingPrevious}
+            position="bottom"
+          />
         </div>
       )}
     </div>
