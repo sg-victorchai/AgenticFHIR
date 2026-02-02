@@ -1,0 +1,17 @@
+# Local VS Code settings with sensitive data
+.vscode/settings.json
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
