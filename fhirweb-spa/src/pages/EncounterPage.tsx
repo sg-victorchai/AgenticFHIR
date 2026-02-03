@@ -5,6 +5,9 @@ import {
   useGetEncountersQuery,
   useGetNextPageMutation,
   useGetPreviousPageMutation,
+  useGetFirstPageMutation,
+  useGetLastPageMutation,
+  useGoToPageMutation,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
 
@@ -45,6 +48,19 @@ const EncounterPage: React.FC = () => {
     useGetNextPageMutation();
   const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
     useGetPreviousPageMutation();
+  const [triggerFirstPage, { isLoading: isLoadingFirst }] =
+    useGetFirstPageMutation();
+  const [triggerLastPage, { isLoading: isLoadingLast }] =
+    useGetLastPageMutation();
+  const [triggerGoToPage, { isLoading: isLoadingGoTo }] = useGoToPageMutation();
+
+  // Unified loading state for all pagination operations
+  const isPaginationLoading =
+    isLoadingNext ||
+    isLoadingPrevious ||
+    isLoadingFirst ||
+    isLoadingLast ||
+    isLoadingGoTo;
 
   const handleNextPage = async () => {
     if (currentBundle) {
@@ -58,6 +74,36 @@ const EncounterPage: React.FC = () => {
   const handlePreviousPage = async () => {
     if (currentBundle) {
       const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIREncounter>);
+      }
+    }
+  };
+
+  const handleFirstPage = async () => {
+    if (currentBundle) {
+      const result = await triggerFirstPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIREncounter>);
+      }
+    }
+  };
+
+  const handleLastPage = async () => {
+    if (currentBundle) {
+      const result = await triggerLastPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIREncounter>);
+      }
+    }
+  };
+
+  const handleGoToPage = async (pageNumber: number) => {
+    if (currentBundle) {
+      const result = await triggerGoToPage({
+        bundle: currentBundle,
+        pageNumber,
+      });
       if ('data' in result) {
         setCurrentBundle(result.data as Bundle<FHIREncounter>);
       }
@@ -259,8 +305,10 @@ const EncounterPage: React.FC = () => {
           bundle={currentBundle}
           onNextPage={handleNextPage}
           onPreviousPage={handlePreviousPage}
-          isLoadingNext={isLoadingNext}
-          isLoadingPrevious={isLoadingPrevious}
+          onFirstPage={handleFirstPage}
+          onLastPage={handleLastPage}
+          onGoToPage={handleGoToPage}
+          isLoading={isPaginationLoading}
           position="top"
         />
 
@@ -343,8 +391,10 @@ const EncounterPage: React.FC = () => {
           bundle={currentBundle}
           onNextPage={handleNextPage}
           onPreviousPage={handlePreviousPage}
-          isLoadingNext={isLoadingNext}
-          isLoadingPrevious={isLoadingPrevious}
+          onFirstPage={handleFirstPage}
+          onLastPage={handleLastPage}
+          onGoToPage={handleGoToPage}
+          isLoading={isPaginationLoading}
           position="bottom"
         />
       </div>

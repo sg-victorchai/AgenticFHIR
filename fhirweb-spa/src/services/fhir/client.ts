@@ -404,6 +404,255 @@ export const fhirApi = createApi({
       },
     }),
 
+    getFirstPage: builder.mutation<Bundle<Resource>, Bundle<Resource>>({
+      queryFn: async (bundle) => {
+        try {
+          const client = await createFHIRClient();
+
+          // Check if bundle has first link
+          const firstLink = bundle.link?.find(
+            (link) => link.relation === 'first',
+          );
+
+          if (firstLink && firstLink.url) {
+            // Parse the first link URL to extract parameters
+            const url = new URL(firstLink.url, 'http://dummy.com');
+            const pathMatch = url.pathname.match(/\/([^/]+)$/);
+            const resourceType = pathMatch?.[1];
+
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from URL');
+            }
+
+            const searchParams: Record<string, string> = {};
+            const params = new URLSearchParams(url.search);
+            params.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
+
+            return { data: results as Bundle<Resource> };
+          } else {
+            // Fallback: manually construct first page query (offset=0)
+            const selfLink = bundle.link?.find(
+              (link) => link.relation === 'self',
+            );
+            if (!selfLink?.url) {
+              throw new Error('Cannot paginate: no self link in bundle');
+            }
+
+            const url = new URL(selfLink.url, 'http://dummy.com');
+            const params = new URLSearchParams(url.search);
+
+            // Set offset to 0 for first page
+            params.set('_offset', '0');
+
+            // Extract resource type from URL
+            const pathMatch = url.pathname.match(/\/([^/]+)$/);
+            const resourceType = pathMatch?.[1];
+
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from URL');
+            }
+
+            // Convert params back to object
+            const searchParams: Record<string, string> = {};
+            params.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
+
+            return { data: results as Bundle<Resource> };
+          }
+        } catch (error: any) {
+          console.error('Error fetching first page:', error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+    }),
+
+    getLastPage: builder.mutation<Bundle<Resource>, Bundle<Resource>>({
+      queryFn: async (bundle) => {
+        try {
+          const client = await createFHIRClient();
+
+          // Check if bundle has last link
+          const lastLink = bundle.link?.find(
+            (link) => link.relation === 'last',
+          );
+
+          if (lastLink && lastLink.url) {
+            // Parse the last link URL to extract parameters
+            const url = new URL(lastLink.url, 'http://dummy.com');
+            const pathMatch = url.pathname.match(/\/([^/]+)$/);
+            const resourceType = pathMatch?.[1];
+
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from URL');
+            }
+
+            const searchParams: Record<string, string> = {};
+            const params = new URLSearchParams(url.search);
+            params.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
+
+            return { data: results as Bundle<Resource> };
+          } else {
+            // Fallback: manually calculate last page using total
+            const selfLink = bundle.link?.find(
+              (link) => link.relation === 'self',
+            );
+            if (!selfLink?.url) {
+              throw new Error('Cannot paginate: no self link in bundle');
+            }
+
+            const url = new URL(selfLink.url, 'http://dummy.com');
+            const params = new URLSearchParams(url.search);
+
+            const pageSize = parseInt(params.get('_count') || '20', 10);
+            const total = bundle.total || 0;
+
+            if (total === 0) {
+              throw new Error('No results to paginate');
+            }
+
+            // Calculate offset for last page
+            const lastOffset = Math.max(
+              0,
+              Math.floor((total - 1) / pageSize) * pageSize,
+            );
+
+            params.set('_offset', lastOffset.toString());
+
+            // Extract resource type from URL
+            const pathMatch = url.pathname.match(/\/([^/]+)$/);
+            const resourceType = pathMatch?.[1];
+
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from URL');
+            }
+
+            // Convert params back to object
+            const searchParams: Record<string, string> = {};
+            params.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
+
+            return { data: results as Bundle<Resource> };
+          }
+        } catch (error: any) {
+          console.error('Error fetching last page:', error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+    }),
+
+    goToPage: builder.mutation<
+      Bundle<Resource>,
+      { bundle: Bundle<Resource>; pageNumber: number }
+    >({
+      queryFn: async ({ bundle, pageNumber }) => {
+        try {
+          const client = await createFHIRClient();
+
+          // Validate page number
+          if (pageNumber < 1) {
+            throw new Error('Page number must be at least 1');
+          }
+
+          const selfLink = bundle.link?.find(
+            (link) => link.relation === 'self',
+          );
+          if (!selfLink?.url) {
+            throw new Error('Cannot paginate: no self link in bundle');
+          }
+
+          const url = new URL(selfLink.url, 'http://dummy.com');
+          const params = new URLSearchParams(url.search);
+
+          const pageSize = parseInt(params.get('_count') || '20', 10);
+          const total = bundle.total || 0;
+
+          // Calculate offset for requested page (pageNumber is 1-indexed)
+          const targetOffset = (pageNumber - 1) * pageSize;
+
+          // Validate that the page exists
+          if (targetOffset >= total) {
+            throw new Error(`Page ${pageNumber} does not exist`);
+          }
+
+          params.set('_offset', targetOffset.toString());
+
+          // Extract resource type from URL
+          const pathMatch = url.pathname.match(/\/([^/]+)$/);
+          const resourceType = pathMatch?.[1];
+
+          if (!resourceType) {
+            throw new Error('Cannot determine resource type from URL');
+          }
+
+          // Convert params back to object
+          const searchParams: Record<string, string> = {};
+          params.forEach((value, key) => {
+            searchParams[key] = value;
+          });
+
+          const results = await client.search({
+            resourceType,
+            searchParams,
+          });
+
+          return { data: results as Bundle<Resource> };
+        } catch (error: any) {
+          console.error('Error going to page:', error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+    }),
+
     createResource: builder.mutation<
       Resource,
       { resourceType: string; resource: Resource }
@@ -754,6 +1003,9 @@ export const {
   useGetMedicationsQuery,
   useGetNextPageMutation,
   useGetPreviousPageMutation,
+  useGetFirstPageMutation,
+  useGetLastPageMutation,
+  useGoToPageMutation,
   useCreateResourceMutation,
   useUpdateResourceMutation,
   useDeleteResourceMutation,

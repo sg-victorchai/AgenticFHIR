@@ -162,11 +162,17 @@ All resource listing pages should include server-side pagination to handle large
 
 A reusable `Pagination` component is available at `src/components/common/Pagination.tsx` that handles:
 
-- Display of current page information (e.g., "Showing 1-20 of 150 results")
-- Previous/Next navigation buttons with loading states
-- Disabled states when no previous/next links exist
-- Responsive design for mobile and desktop
-- Accessibility features (keyboard navigation, ARIA labels)
+- Display of current page information (e.g., "Showing 1-20 of 150 results (Page 1 of 8)")
+- **First/Last Page Navigation**: Desktop-only buttons to jump to first or last page
+- **Previous/Next Navigation**: Buttons to navigate between pages (available on mobile and desktop)
+- **Jump to Page**: Desktop-only input field with "Go" button to jump directly to any page number (with validation and Enter key support)
+- **Unified Loading State**: Single loading indicator for all navigation operations
+- **Top and Bottom Placement**: Pagination controls at both top and bottom for easy access
+- Disabled states when no previous/next/first/last pages exist
+- Responsive design:
+  - **Mobile**: Minimal navigation with Previous/Next buttons only
+  - **Desktop**: Full navigation with First/Previous/Next/Last buttons and Jump-to-Page feature
+- Accessibility features (keyboard navigation, ARIA labels, screen reader support)
 
 ### Implementation Pattern
 
@@ -181,6 +187,9 @@ import {
   useGetResourceQuery,
   useGetNextPageMutation,
   useGetPreviousPageMutation,
+  useGetFirstPageMutation,
+  useGetLastPageMutation,
+  useGoToPageMutation,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
 ```
@@ -211,6 +220,19 @@ const [triggerNextPage, { isLoading: isLoadingNext }] =
   useGetNextPageMutation();
 const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
   useGetPreviousPageMutation();
+const [triggerFirstPage, { isLoading: isLoadingFirst }] =
+  useGetFirstPageMutation();
+const [triggerLastPage, { isLoading: isLoadingLast }] =
+  useGetLastPageMutation();
+const [triggerGoToPage, { isLoading: isLoadingGoTo }] = useGoToPageMutation();
+
+// Unified loading state for all pagination operations
+const isPaginationLoading =
+  isLoadingNext ||
+  isLoadingPrevious ||
+  isLoadingFirst ||
+  isLoadingLast ||
+  isLoadingGoTo;
 
 const handleNextPage = async () => {
   if (currentBundle) {
@@ -224,6 +246,33 @@ const handleNextPage = async () => {
 const handlePreviousPage = async () => {
   if (currentBundle) {
     const result = await triggerPreviousPage(currentBundle);
+    if ('data' in result) {
+      setCurrentBundle(result.data as Bundle<FHIRResourceType>);
+    }
+  }
+};
+
+const handleFirstPage = async () => {
+  if (currentBundle) {
+    const result = await triggerFirstPage(currentBundle);
+    if ('data' in result) {
+      setCurrentBundle(result.data as Bundle<FHIRResourceType>);
+    }
+  }
+};
+
+const handleLastPage = async () => {
+  if (currentBundle) {
+    const result = await triggerLastPage(currentBundle);
+    if ('data' in result) {
+      setCurrentBundle(result.data as Bundle<FHIRResourceType>);
+    }
+  }
+};
+
+const handleGoToPage = async (pageNumber: number) => {
+  if (currentBundle) {
+    const result = await triggerGoToPage({ bundle: currentBundle, pageNumber });
     if ('data' in result) {
       setCurrentBundle(result.data as Bundle<FHIRResourceType>);
     }
@@ -261,8 +310,10 @@ Place the Pagination component at **both the top and bottom** of your table or c
     bundle={currentBundle}
     onNextPage={handleNextPage}
     onPreviousPage={handlePreviousPage}
-    isLoadingNext={isLoadingNext}
-    isLoadingPrevious={isLoadingPrevious}
+    onFirstPage={handleFirstPage}
+    onLastPage={handleLastPage}
+    onGoToPage={handleGoToPage}
+    isLoading={isPaginationLoading}
     position="top"
   />
 
@@ -275,8 +326,10 @@ Place the Pagination component at **both the top and bottom** of your table or c
     bundle={currentBundle}
     onNextPage={handleNextPage}
     onPreviousPage={handlePreviousPage}
-    isLoadingNext={isLoadingNext}
-    isLoadingPrevious={isLoadingPrevious}
+    onFirstPage={handleFirstPage}
+    onLastPage={handleLastPage}
+    onGoToPage={handleGoToPage}
+    isLoading={isPaginationLoading}
     position="bottom"
   />
 </div>
@@ -287,8 +340,10 @@ Place the Pagination component at **both the top and bottom** of your table or c
   bundle={currentBundle}
   onNextPage={handleNextPage}
   onPreviousPage={handlePreviousPage}
-  isLoadingNext={isLoadingNext}
-  isLoadingPrevious={isLoadingPrevious}
+  onFirstPage={handleFirstPage}
+  onLastPage={handleLastPage}
+  onGoToPage={handleGoToPage}
+  isLoading={isPaginationLoading}
   position="top"
 />
 
@@ -302,8 +357,10 @@ Place the Pagination component at **both the top and bottom** of your table or c
     bundle={currentBundle}
     onNextPage={handleNextPage}
     onPreviousPage={handlePreviousPage}
-    isLoadingNext={isLoadingNext}
-    isLoadingPrevious={isLoadingPrevious}
+    onFirstPage={handleFirstPage}
+    onLastPage={handleLastPage}
+    onGoToPage={handleGoToPage}
+    isLoading={isPaginationLoading}
     position="bottom"
   />
 </div>
@@ -313,17 +370,29 @@ Place the Pagination component at **both the top and bottom** of your table or c
 
 The pagination component includes:
 
-- **Previous/Next Navigation**: Buttons to navigate between pages
-- **Page Information**: Shows current range (e.g., "Showing 1-20 of 150 results (Page 1 of 8)")
-- **Jump to Page**: Input field and "Go" button to jump directly to any page number
-- **Top and Bottom Placement**: Pagination controls at both top and bottom for easy access
-- **Loading States**: Visual feedback during page transitions
-- **Disabled States**: Buttons are appropriately disabled when no more pages exist
-onPreviousPage={handlePreviousPage}
-isLoadingNext={isLoadingNext}
-isLoadingPrevious={isLoadingPrevious}
-/>
-</div>
+- **First/Last Page Navigation**: Desktop-only buttons to quickly jump to the beginning or end of results
+  - First button: Disabled when on page 1
+  - Last button: Disabled when on the last page
+  - Icons use double-chevron design for clear visual distinction
+- **Previous/Next Navigation**: Standard page-by-page navigation available on both mobile and desktop
+  - Previous: Disabled on first page
+  - Next: Disabled on last page
+- **Page Information**: Shows comprehensive stats: "Showing 1-20 of 150 results (Page 1 of 8)"
+- **Jump to Page**: Desktop-only feature with input validation
+  - Number input field pre-filled with current page
+  - "Go" button to execute the jump
+  - Enter key support for quick navigation
+  - Validation prevents jumping to invalid pages (< 1, > totalPages, or current page)
+  - Input disabled during loading states
+- **Unified Loading State**: Single `isLoading` prop controls all navigation buttons
+  - All buttons disabled during any pagination operation
+  - Prevents race conditions from multiple simultaneous requests
+  - Shows "Loading..." text on mobile Previous/Next buttons
+- **Responsive Design**:
+  - **Mobile**: Minimal interface with just Previous/Next buttons for simplicity
+  - **Desktop**: Full feature set with First/Last buttons and Jump-to-Page
+- **Top and Bottom Placement**: Controls at both positions for convenient access on long pages
+- **Automatic Fallback**: Works with or without FHIR server-provided pagination links
 
 ````
 
@@ -346,8 +415,25 @@ const results = await client.search({
 
 The standard page size is **20 results per page**. The `_offset` parameter is crucial for:
 - Tracking current position in result set
-- Enabling next/previous navigation even when FHIR server doesn't provide pagination links
+- Enabling first/last/next/previous navigation even when FHIR server doesn't provide pagination links
 - Supporting jump-to-page functionality
+
+### Available FHIR Client Pagination Methods
+
+The FHIR client (`src/services/fhir/client.ts`) provides five pagination mutation hooks:
+
+1. **`useGetNextPageMutation`**: Navigate to the next page
+2. **`useGetPreviousPageMutation`**: Navigate to the previous page
+3. **`useGetFirstPageMutation`**: Jump to the first page (offset=0)
+4. **`useGetLastPageMutation`**: Jump to the last page (calculated from bundle.total)
+5. **`useGoToPageMutation`**: Jump to a specific page number (1-indexed)
+
+All methods:
+- Accept the current Bundle as input
+- Return a new Bundle with the requested page of results
+- First check for FHIR server-provided pagination links (relation='next', 'previous', 'first', 'last')
+- Fall back to manual offset calculation if links are not available
+- Include comprehensive error handling
 
 ### Automatic Pagination Fallback
 
@@ -383,12 +469,20 @@ const filteredResources = selectedCategory
 
 ### Complete Example References
 
-See these files for complete implementations:
+See these files for complete implementations with enhanced pagination:
 
-- **Table with pagination**: `src/pages/MedicationRequestPage.tsx`
-- **Search with pagination**: `src/pages/PatientSearchPage.tsx`
-- **Client-side filtering**: `src/pages/EncounterPage.tsx`
-- **Card layout**: `src/pages/CarePlanPage.tsx`
+- **Table with pagination (top+bottom)**: `src/pages/MedicationRequestPage.tsx`
+- **Search with pagination (top+bottom)**: `src/pages/PatientSearchPage.tsx`
+- **Client-side filtering with pagination (top+bottom)**: `src/pages/EncounterPage.tsx`
+- **Observations with pagination (top+bottom)**: `src/pages/ObservationPage.tsx`
+- **Card layout with pagination (top+bottom)**: `src/pages/CarePlanPage.tsx`
+
+All implementations follow the standardized pattern with:
+- Pagination at both top and bottom positions
+- Unified loading state for all navigation operations
+- Full support for First/Last/Previous/Next navigation
+- Jump-to-page functionality
+- Proper bundle state management
 
 ## Detail/Edit/Create View
 

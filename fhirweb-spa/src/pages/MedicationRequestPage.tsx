@@ -5,6 +5,9 @@ import {
   useGetMedicationsQuery,
   useGetNextPageMutation,
   useGetPreviousPageMutation,
+  useGetFirstPageMutation,
+  useGetLastPageMutation,
+  useGoToPageMutation,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
 
@@ -71,6 +74,19 @@ const MedicationRequestPage: React.FC = () => {
     useGetNextPageMutation();
   const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
     useGetPreviousPageMutation();
+  const [triggerFirstPage, { isLoading: isLoadingFirst }] =
+    useGetFirstPageMutation();
+  const [triggerLastPage, { isLoading: isLoadingLast }] =
+    useGetLastPageMutation();
+  const [triggerGoToPage, { isLoading: isLoadingGoTo }] = useGoToPageMutation();
+
+  // Unified loading state for all pagination operations
+  const isPaginationLoading =
+    isLoadingNext ||
+    isLoadingPrevious ||
+    isLoadingFirst ||
+    isLoadingLast ||
+    isLoadingGoTo;
 
   const handleNextPage = async () => {
     if (currentBundle) {
@@ -90,11 +106,41 @@ const MedicationRequestPage: React.FC = () => {
     }
   };
 
+  const handleFirstPage = async () => {
+    if (currentBundle) {
+      const result = await triggerFirstPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data);
+      }
+    }
+  };
+
+  const handleLastPage = async () => {
+    if (currentBundle) {
+      const result = await triggerLastPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data);
+      }
+    }
+  };
+
+  const handleGoToPage = async (pageNumber: number) => {
+    if (currentBundle) {
+      const result = await triggerGoToPage({
+        bundle: currentBundle,
+        pageNumber,
+      });
+      if ('data' in result) {
+        setCurrentBundle(result.data);
+      }
+    }
+  };
+
   // Format medication requests from the API response
   const medications: MedicationRequest[] = React.useMemo(() => {
     if (!currentBundle || !currentBundle.entry) return [];
 
-    return data.entry
+    return currentBundle.entry
       .filter((entry) => entry.resource)
       .map((entry) => {
         const resource = entry.resource as any;
@@ -164,8 +210,10 @@ const MedicationRequestPage: React.FC = () => {
             bundle={currentBundle}
             onNextPage={handleNextPage}
             onPreviousPage={handlePreviousPage}
-            isLoadingNext={isLoadingNext}
-            isLoadingPrevious={isLoadingPrevious}
+            onFirstPage={handleFirstPage}
+            onLastPage={handleLastPage}
+            onGoToPage={handleGoToPage}
+            isLoading={isPaginationLoading}
             position="top"
           />
 
@@ -249,8 +297,10 @@ const MedicationRequestPage: React.FC = () => {
             bundle={currentBundle}
             onNextPage={handleNextPage}
             onPreviousPage={handlePreviousPage}
-            isLoadingNext={isLoadingNext}
-            isLoadingPrevious={isLoadingPrevious}
+            onFirstPage={handleFirstPage}
+            onLastPage={handleLastPage}
+            onGoToPage={handleGoToPage}
+            isLoading={isPaginationLoading}
             position="bottom"
           />
         </div>
