@@ -1,0 +1,1700 @@
+import React, { useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import {
+  useGetPatientQuery,
+  useGetResourceByIdQuery,
+  useCreateResourceMutation,
+} from '../../services/fhir/client';
+import { Encounter } from 'fhir/r5';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type TabId =
+  | 'vitals'
+  | 'exam'
+  | 'investigations'
+  | 'assessment'
+  | 'management'
+  | 'admission';
+
+interface RecordedItem {
+  id: string;
+  display: string;
+  note?: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const TABS: { id: TabId; label: string; step: number }[] = [
+  { id: 'vitals', label: 'Vitals', step: 1 },
+  { id: 'exam', label: 'Physical Exam', step: 2 },
+  { id: 'investigations', label: 'Investigations', step: 3 },
+  { id: 'assessment', label: 'Assessment', step: 4 },
+  { id: 'management', label: 'Management', step: 5 },
+  { id: 'admission', label: 'Admit Patient', step: 6 },
+];
+
+const BODY_SYSTEMS = [
+  { code: '113255004', display: 'Respiratory' },
+  { code: '80891009', display: 'Cardiovascular' },
+  { code: '818983003', display: 'Abdomen' },
+  { code: '25938000', display: 'Neurological' },
+  { code: '387784004', display: 'Musculoskeletal' },
+  { code: '39937001', display: 'Skin' },
+  { code: '53127002', display: 'Genitourinary' },
+  { code: '265581004', display: 'HEENT' },
+  { code: '74728003', display: 'General / Other' },
+];
+
+const INVESTIGATION_CATEGORIES = [
+  { display: 'Haematology', code: '252275004' },
+  { display: 'Biochemistry', code: '59524001' },
+  { display: 'Immunology / Serology', code: '252276003' },
+  { display: 'Microbiology', code: '19851009' },
+  { display: 'Radiology / Imaging', code: '394914008' },
+  { display: 'Cardiology', code: '394579002' },
+  { display: 'Pulmonology', code: '394607009' },
+  { display: 'Other', code: '74728003' },
+];
+
+const SEVERITY_SNOMED = {
+  mild: { code: '255604002', display: 'Mild' },
+  moderate: { code: '6736007', display: 'Moderate' },
+  severe: { code: '24484000', display: 'Severe' },
+};
+
+const ROUTE_SNOMED: Record<string, { code: string; display: string }> = {
+  oral: { code: '26643006', display: 'Oral route' },
+  IV: { code: '47625008', display: 'Intravenous route' },
+  IM: { code: '78421000', display: 'Intramuscular route' },
+  SC: { code: '34206005', display: 'Subcutaneous route' },
+  topical: { code: '6064005', display: 'Topical route' },
+  inhaled: { code: '18679011000001101', display: 'Inhalation route' },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const nowFHIR = (): string => {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  const sign = off <= 0 ? '+' : '-';
+  const h = String(Math.abs(Math.floor(off / 60))).padStart(2, '0');
+  const m = String(Math.abs(off % 60)).padStart(2, '0');
+  return d.toISOString().slice(0, 19) + `${sign}${h}:${m}`;
+};
+
+const localNow = (): string => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+};
+
+const localDatePlusDays = (days: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+};
+
+const toFHIRDateTime = (localDT: string): string => {
+  const d = new Date(localDT);
+  const off = d.getTimezoneOffset();
+  const sign = off <= 0 ? '+' : '-';
+  const h = String(Math.abs(Math.floor(off / 60))).padStart(2, '0');
+  const m = String(Math.abs(off % 60)).padStart(2, '0');
+  return `${localDT}:00${sign}${h}:${m}`;
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const RecordedList: React.FC<{ items: RecordedItem[]; emptyLabel: string }> = ({
+  items,
+  emptyLabel,
+}) => (
+  <div className="mt-5 border-t border-gray-100 pt-4">
+    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+      Recorded this session ({items.length})
+    </h4>
+    {items.length === 0 ? (
+      <p className="text-sm text-gray-400 italic">{emptyLabel}</p>
+    ) : (
+      <ul className="space-y-2">
+        {items.map((item) => (
+          <li
+            key={item.id}
+            className="bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2"
+          >
+            <span className="font-medium text-gray-700">{item.display}</span>
+            {item.note && (
+              <span className="text-gray-500 text-xs flex-shrink-0">
+                {item.note}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+);
+
+const ErrorBox: React.FC<{ msg: string }> = ({ msg }) =>
+  msg ? (
+    <div className="bg-red-50 border border-red-300 text-red-700 rounded-md p-3 text-sm mt-3">
+      {msg}
+    </div>
+  ) : null;
+
+const fieldCls =
+  'w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
+const labelCls = 'block text-sm font-medium text-gray-700 mb-1';
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const ClinicalConsultPage: React.FC = () => {
+  const { id: patientId, encounterId } = useParams<{
+    id: string;
+    encounterId: string;
+  }>();
+  const [activeTab, setActiveTab] = useState<TabId>('vitals');
+  const [createResource, { isLoading: isCreating }] =
+    useCreateResourceMutation();
+
+  const { data: patient } = useGetPatientQuery(patientId!);
+  const { data: encounterResource } = useGetResourceByIdQuery(
+    { resourceType: 'Encounter', id: encounterId! },
+    { skip: !encounterId },
+  );
+  const encounter = encounterResource as Encounter | undefined;
+
+  const patientName = patient
+    ? patient.name?.[0]?.text ||
+      [
+        patient.name?.[0]?.prefix?.join(' '),
+        patient.name?.[0]?.given?.join(' '),
+        patient.name?.[0]?.family,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : '';
+
+  const encounterReason =
+    (encounter as any)?.reason?.[0]?.value?.[0]?.concept?.text ||
+    'Outpatient Visit';
+  const encounterStart = encounter?.actualPeriod?.start
+    ? new Date(encounter.actualPeriod.start).toLocaleString()
+    : '';
+
+  // Created item state per tab
+  const [vitalsItems, setVitalsItems] = useState<RecordedItem[]>([]);
+  const [examItems, setExamItems] = useState<RecordedItem[]>([]);
+  const [orderItems, setOrderItems] = useState<RecordedItem[]>([]);
+  const [diagnosisItems, setDiagnosisItems] = useState<RecordedItem[]>([]);
+  const [medicationItems, setMedicationItems] = useState<RecordedItem[]>([]);
+  const [carePlanItem, setCarePlanItem] = useState<RecordedItem | null>(null);
+  const [admissionItem, setAdmissionItem] = useState<RecordedItem | null>(null);
+
+  // ── VITALS ────────────────────────────────────────────────────────────────
+
+  const [vitalsForm, setVitalsForm] = useState({
+    spo2: '',
+    hr: '',
+    sbp: '',
+    dbp: '',
+    rr: '',
+    temp: '',
+    recordedAt: localNow(),
+  });
+  const [vitalsError, setVitalsError] = useState('');
+
+  const handleSaveVitals = async () => {
+    setVitalsError('');
+    const { spo2, hr, sbp, dbp, rr, temp, recordedAt } = vitalsForm;
+
+    const vitals: Array<{
+      code: string;
+      display: string;
+      value: number;
+      unit: string;
+      ucumCode: string;
+    }> = [];
+    if (spo2)
+      vitals.push({
+        code: '2708-6',
+        display: 'Oxygen saturation',
+        value: parseFloat(spo2),
+        unit: '%',
+        ucumCode: '%',
+      });
+    if (hr)
+      vitals.push({
+        code: '8867-4',
+        display: 'Heart rate',
+        value: parseFloat(hr),
+        unit: 'beats/min',
+        ucumCode: '/min',
+      });
+    if (sbp)
+      vitals.push({
+        code: '8480-6',
+        display: 'Systolic blood pressure',
+        value: parseFloat(sbp),
+        unit: 'mmHg',
+        ucumCode: 'mm[Hg]',
+      });
+    if (dbp)
+      vitals.push({
+        code: '8462-4',
+        display: 'Diastolic blood pressure',
+        value: parseFloat(dbp),
+        unit: 'mmHg',
+        ucumCode: 'mm[Hg]',
+      });
+    if (rr)
+      vitals.push({
+        code: '9279-1',
+        display: 'Respiratory rate',
+        value: parseFloat(rr),
+        unit: 'breaths/min',
+        ucumCode: '/min',
+      });
+    if (temp)
+      vitals.push({
+        code: '8310-5',
+        display: 'Body temperature',
+        value: parseFloat(temp),
+        unit: '°C',
+        ucumCode: 'Cel',
+      });
+
+    if (vitals.length === 0) {
+      setVitalsError('Enter at least one vital sign value.');
+      return;
+    }
+
+    const effectiveDateTime = toFHIRDateTime(recordedAt);
+    const created: RecordedItem[] = [];
+
+    for (const v of vitals) {
+      const obs = {
+        resourceType: 'Observation' as const,
+        status: 'final' as const,
+        category: [
+          {
+            coding: [
+              {
+                system:
+                  'http://terminology.hl7.org/CodeSystem/observation-category',
+                code: 'vital-signs',
+                display: 'Vital Signs',
+              },
+            ],
+          },
+        ],
+        code: {
+          coding: [
+            { system: 'http://loinc.org', code: v.code, display: v.display },
+          ],
+        },
+        subject: { reference: `Patient/${patientId}`, display: patientName },
+        encounter: { reference: `Encounter/${encounterId}` },
+        effectiveDateTime,
+        valueQuantity: {
+          value: v.value,
+          unit: v.unit,
+          system: 'http://unitsofmeasure.org',
+          code: v.ucumCode,
+        },
+      };
+      const result = await createResource({
+        resourceType: 'Observation',
+        resource: obs as any,
+      });
+      if ('data' in result && result.data?.id) {
+        created.push({
+          id: result.data.id,
+          display: `${v.display}: ${v.value} ${v.unit}`,
+        });
+      }
+    }
+
+    if (created.length > 0) {
+      setVitalsItems((prev) => [...prev, ...created]);
+      setVitalsForm((f) => ({
+        ...f,
+        spo2: '',
+        hr: '',
+        sbp: '',
+        dbp: '',
+        rr: '',
+        temp: '',
+      }));
+    } else {
+      setVitalsError('Failed to save vital signs. Please try again.');
+    }
+  };
+
+  // ── PHYSICAL EXAM ─────────────────────────────────────────────────────────
+
+  const [examForm, setExamForm] = useState({
+    bodySystem: BODY_SYSTEMS[0].code,
+    finding: '',
+    isNormal: true,
+  });
+  const [examError, setExamError] = useState('');
+
+  const handleSaveExam = async () => {
+    setExamError('');
+    if (!examForm.finding.trim()) {
+      setExamError('Describe the examination finding.');
+      return;
+    }
+    const system = BODY_SYSTEMS.find((s) => s.code === examForm.bodySystem)!;
+    const obs = {
+      resourceType: 'Observation' as const,
+      status: 'final' as const,
+      category: [
+        {
+          coding: [
+            {
+              system:
+                'http://terminology.hl7.org/CodeSystem/observation-category',
+              code: 'exam',
+              display: 'Exam',
+            },
+          ],
+        },
+      ],
+      code: {
+        coding: [
+          {
+            system: 'http://snomed.info/sct',
+            code: system.code,
+            display: system.display,
+          },
+        ],
+        text: system.display,
+      },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      effectiveDateTime: nowFHIR(),
+      interpretation: examForm.isNormal
+        ? [
+            {
+              coding: [
+                {
+                  system:
+                    'http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation',
+                  code: 'N',
+                  display: 'Normal',
+                },
+              ],
+            },
+          ]
+        : [
+            {
+              coding: [
+                {
+                  system:
+                    'http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation',
+                  code: 'A',
+                  display: 'Abnormal',
+                },
+              ],
+            },
+          ],
+      valueString: examForm.finding.trim(),
+    };
+    const result = await createResource({
+      resourceType: 'Observation',
+      resource: obs as any,
+    });
+    if ('data' in result && result.data?.id) {
+      setExamItems((prev) => [
+        ...prev,
+        {
+          id: result.data!.id!,
+          display: `[${system.display}] ${examForm.finding}`,
+          note: examForm.isNormal ? 'Normal' : 'Abnormal',
+        },
+      ]);
+      setExamForm((f) => ({ ...f, finding: '' }));
+    } else {
+      setExamError('Failed to save examination finding. Please try again.');
+    }
+  };
+
+  // ── INVESTIGATIONS ────────────────────────────────────────────────────────
+
+  const [orderForm, setOrderForm] = useState({
+    category: INVESTIGATION_CATEGORIES[0].code,
+    testName: '',
+    priority: 'routine' as 'routine' | 'urgent' | 'stat',
+    notes: '',
+  });
+  const [ordersError, setOrdersError] = useState('');
+
+  const handleSaveOrder = async () => {
+    setOrdersError('');
+    if (!orderForm.testName.trim()) {
+      setOrdersError('Enter the test or investigation name.');
+      return;
+    }
+    const cat = INVESTIGATION_CATEGORIES.find(
+      (c) => c.code === orderForm.category,
+    )!;
+    const order = {
+      resourceType: 'ServiceRequest' as const,
+      status: 'active' as const,
+      intent: 'order' as const,
+      priority: orderForm.priority as any,
+      code: {
+        concept: {
+          coding: [
+            {
+              system: 'http://snomed.info/sct',
+              code: cat.code,
+              display: cat.display,
+            },
+          ],
+          text: orderForm.testName.trim(),
+        },
+      },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      authoredOn: nowFHIR(),
+      ...(orderForm.notes ? { note: [{ text: orderForm.notes }] } : {}),
+    };
+    const result = await createResource({
+      resourceType: 'ServiceRequest',
+      resource: order as any,
+    });
+    if ('data' in result && result.data?.id) {
+      setOrderItems((prev) => [
+        ...prev,
+        {
+          id: result.data!.id!,
+          display: orderForm.testName.trim(),
+          note: `${cat.display} · ${orderForm.priority.toUpperCase()}`,
+        },
+      ]);
+      setOrderForm((f) => ({ ...f, testName: '', notes: '' }));
+    } else {
+      setOrdersError('Failed to place order. Please try again.');
+    }
+  };
+
+  // ── ASSESSMENT ────────────────────────────────────────────────────────────
+
+  const [diagForm, setDiagForm] = useState({
+    diagnosis: '',
+    snomedCode: '',
+    severity: 'moderate' as 'mild' | 'moderate' | 'severe',
+    verification: 'confirmed' as 'confirmed' | 'provisional',
+  });
+  const [diagError, setDiagError] = useState('');
+
+  const handleSaveDiagnosis = async () => {
+    setDiagError('');
+    if (!diagForm.diagnosis.trim()) {
+      setDiagError('Enter a diagnosis.');
+      return;
+    }
+    const condition = {
+      resourceType: 'Condition' as const,
+      clinicalStatus: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+            code: 'active',
+            display: 'Active',
+          },
+        ],
+      },
+      verificationStatus: {
+        coding: [
+          {
+            system:
+              'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+            code: diagForm.verification,
+            display:
+              diagForm.verification === 'confirmed'
+                ? 'Confirmed'
+                : 'Provisional',
+          },
+        ],
+      },
+      category: [
+        {
+          coding: [
+            {
+              system:
+                'http://terminology.hl7.org/CodeSystem/condition-category',
+              code: 'encounter-diagnosis',
+              display: 'Encounter Diagnosis',
+            },
+          ],
+        },
+      ],
+      severity: {
+        coding: [
+          {
+            system: 'http://snomed.info/sct',
+            ...SEVERITY_SNOMED[diagForm.severity],
+          },
+        ],
+      },
+      code: {
+        coding: diagForm.snomedCode
+          ? [
+              {
+                system: 'http://snomed.info/sct',
+                code: diagForm.snomedCode,
+                display: diagForm.diagnosis.trim(),
+              },
+            ]
+          : [],
+        text: diagForm.diagnosis.trim(),
+      },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      onsetDateTime: nowFHIR(),
+      recordedDate: nowFHIR().slice(0, 10),
+    };
+    const result = await createResource({
+      resourceType: 'Condition',
+      resource: condition as any,
+    });
+    if ('data' in result && result.data?.id) {
+      setDiagnosisItems((prev) => [
+        ...prev,
+        {
+          id: result.data!.id!,
+          display: diagForm.diagnosis.trim(),
+          note: `${SEVERITY_SNOMED[diagForm.severity].display} · ${diagForm.verification}`,
+        },
+      ]);
+      setDiagForm((f) => ({ ...f, diagnosis: '', snomedCode: '' }));
+    } else {
+      setDiagError('Failed to save diagnosis. Please try again.');
+    }
+  };
+
+  // ── MANAGEMENT ────────────────────────────────────────────────────────────
+
+  const [medForm, setMedForm] = useState({
+    drugName: '',
+    dose: '',
+    unit: 'mg',
+    route: 'oral' as keyof typeof ROUTE_SNOMED,
+    frequency: '',
+    instructions: '',
+  });
+  const [medError, setMedError] = useState('');
+
+  const [carePlanForm, setCarePlanForm] = useState({
+    title: '',
+    description: '',
+  });
+  const [carePlanError, setCarePlanError] = useState('');
+
+  const handleSaveMedication = async () => {
+    setMedError('');
+    if (!medForm.drugName.trim()) {
+      setMedError('Enter a drug name.');
+      return;
+    }
+    const dosageParts = [
+      medForm.dose ? `${medForm.dose} ${medForm.unit}` : '',
+      medForm.route ? `${medForm.route}` : '',
+      medForm.frequency || '',
+      medForm.instructions || '',
+    ].filter(Boolean);
+    const dosageText = dosageParts.join(' · ');
+
+    const medReq = {
+      resourceType: 'MedicationRequest' as const,
+      status: 'active' as const,
+      intent: 'order' as const,
+      medication: { concept: { text: medForm.drugName.trim() } },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      authoredOn: nowFHIR(),
+      dosageInstruction: [
+        {
+          text: dosageText || medForm.drugName.trim(),
+          route: {
+            coding: [
+              {
+                system: 'http://snomed.info/sct',
+                ...ROUTE_SNOMED[medForm.route],
+              },
+            ],
+          },
+          ...(medForm.dose
+            ? {
+                doseAndRate: [
+                  {
+                    doseQuantity: {
+                      value: parseFloat(medForm.dose),
+                      unit: medForm.unit,
+                      system: 'http://unitsofmeasure.org',
+                      code: medForm.unit,
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+      ],
+    };
+    const result = await createResource({
+      resourceType: 'MedicationRequest',
+      resource: medReq as any,
+    });
+    if ('data' in result && result.data?.id) {
+      setMedicationItems((prev) => [
+        ...prev,
+        {
+          id: result.data!.id!,
+          display: medForm.drugName.trim(),
+          note: dosageText,
+        },
+      ]);
+      setMedForm({
+        drugName: '',
+        dose: '',
+        unit: 'mg',
+        route: 'oral',
+        frequency: '',
+        instructions: '',
+      });
+    } else {
+      setMedError('Failed to save medication. Please try again.');
+    }
+  };
+
+  const handleSaveCarePlan = async () => {
+    setCarePlanError('');
+    if (!carePlanForm.description.trim()) {
+      setCarePlanError('Enter a care plan description.');
+      return;
+    }
+    const cp = {
+      resourceType: 'CarePlan' as const,
+      status: 'active' as const,
+      intent: 'order' as const,
+      title: carePlanForm.title.trim() || 'Care Plan',
+      description: carePlanForm.description.trim(),
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      created: nowFHIR().slice(0, 10),
+      period: { start: nowFHIR() },
+    };
+    const result = await createResource({
+      resourceType: 'CarePlan',
+      resource: cp as any,
+    });
+    if ('data' in result && result.data?.id) {
+      setCarePlanItem({
+        id: result.data.id,
+        display: cp.title,
+        note: cp.description,
+      });
+      setCarePlanForm({ title: '', description: '' });
+    } else {
+      setCarePlanError('Failed to save care plan. Please try again.');
+    }
+  };
+
+  // ── ADMISSION ─────────────────────────────────────────────────────────────
+
+  const [admForm, setAdmForm] = useState({
+    admissionDate: localNow(),
+    dischargeDate: localDatePlusDays(5),
+    reason: '',
+    stayDays: '5',
+  });
+  const [admError, setAdmError] = useState('');
+
+  const handleSaveAdmission = async () => {
+    setAdmError('');
+    if (!admForm.reason.trim()) {
+      setAdmError('Enter a reason for admission.');
+      return;
+    }
+    if (admissionItem) {
+      setAdmError('Inpatient admission already created for this encounter.');
+      return;
+    }
+    const inpatientEnc = {
+      resourceType: 'Encounter' as const,
+      status: 'in-progress' as const,
+      class: [
+        {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+              code: 'IMP',
+              display: 'inpatient encounter',
+            },
+          ],
+        },
+      ],
+      type: [
+        {
+          coding: [
+            {
+              system: 'http://snomed.info/sct',
+              code: '32485007',
+              display: 'Hospital admission (procedure)',
+            },
+          ],
+          text: 'Inpatient hospital admission for observation and management',
+        },
+      ],
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      partOf: { reference: `Encounter/${encounterId}` },
+      actualPeriod: {
+        start: toFHIRDateTime(admForm.admissionDate),
+        end: toFHIRDateTime(admForm.dischargeDate),
+      },
+      reason: [{ value: [{ concept: { text: admForm.reason.trim() } }] }],
+      ...(diagnosisItems.length > 0
+        ? {
+            diagnosis: diagnosisItems.map((d) => ({
+              condition: [
+                {
+                  reference: {
+                    reference: `Condition/${d.id}`,
+                    display: d.display,
+                  },
+                },
+              ],
+              use: [
+                {
+                  coding: [
+                    {
+                      system:
+                        'http://terminology.hl7.org/CodeSystem/diagnosis-role',
+                      code: 'AD',
+                      display: 'Admission diagnosis',
+                    },
+                  ],
+                },
+              ],
+            })),
+          }
+        : {}),
+    };
+    const result = await createResource({
+      resourceType: 'Encounter',
+      resource: inpatientEnc as any,
+    });
+    if ('data' in result && result.data?.id) {
+      const admitDate = new Date(admForm.admissionDate).toLocaleDateString();
+      const dischargeDate = new Date(
+        admForm.dischargeDate,
+      ).toLocaleDateString();
+      setAdmissionItem({
+        id: result.data.id,
+        display: `Inpatient Admission — ${admForm.stayDays} days`,
+        note: `${admitDate} → ${dischargeDate} · ${admForm.reason}`,
+      });
+    } else {
+      setAdmError('Failed to create admission record. Please try again.');
+    }
+  };
+
+  // ─── Tab badge counts ──────────────────────────────────────────────────────
+
+  const tabCounts: Record<TabId, number> = {
+    vitals: vitalsItems.length,
+    exam: examItems.length,
+    investigations: orderItems.length,
+    assessment: diagnosisItems.length,
+    management: medicationItems.length + (carePlanItem ? 1 : 0),
+    admission: admissionItem ? 1 : 0,
+  };
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="container mx-auto px-4 py-6">
+      {/* Breadcrumb */}
+      <nav className="text-sm text-gray-500 mb-4 flex items-center gap-1 flex-wrap">
+        <Link to="/patients" className="hover:text-blue-600 transition-colors">
+          Patients
+        </Link>
+        <span>/</span>
+        <Link
+          to={`/patient/${patientId}/details`}
+          className="hover:text-blue-600 transition-colors"
+        >
+          {patientName || patientId}
+        </Link>
+        <span>/</span>
+        <Link
+          to={`/patient/${patientId}/encounter`}
+          className="hover:text-blue-600 transition-colors"
+        >
+          Encounters
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 font-medium">Clinical Consult</span>
+      </nav>
+
+      {/* Patient + Encounter Banner */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 shadow-sm">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="bg-blue-600 rounded-full h-12 w-12 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+            {patientName.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div className="font-semibold text-gray-800 text-lg">
+              {patientName}
+            </div>
+            <div className="text-sm text-gray-500">
+              DOB: {patient?.birthDate || '—'} &middot;{' '}
+              {patient?.gender
+                ? patient.gender.charAt(0).toUpperCase() +
+                  patient.gender.slice(1)
+                : '—'}{' '}
+              &middot; ID: {patient?.identifier?.[0]?.value || patientId}
+            </div>
+          </div>
+        </div>
+        <div className="border-l border-gray-200 pl-4 flex-1">
+          <div className="text-sm font-medium text-gray-700">Current Visit</div>
+          <div className="text-sm text-gray-600 mt-0.5">{encounterReason}</div>
+          <div className="text-xs text-gray-400 mt-0.5">{encounterStart}</div>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            In Progress
+          </span>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+            Outpatient
+          </span>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex overflow-x-auto border-b border-gray-200 mb-6 gap-0">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+              activeTab === tab.id
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <span className="text-xs text-gray-400 font-normal">
+              {tab.step}.
+            </span>
+            {tab.label}
+            {tabCounts[tab.id] > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-700 text-xs font-semibold px-1.5 py-0.5 rounded-full">
+                {tabCounts[tab.id]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div className="bg-white shadow rounded-lg p-6">
+        {/* ── VITALS ── */}
+        {activeTab === 'vitals' && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Vital Signs
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Record the patient's vital signs. Leave fields blank to skip.
+            </p>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className={labelCls}>SpO₂ (%)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="100"
+                  step="1"
+                  placeholder="e.g. 98"
+                  className={fieldCls}
+                  value={vitalsForm.spo2}
+                  onChange={(e) =>
+                    setVitalsForm((f) => ({ ...f, spo2: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Heart Rate (bpm)</label>
+                <input
+                  type="number"
+                  min="20"
+                  max="300"
+                  step="1"
+                  placeholder="e.g. 72"
+                  className={fieldCls}
+                  value={vitalsForm.hr}
+                  onChange={(e) =>
+                    setVitalsForm((f) => ({ ...f, hr: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Systolic BP (mmHg)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="300"
+                  step="1"
+                  placeholder="e.g. 120"
+                  className={fieldCls}
+                  value={vitalsForm.sbp}
+                  onChange={(e) =>
+                    setVitalsForm((f) => ({ ...f, sbp: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Diastolic BP (mmHg)</label>
+                <input
+                  type="number"
+                  min="20"
+                  max="200"
+                  step="1"
+                  placeholder="e.g. 80"
+                  className={fieldCls}
+                  value={vitalsForm.dbp}
+                  onChange={(e) =>
+                    setVitalsForm((f) => ({ ...f, dbp: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Resp. Rate (breaths/min)</label>
+                <input
+                  type="number"
+                  min="4"
+                  max="60"
+                  step="1"
+                  placeholder="e.g. 16"
+                  className={fieldCls}
+                  value={vitalsForm.rr}
+                  onChange={(e) =>
+                    setVitalsForm((f) => ({ ...f, rr: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Temperature (°C)</label>
+                <input
+                  type="number"
+                  min="30"
+                  max="43"
+                  step="0.1"
+                  placeholder="e.g. 36.8"
+                  className={fieldCls}
+                  value={vitalsForm.temp}
+                  onChange={(e) =>
+                    setVitalsForm((f) => ({ ...f, temp: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className={labelCls}>Recorded At</label>
+              <input
+                type="datetime-local"
+                className={`${fieldCls} max-w-xs`}
+                value={vitalsForm.recordedAt}
+                onChange={(e) =>
+                  setVitalsForm((f) => ({ ...f, recordedAt: e.target.value }))
+                }
+              />
+            </div>
+
+            <ErrorBox msg={vitalsError} />
+
+            <button
+              onClick={handleSaveVitals}
+              disabled={isCreating}
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+            >
+              {isCreating ? 'Saving...' : 'Save Vital Signs'}
+            </button>
+
+            <RecordedList
+              items={vitalsItems}
+              emptyLabel="No vitals recorded yet."
+            />
+          </div>
+        )}
+
+        {/* ── PHYSICAL EXAM ── */}
+        {activeTab === 'exam' && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Physical Examination
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Record findings by body system. Add one finding at a time.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Body System</label>
+                <select
+                  className={fieldCls}
+                  value={examForm.bodySystem}
+                  onChange={(e) =>
+                    setExamForm((f) => ({ ...f, bodySystem: e.target.value }))
+                  }
+                >
+                  {BODY_SYSTEMS.map((s) => (
+                    <option key={s.code} value={s.code}>
+                      {s.display}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Finding</label>
+                <input
+                  type="text"
+                  placeholder="Describe the finding..."
+                  className={fieldCls}
+                  value={examForm.finding}
+                  onChange={(e) =>
+                    setExamForm((f) => ({ ...f, finding: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="normality"
+                  checked={examForm.isNormal}
+                  onChange={() =>
+                    setExamForm((f) => ({ ...f, isNormal: true }))
+                  }
+                  className="text-green-600"
+                />
+                <span className="text-sm text-gray-700">Normal</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="normality"
+                  checked={!examForm.isNormal}
+                  onChange={() =>
+                    setExamForm((f) => ({ ...f, isNormal: false }))
+                  }
+                  className="text-red-500"
+                />
+                <span className="text-sm text-gray-700">Abnormal</span>
+              </label>
+            </div>
+
+            <ErrorBox msg={examError} />
+
+            <button
+              onClick={handleSaveExam}
+              disabled={isCreating}
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+            >
+              {isCreating ? 'Saving...' : 'Add Finding'}
+            </button>
+
+            <RecordedList
+              items={examItems}
+              emptyLabel="No examination findings recorded yet."
+            />
+          </div>
+        )}
+
+        {/* ── INVESTIGATIONS ── */}
+        {activeTab === 'investigations' && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Investigations
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Place lab, imaging, or other investigation orders.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Category</label>
+                <select
+                  className={fieldCls}
+                  value={orderForm.category}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, category: e.target.value }))
+                  }
+                >
+                  {INVESTIGATION_CATEGORIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.display}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>
+                  Test / Investigation Name{' '}
+                  <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Full Blood Count, Chest X-ray..."
+                  className={fieldCls}
+                  value={orderForm.testName}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, testName: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Priority</label>
+                <select
+                  className={fieldCls}
+                  value={orderForm.priority}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({
+                      ...f,
+                      priority: e.target.value as any,
+                    }))
+                  }
+                >
+                  <option value="routine">Routine</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="stat">STAT</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Clinical Notes</label>
+                <input
+                  type="text"
+                  placeholder="Optional clinical indication..."
+                  className={fieldCls}
+                  value={orderForm.notes}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <ErrorBox msg={ordersError} />
+
+            <button
+              onClick={handleSaveOrder}
+              disabled={isCreating}
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+            >
+              {isCreating ? 'Placing...' : 'Place Order'}
+            </button>
+
+            <RecordedList
+              items={orderItems}
+              emptyLabel="No investigation orders placed yet."
+            />
+          </div>
+        )}
+
+        {/* ── ASSESSMENT ── */}
+        {activeTab === 'assessment' && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Assessment / Diagnosis
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Record the clinical diagnosis for this encounter.
+            </p>
+
+            {/* Summary of findings */}
+            {(vitalsItems.length > 0 ||
+              examItems.length > 0 ||
+              orderItems.length > 0) && (
+              <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-5 text-sm text-gray-600">
+                <span className="font-medium text-gray-700">
+                  Findings summary:{' '}
+                </span>
+                {vitalsItems.length} vital sign
+                {vitalsItems.length !== 1 ? 's' : ''} &middot;{' '}
+                {examItems.length} exam finding
+                {examItems.length !== 1 ? 's' : ''} &middot; {orderItems.length}{' '}
+                order{orderItems.length !== 1 ? 's' : ''} placed
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className={labelCls}>
+                  Diagnosis <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Acute decompensated heart failure"
+                  className={fieldCls}
+                  value={diagForm.diagnosis}
+                  onChange={(e) =>
+                    setDiagForm((f) => ({ ...f, diagnosis: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>
+                  SNOMED Code{' '}
+                  <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 703328004"
+                  className={fieldCls}
+                  value={diagForm.snomedCode}
+                  onChange={(e) =>
+                    setDiagForm((f) => ({ ...f, snomedCode: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Verification Status</label>
+                <select
+                  className={fieldCls}
+                  value={diagForm.verification}
+                  onChange={(e) =>
+                    setDiagForm((f) => ({
+                      ...f,
+                      verification: e.target.value as any,
+                    }))
+                  }
+                >
+                  <option value="confirmed">Confirmed</option>
+                  <option value="provisional">Provisional</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Severity</label>
+                <select
+                  className={fieldCls}
+                  value={diagForm.severity}
+                  onChange={(e) =>
+                    setDiagForm((f) => ({
+                      ...f,
+                      severity: e.target.value as any,
+                    }))
+                  }
+                >
+                  <option value="mild">Mild</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="severe">Severe</option>
+                </select>
+              </div>
+            </div>
+
+            <ErrorBox msg={diagError} />
+
+            <button
+              onClick={handleSaveDiagnosis}
+              disabled={isCreating}
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+            >
+              {isCreating ? 'Saving...' : 'Save Diagnosis'}
+            </button>
+
+            <RecordedList
+              items={diagnosisItems}
+              emptyLabel="No diagnoses recorded yet."
+            />
+          </div>
+        )}
+
+        {/* ── MANAGEMENT ── */}
+        {activeTab === 'management' && (
+          <div className="space-y-8">
+            {/* Medications */}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                Medications
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Add medication orders for this encounter.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>
+                    Drug Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Furosemide"
+                    className={fieldCls}
+                    value={medForm.drugName}
+                    onChange={(e) =>
+                      setMedForm((f) => ({ ...f, drugName: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={labelCls}>Dose</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 40"
+                      className={fieldCls}
+                      value={medForm.dose}
+                      onChange={(e) =>
+                        setMedForm((f) => ({ ...f, dose: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="w-24">
+                    <label className={labelCls}>Unit</label>
+                    <select
+                      className={fieldCls}
+                      value={medForm.unit}
+                      onChange={(e) =>
+                        setMedForm((f) => ({ ...f, unit: e.target.value }))
+                      }
+                    >
+                      {['mg', 'mcg', 'g', 'mL', 'units', 'IU', '%'].map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Route</label>
+                  <select
+                    className={fieldCls}
+                    value={medForm.route}
+                    onChange={(e) =>
+                      setMedForm((f) => ({
+                        ...f,
+                        route: e.target.value as any,
+                      }))
+                    }
+                  >
+                    {Object.keys(ROUTE_SNOMED).map((r) => (
+                      <option key={r} value={r}>
+                        {r.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Frequency</label>
+                  <select
+                    className={fieldCls}
+                    value={medForm.frequency}
+                    onChange={(e) =>
+                      setMedForm((f) => ({ ...f, frequency: e.target.value }))
+                    }
+                  >
+                    <option value="">— Select —</option>
+                    {[
+                      'Once daily (OD)',
+                      'Twice daily (BD)',
+                      'Three times daily (TDS)',
+                      'Four times daily (QDS)',
+                      'Every 6 hours (Q6H)',
+                      'Every 8 hours (Q8H)',
+                      'Every 12 hours (Q12H)',
+                      'STAT (once only)',
+                      'PRN (as needed)',
+                      'Nightly (ON)',
+                    ].map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className={labelCls}>Special Instructions</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. With food, monitor potassium..."
+                    className={fieldCls}
+                    value={medForm.instructions}
+                    onChange={(e) =>
+                      setMedForm((f) => ({
+                        ...f,
+                        instructions: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <ErrorBox msg={medError} />
+
+              <button
+                onClick={handleSaveMedication}
+                disabled={isCreating}
+                className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+              >
+                {isCreating ? 'Saving...' : 'Add Medication'}
+              </button>
+
+              <RecordedList
+                items={medicationItems}
+                emptyLabel="No medications ordered yet."
+              />
+            </div>
+
+            {/* Care Plan */}
+            <div className="border-t border-gray-100 pt-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                Care Plan
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Document the overall management and follow-up plan.
+              </p>
+
+              {carePlanItem ? (
+                <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                  <div className="font-medium text-gray-800 text-sm">
+                    {carePlanItem.display}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {carePlanItem.note}
+                  </div>
+                  <div className="text-xs text-green-700 mt-2">
+                    Care plan saved (ID: {carePlanItem.id})
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className={labelCls}>Plan Title</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. HFrEF Management Plan"
+                        className={fieldCls}
+                        value={carePlanForm.title}
+                        onChange={(e) =>
+                          setCarePlanForm((f) => ({
+                            ...f,
+                            title: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>
+                        Plan Description <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        rows={4}
+                        placeholder="Describe the management goals, plan, referrals, and follow-up..."
+                        className={fieldCls}
+                        value={carePlanForm.description}
+                        onChange={(e) =>
+                          setCarePlanForm((f) => ({
+                            ...f,
+                            description: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <ErrorBox msg={carePlanError} />
+
+                  <button
+                    onClick={handleSaveCarePlan}
+                    disabled={isCreating}
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                  >
+                    {isCreating ? 'Saving...' : 'Save Care Plan'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── ADMIT PATIENT ── */}
+        {activeTab === 'admission' && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Admit Patient to Inpatient
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Create an inpatient admission linked to this outpatient encounter.
+              This is a new encounter record; the original visit remains
+              unchanged.
+            </p>
+
+            {admissionItem ? (
+              <div className="bg-green-50 border border-green-200 rounded-md p-5">
+                <div className="text-green-800 font-semibold text-sm mb-1">
+                  Inpatient admission created successfully
+                </div>
+                <div className="text-sm text-gray-700">
+                  {admissionItem.display}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {admissionItem.note}
+                </div>
+                <div className="text-xs text-green-700 mt-2">
+                  Encounter ID: {admissionItem.id}
+                </div>
+                <div className="mt-3 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded p-2">
+                  This inpatient encounter is linked via{' '}
+                  <code>partOf: Encounter/{encounterId}</code>
+                </div>
+              </div>
+            ) : (
+              <>
+                {diagnosisItems.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-5 text-sm">
+                    <span className="font-medium text-blue-800">
+                      Admission diagnoses will be linked:{' '}
+                    </span>
+                    <span className="text-blue-700">
+                      {diagnosisItems.map((d) => d.display).join(', ')}
+                    </span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>
+                      Admission Date &amp; Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      className={fieldCls}
+                      value={admForm.admissionDate}
+                      onChange={(e) =>
+                        setAdmForm((f) => ({
+                          ...f,
+                          admissionDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Planned Discharge</label>
+                    <input
+                      type="datetime-local"
+                      className={fieldCls}
+                      value={admForm.dischargeDate}
+                      onChange={(e) =>
+                        setAdmForm((f) => ({
+                          ...f,
+                          dischargeDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Stay Duration (days)</label>
+                    <select
+                      className={fieldCls}
+                      value={admForm.stayDays}
+                      onChange={(e) => {
+                        const days = parseInt(e.target.value);
+                        const newDischarge = localDatePlusDays(days);
+                        setAdmForm((f) => ({
+                          ...f,
+                          stayDays: e.target.value,
+                          dischargeDate: newDischarge,
+                        }));
+                      }}
+                    >
+                      {['1', '2', '3', '5', '7', '10', '14', '21', '28'].map(
+                        (d) => (
+                          <option key={d} value={d}>
+                            {d} day{parseInt(d) !== 1 ? 's' : ''}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>
+                      Reason for Admission{' '}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Acute decompensated heart failure, IV diuresis"
+                      className={fieldCls}
+                      value={admForm.reason}
+                      onChange={(e) =>
+                        setAdmForm((f) => ({ ...f, reason: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <ErrorBox msg={admError} />
+
+                <button
+                  onClick={handleSaveAdmission}
+                  disabled={isCreating}
+                  className="mt-4 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-2 px-6 rounded-md disabled:opacity-50 transition-colors"
+                >
+                  {isCreating ? 'Admitting...' : 'Confirm Admission'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Next tab navigation hint */}
+      <div className="mt-4 flex justify-between items-center text-sm text-gray-500">
+        <div>
+          {TABS.findIndex((t) => t.id === activeTab) > 0 && (
+            <button
+              onClick={() => {
+                const idx = TABS.findIndex((t) => t.id === activeTab);
+                setActiveTab(TABS[idx - 1].id);
+              }}
+              className="text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              &larr; Previous
+            </button>
+          )}
+        </div>
+        <div>
+          {TABS.findIndex((t) => t.id === activeTab) < TABS.length - 1 && (
+            <button
+              onClick={() => {
+                const idx = TABS.findIndex((t) => t.id === activeTab);
+                setActiveTab(TABS[idx + 1].id);
+              }}
+              className="text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              Next: {TABS[TABS.findIndex((t) => t.id === activeTab) + 1].label}{' '}
+              &rarr;
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ClinicalConsultPage;

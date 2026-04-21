@@ -8,6 +8,7 @@ import {
   useGetFirstPageMutation,
   useGetLastPageMutation,
   useGoToPageMutation,
+  useSearchByEncounterQuery,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
 
@@ -16,10 +17,103 @@ interface Encounter {
   type: string;
   status: string;
   class: string;
+  reason: string;
   periodStart: string;
   periodEnd: string;
   serviceProvider: string;
 }
+
+// ─── Per-row consult action button ───────────────────────────────────────────
+
+const ConsultActionButton: React.FC<{
+  patientId: string;
+  encounterId: string;
+  status: string;
+}> = ({ patientId, encounterId, status }) => {
+  const { data, isLoading } = useSearchByEncounterQuery({
+    resourceType: 'Observation',
+    encounterId,
+  });
+
+  if (isLoading) {
+    return <span className="text-xs text-gray-300 animate-pulse">···</span>;
+  }
+
+  const hasNotes = (data?.entry?.length ?? 0) > 0;
+  const isActive = status === 'in-progress';
+
+  if (!hasNotes && isActive) {
+    return (
+      <Link
+        to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+        className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+      >
+        Start Consult
+      </Link>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      <Link
+        to={`/patient/${patientId}/encounter/${encounterId}/notes`}
+        className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+      >
+        View Notes
+      </Link>
+      {isActive && (
+        <Link
+          to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+          className="inline-flex items-center bg-amber-500 hover:bg-amber-600 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+        >
+          Continue
+        </Link>
+      )}
+    </div>
+  );
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const formatDate = (dateString: string) => {
+  if (!dateString) return '—';
+  try {
+    return new Date(dateString).toLocaleDateString('en-SG', {
+      dateStyle: 'medium',
+    });
+  } catch {
+    return dateString;
+  }
+};
+
+const formatDateFull = (dateString: string) => {
+  if (!dateString) return '—';
+  try {
+    return new Date(dateString).toLocaleString('en-SG', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    return dateString;
+  }
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  'in-progress': 'bg-blue-100 text-blue-800',
+  finished: 'bg-green-100 text-green-800',
+  completed: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-700',
+  planned: 'bg-yellow-100 text-yellow-700',
+};
+
+const CLASS_STYLES: Record<string, string> = {
+  ambulatory: 'bg-sky-100 text-sky-700',
+  inpatient: 'bg-orange-100 text-orange-700',
+  IMP: 'bg-orange-100 text-orange-700',
+  AMB: 'bg-sky-100 text-sky-700',
+  EMER: 'bg-red-100 text-red-700',
+  emergency: 'bg-red-100 text-red-700',
+};
 
 const EncounterPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -137,11 +231,17 @@ const EncounterPage: React.FC = () => {
           const serviceProviderDisplay =
             resource.serviceProvider?.display || '';
 
+          const reasonText =
+            (resource as any).reason?.[0]?.value?.[0]?.concept?.text ||
+            resource.type?.[0]?.text ||
+            '—';
+
           return {
             id: resource.id || '',
             type: typeDisplay,
             status: resource.status || 'unknown',
             class: classDisplay,
+            reason: reasonText,
             periodStart: resource.actualPeriod?.start || '',
             periodEnd: resource.actualPeriod?.end || '',
             serviceProvider: serviceProviderDisplay,
@@ -156,9 +256,10 @@ const EncounterPage: React.FC = () => {
   const types = Array.from(new Set(encounters.map((enc) => enc.type)));
   const statuses = Array.from(new Set(encounters.map((enc) => enc.status)));
 
-  // Filter encounters based on selected filters
+  // Filter encounters based on selected filters; always exclude entered-in-error records
   const filteredEncounters = encounters.filter(
     (enc) =>
+      enc.status !== 'entered-in-error' &&
       (selectedType === '' || enc.type === selectedType) &&
       (selectedStatus === '' || enc.status === selectedStatus),
   );
@@ -191,47 +292,29 @@ const EncounterPage: React.FC = () => {
     );
   }
 
-  if (filteredEncounters.length === 0) {
-    return (
-      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-        <p className="text-yellow-700">No encounters found for this patient.</p>
-      </div>
-    );
-  }
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString();
-    } catch {
-      return dateString;
-    }
-  };
-
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'in-progress':
-        return 'blue';
-      case 'finished':
-      case 'completed':
-        return 'green';
-      case 'cancelled':
-        return 'red';
-      case 'planned':
-        return 'yellow';
-      default:
-        return 'gray';
-    }
-  };
-
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-xl font-semibold">
-          Encounters for {patientContext?.patient?.name?.[0]?.given?.[0]}{' '}
-          {patientContext?.patient?.name?.[0]?.family}
-        </h2>
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-800">Visit History</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {patientContext?.patient?.name?.[0]?.given?.[0]}{' '}
+            {patientContext?.patient?.name?.[0]?.family}
+            {encounters.length > 0 && (
+              <span className="ml-2 text-gray-400">
+                · {encounters.length} encounter
+                {encounters.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </p>
+        </div>
+        <Link
+          to={`/patient/${id}/details`}
+          state={{ backTo: `/patient/${id}/encounter` }}
+          className="inline-flex items-center text-sm text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 rounded-md py-1.5 px-3 transition-colors"
+        >
+          Patient Details
+        </Link>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -312,79 +395,113 @@ const EncounterPage: React.FC = () => {
           position="top"
         />
 
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Type
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Class
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Start Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                End Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Service Provider
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredEncounters.map((encounter) => (
-              <tr key={encounter.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">
-                    {encounter.type}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{encounter.class}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-${getStatusBadgeColor(
-                      encounter.status,
-                    )}-100 text-${getStatusBadgeColor(encounter.status)}-800`}
-                  >
-                    {encounter.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-500">
-                    {formatDate(encounter.periodStart)}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-500">
-                    {formatDate(encounter.periodEnd)}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-500">
-                    {encounter.serviceProvider}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <Link
-                    to={`/patient/${id}/encounter/crud/${encounter.id}`}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    View Details
-                  </Link>
-                </td>
+        {filteredEncounters.length === 0 ? (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-md">
+            <p className="text-yellow-800 text-sm">
+              No encounters match the selected filters.
+            </p>
+          </div>
+        ) : (
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Chief Complaint / Reason
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  End Date
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Consult Note
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  FHIR Record
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {filteredEncounters.map((encounter) => (
+                <tr
+                  key={encounter.id}
+                  className="hover:bg-gray-50 transition-colors"
+                >
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-800">
+                      {formatDate(encounter.periodStart)}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {encounter.periodStart
+                        ? new Date(encounter.periodStart).toLocaleTimeString(
+                            'en-SG',
+                            { timeStyle: 'short' },
+                          )
+                        : '—'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-sm font-medium text-gray-800 max-w-xs">
+                      {encounter.reason}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {encounter.serviceProvider}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        CLASS_STYLES[encounter.class] ||
+                        'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {encounter.class || encounter.type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        STATUS_STYLES[encounter.status] ||
+                        'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {encounter.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    {encounter.periodEnd ? (
+                      formatDateFull(encounter.periodEnd)
+                    ) : (
+                      <span className="text-gray-300">ongoing</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <ConsultActionButton
+                      patientId={id || ''}
+                      encounterId={encounter.id}
+                      status={encounter.status}
+                    />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm">
+                    <Link
+                      to={`/patient/${id}/encounter/crud/${encounter.id}`}
+                      className="text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      Details
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
 
         {/* Pagination at bottom */}
         <Pagination

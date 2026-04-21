@@ -8,6 +8,11 @@ import CarePlanPage from './pages/CarePlanPage';
 import ObservationPage from './pages/ObservationPage';
 import MedicationRequestPage from './pages/MedicationRequestPage';
 import EncounterPage from './pages/EncounterPage';
+import { EventMonitorPage } from './pages/EventMonitorPage';
+import { WebhookManagementPage } from './pages/WebhookManagementPage';
+import VisitRegistrationPage from './pages/clinical/VisitRegistrationPage';
+import ClinicalConsultPage from './pages/clinical/ClinicalConsultPage';
+import ConsultNoteDetailPage from './pages/clinical/ConsultNoteDetailPage';
 // CRUD components
 import CarePlanCrudPage from './pages/crud/CarePlanCrudPage';
 import ObservationCrudPage from './pages/crud/ObservationCrudPage';
@@ -20,10 +25,24 @@ const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/launch" element={<LaunchPage />} />
+      <Route path="/webhooks" element={<WebhookManagementPage />} />
+      <Route path="/events" element={<EventMonitorPage />} />
       <Route path="/" element={<HomePage />} />
       <Route path="/patients" element={<PatientSearchPage />} />
       <Route path="/patient/new" element={<PatientCrudPage />} />
       <Route path="/patient/:id/details" element={<PatientCrudPage />} />
+      <Route
+        path="/patient/:id/visit/new"
+        element={<VisitRegistrationPage />}
+      />
+      <Route
+        path="/patient/:id/encounter/:encounterId/consult"
+        element={<ClinicalConsultPage />}
+      />
+      <Route
+        path="/patient/:id/encounter/:encounterId/notes"
+        element={<ConsultNoteDetailPage />}
+      />
       <Route path="/patient/:id" element={<PatientPage />}>
         {/* CarePlan becomes a nested route under patient */}
         <Route path="careplan" element={<CarePlanPage />} />

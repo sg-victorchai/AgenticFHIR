@@ -256,7 +256,7 @@ const PatientSearchPage: React.FC = () => {
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
-                    Summary Care Records
+                    Register &amp; Consult
                   </th>
                 </tr>
               </thead>
@@ -286,18 +286,27 @@ const PatientSearchPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link
                         to={`/patient/${patient.id}/details`}
+                        state={{ backTo: '/patients' }}
                         className="text-blue-600 hover:text-blue-900"
                       >
                         View Details
                       </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <Link
-                        to={`/patient/${patient.id}`}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        View Summary
-                      </Link>
+                      <div className="flex flex-row gap-2">
+                        <Link
+                          to={`/patient/${patient.id}/visit/new`}
+                          className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                        >
+                          Register
+                        </Link>
+                        <Link
+                          to={`/patient/${patient.id}/encounter`}
+                          className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                        >
+                          Consult
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -319,9 +328,17 @@ const PatientSearchPage: React.FC = () => {
         ) : (
           shouldSearch &&
           !isLoading && (
-            <p className="text-gray-500 italic">
-              No patients found matching "{searchTerm}"
-            </p>
+            <div className="py-6 text-center">
+              <p className="text-gray-500 italic mb-4">
+                No patients found matching &ldquo;{searchTerm}&rdquo;
+              </p>
+              <Link
+                to="/patient/new"
+                className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-5 rounded-md transition-colors"
+              >
+                Create New Patient
+              </Link>
+            </div>
           )
         )}
 

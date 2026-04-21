@@ -960,6 +960,63 @@ export const fhirApi = createApi({
       invalidatesTags: ['Patient'],
     }),
 
+    searchByEncounter: builder.query<
+      Bundle<Resource>,
+      { resourceType: string; encounterId: string }
+    >({
+      queryFn: async ({ resourceType, encounterId }) => {
+        try {
+          const client = await createFHIRClient();
+          const results = await client.search({
+            resourceType,
+            searchParams: { encounter: encounterId, _count: '100' },
+          });
+          return { data: results as Bundle<Resource> };
+        } catch (error: any) {
+          console.error(`Error searching ${resourceType} by encounter:`, error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+      providesTags: (_result, _error, { resourceType, encounterId }) => [
+        { type: resourceType as any, id: encounterId },
+      ],
+    }),
+
+    searchChildEncounters: builder.query<Bundle<Resource>, string>({
+      queryFn: async (encounterId) => {
+        try {
+          const client = await createFHIRClient();
+          const results = await client.search({
+            resourceType: 'Encounter',
+            searchParams: { 'part-of': encounterId, _count: '20' },
+          });
+          return { data: results as Bundle<Resource> };
+        } catch (error: any) {
+          console.error('Error searching child encounters:', error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+      providesTags: (_result, _error, encounterId) => [
+        { type: 'Encounter', id: `partof-${encounterId}` },
+      ],
+    }),
+
     updatePatient: builder.mutation<Patient, Patient>({
       queryFn: async (patient) => {
         try {
@@ -1017,4 +1074,6 @@ export const {
   useGetConditionsQuery,
   useGetPractitionerByIdQuery,
   useGetLocationsQuery,
+  useSearchByEncounterQuery,
+  useSearchChildEncountersQuery,
 } = fhirApi;

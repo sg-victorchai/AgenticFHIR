@@ -1,0 +1,2170 @@
+import React, { useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import {
+  useGetPatientQuery,
+  useGetResourceByIdQuery,
+  useSearchByEncounterQuery,
+  useSearchChildEncountersQuery,
+  useCreateResourceMutation,
+} from '../../services/fhir/client';
+import {
+  Encounter,
+  Observation,
+  Condition,
+  MedicationRequest,
+  CarePlan,
+  Bundle,
+  Resource,
+  ServiceRequest,
+} from 'fhir/r5';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const BODY_SYSTEMS = [
+  { code: '113255004', display: 'Respiratory' },
+  { code: '80891009', display: 'Cardiovascular' },
+  { code: '818983003', display: 'Abdomen' },
+  { code: '25938000', display: 'Neurological' },
+  { code: '387784004', display: 'Musculoskeletal' },
+  { code: '39937001', display: 'Skin' },
+  { code: '53127002', display: 'Genitourinary' },
+  { code: '265581004', display: 'HEENT' },
+  { code: '74728003', display: 'General / Other' },
+];
+
+const INVESTIGATION_CATEGORIES = [
+  { display: 'Haematology', code: '252275004' },
+  { display: 'Biochemistry', code: '59524001' },
+  { display: 'Radiology / Imaging', code: '394914008' },
+  { display: 'Cardiology', code: '394579002' },
+  { display: 'Microbiology', code: '19851009' },
+  { display: 'Other', code: '74728003' },
+];
+
+const ROUTE_SNOMED: Record<string, { code: string; display: string }> = {
+  oral: { code: '26643006', display: 'Oral route' },
+  IV: { code: '47625008', display: 'Intravenous route' },
+  IM: { code: '78421000', display: 'Intramuscular route' },
+  SC: { code: '34206005', display: 'Subcutaneous route' },
+  inhaled: { code: '18679011000001101', display: 'Inhalation route' },
+};
+
+const SEVERITY_SNOMED = {
+  mild: { code: '255604002', display: 'Mild' },
+  moderate: { code: '6736007', display: 'Moderate' },
+  severe: { code: '24484000', display: 'Severe' },
+};
+
+const VITAL_LOINC_NAMES: Record<string, string> = {
+  '2708-6': 'SpO₂',
+  '8867-4': 'Heart Rate',
+  '8480-6': 'Systolic BP',
+  '8462-4': 'Diastolic BP',
+  '9279-1': 'Resp. Rate',
+  '8310-5': 'Temperature',
+};
+
+const SECTION_ACCENT: Record<string, string> = {
+  vitals: 'bg-sky-600',
+  exam: 'bg-teal-600',
+  investigations: 'bg-violet-600',
+  assessment: 'bg-rose-600',
+  management: 'bg-emerald-600',
+  admission: 'bg-orange-600',
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const formatDT = (s?: string) => {
+  if (!s) return '—';
+  try {
+    return new Date(s).toLocaleString('en-SG', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    return s;
+  }
+};
+
+const formatDate = (s?: string) => {
+  if (!s) return '—';
+  try {
+    return new Date(s).toLocaleDateString('en-SG', { dateStyle: 'medium' });
+  } catch {
+    return s;
+  }
+};
+
+const extractResources = <T,>(bundle?: Bundle<Resource>): T[] => {
+  if (!bundle?.entry) return [];
+  return bundle.entry
+    .filter((e) => e.resource)
+    .map((e) => e.resource as unknown as T);
+};
+
+const nowFHIR = (): string => {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  const sign = off <= 0 ? '+' : '-';
+  const h = String(Math.abs(Math.floor(off / 60))).padStart(2, '0');
+  const m = String(Math.abs(off % 60)).padStart(2, '0');
+  return d.toISOString().slice(0, 19) + `${sign}${h}:${m}`;
+};
+
+const localNow = (): string => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+};
+
+const localDatePlusDays = (days: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+};
+
+const toFHIRDateTime = (local: string): string => {
+  const d = new Date(local);
+  const off = d.getTimezoneOffset();
+  const sign = off <= 0 ? '+' : '-';
+  const h = String(Math.abs(Math.floor(off / 60))).padStart(2, '0');
+  const m = String(Math.abs(off % 60)).padStart(2, '0');
+  return `${local}:00${sign}${h}:${m}`;
+};
+
+type VitalTrend = 'critical' | 'abnormal' | 'normal';
+
+const interpretVital = (loincCode: string, value: number): VitalTrend => {
+  switch (loincCode) {
+    case '2708-6':
+      return value < 90 ? 'critical' : value < 95 ? 'abnormal' : 'normal';
+    case '8867-4':
+      return value < 40 || value > 150
+        ? 'critical'
+        : value < 60 || value > 100
+          ? 'abnormal'
+          : 'normal';
+    case '8480-6':
+      return value < 80 || value > 200
+        ? 'critical'
+        : value >= 140
+          ? 'abnormal'
+          : 'normal';
+    case '8462-4':
+      return value >= 90 || value < 50 ? 'abnormal' : 'normal';
+    case '9279-1':
+      return value < 8 || value > 30
+        ? 'critical'
+        : value < 12 || value > 20
+          ? 'abnormal'
+          : 'normal';
+    case '8310-5':
+      return value < 35 || value > 40
+        ? 'critical'
+        : value >= 38 || value < 36.0
+          ? 'abnormal'
+          : 'normal';
+    default:
+      return 'normal';
+  }
+};
+
+const vitalCardCls = (t: VitalTrend) =>
+  t === 'critical'
+    ? 'border-red-400 bg-red-50'
+    : t === 'abnormal'
+      ? 'border-amber-400 bg-amber-50'
+      : 'border-gray-200 bg-white';
+const vitalValCls = (t: VitalTrend) =>
+  t === 'critical'
+    ? 'text-red-700'
+    : t === 'abnormal'
+      ? 'text-amber-700'
+      : 'text-gray-800';
+
+const fieldCls =
+  'w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
+const labelCls =
+  'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
+
+// ─── UI primitives ────────────────────────────────────────────────────────────
+
+const StatusPill: React.FC<{ status: string }> = ({ status }) => {
+  const map: Record<string, string> = {
+    final: 'bg-green-100 text-green-800',
+    active: 'bg-blue-100 text-blue-700',
+    'on-hold': 'bg-gray-100 text-gray-600',
+    confirmed: 'bg-green-100 text-green-800',
+    provisional: 'bg-yellow-100 text-yellow-700',
+    'in-progress': 'bg-blue-100 text-blue-700',
+    finished: 'bg-gray-100 text-gray-600',
+    completed: 'bg-gray-100 text-gray-600',
+    cancelled: 'bg-red-100 text-red-700',
+    preliminary: 'bg-yellow-100 text-yellow-800',
+    stat: 'bg-red-100 text-red-700',
+    urgent: 'bg-orange-100 text-orange-700',
+    routine: 'bg-gray-100 text-gray-600',
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[status] || 'bg-gray-100 text-gray-600'}`}
+    >
+      {status}
+    </span>
+  );
+};
+
+const SectionDivider: React.FC<{ label: string }> = ({ label }) => (
+  <div className="flex items-center gap-2 my-3">
+    <div className="flex-1 border-t border-gray-100" />
+    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+      {label}
+    </span>
+    <div className="flex-1 border-t border-gray-100" />
+  </div>
+);
+
+// ─── Section wrapper ──────────────────────────────────────────────────────────
+
+const Section: React.FC<{
+  sectionKey: string;
+  icon: string;
+  title: string;
+  count: number;
+  isEditable: boolean;
+  addLabel: string;
+  children: React.ReactNode;
+  addForm: React.ReactNode;
+}> = ({
+  sectionKey,
+  icon,
+  title,
+  count,
+  isEditable,
+  addLabel,
+  children,
+  addForm,
+}) => {
+  const [open, setOpen] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const accent = SECTION_ACCENT[sectionKey] || 'bg-gray-500';
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden mb-4 shadow-sm">
+      <div
+        className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`${accent} rounded-lg h-7 w-7 flex items-center justify-center text-white font-bold text-xs flex-shrink-0`}
+          >
+            {icon}
+          </div>
+          <span className="font-semibold text-gray-800 text-sm">{title}</span>
+          {count > 0 ? (
+            <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+              {count} recorded
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400 italic">none recorded</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {isEditable && open && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowForm((f) => !f);
+              }}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-md px-2 py-1 transition-colors bg-white"
+            >
+              {showForm ? '✕ Cancel' : `+ ${addLabel}`}
+            </button>
+          )}
+          <span className="text-gray-400 text-xs">{open ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {open && (
+        <div className="bg-white">
+          <div className="px-5 py-4">{children}</div>
+          {isEditable && showForm && (
+            <div className="border-t border-blue-100 bg-blue-50/40 px-5 py-4">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-3">
+                Add to {title}
+              </p>
+              {React.cloneElement(addForm as React.ReactElement, {
+                onDone: () => setShowForm(false),
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const EmptyNote: React.FC<{ label: string }> = ({ label }) => (
+  <p className="text-sm text-gray-400 italic">{label}</p>
+);
+
+// ─── Inline add forms ─────────────────────────────────────────────────────────
+
+interface AddFormProps {
+  patientId: string;
+  patientName: string;
+  encounterId: string;
+  createResource: (arg: {
+    resourceType: string;
+    resource: Resource;
+  }) => Promise<any>;
+  isSaving: boolean;
+  onDone?: () => void;
+}
+
+const AddVitalsForm: React.FC<AddFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  onDone,
+}) => {
+  const [form, setForm] = useState({
+    spo2: '',
+    hr: '',
+    sbp: '',
+    dbp: '',
+    rr: '',
+    temp: '',
+    recordedAt: localNow(),
+  });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    const entries: Array<{
+      code: string;
+      display: string;
+      value: number;
+      unit: string;
+      ucum: string;
+    }> = [];
+    if (form.spo2)
+      entries.push({
+        code: '2708-6',
+        display: 'Oxygen saturation',
+        value: +form.spo2,
+        unit: '%',
+        ucum: '%',
+      });
+    if (form.hr)
+      entries.push({
+        code: '8867-4',
+        display: 'Heart rate',
+        value: +form.hr,
+        unit: 'beats/min',
+        ucum: '/min',
+      });
+    if (form.sbp)
+      entries.push({
+        code: '8480-6',
+        display: 'Systolic blood pressure',
+        value: +form.sbp,
+        unit: 'mmHg',
+        ucum: 'mm[Hg]',
+      });
+    if (form.dbp)
+      entries.push({
+        code: '8462-4',
+        display: 'Diastolic blood pressure',
+        value: +form.dbp,
+        unit: 'mmHg',
+        ucum: 'mm[Hg]',
+      });
+    if (form.rr)
+      entries.push({
+        code: '9279-1',
+        display: 'Respiratory rate',
+        value: +form.rr,
+        unit: 'breaths/min',
+        ucum: '/min',
+      });
+    if (form.temp)
+      entries.push({
+        code: '8310-5',
+        display: 'Body temperature',
+        value: +form.temp,
+        unit: '°C',
+        ucum: 'Cel',
+      });
+    if (entries.length === 0) {
+      setErr('Enter at least one value.');
+      return;
+    }
+    let allOk = true;
+    for (const v of entries) {
+      const obs = {
+        resourceType: 'Observation' as const,
+        status: 'final' as const,
+        category: [
+          {
+            coding: [
+              {
+                system:
+                  'http://terminology.hl7.org/CodeSystem/observation-category',
+                code: 'vital-signs',
+                display: 'Vital Signs',
+              },
+            ],
+          },
+        ],
+        code: {
+          coding: [
+            { system: 'http://loinc.org', code: v.code, display: v.display },
+          ],
+        },
+        subject: { reference: `Patient/${patientId}`, display: patientName },
+        encounter: { reference: `Encounter/${encounterId}` },
+        effectiveDateTime: toFHIRDateTime(form.recordedAt),
+        valueQuantity: {
+          value: v.value,
+          unit: v.unit,
+          system: 'http://unitsofmeasure.org',
+          code: v.ucum,
+        },
+      };
+      const res = await createResource({
+        resourceType: 'Observation',
+        resource: obs as any,
+      });
+      if (!('data' in res)) allOk = false;
+    }
+    if (allOk) {
+      onDone?.();
+    } else {
+      setErr('Some values failed to save. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { id: 'spo2', label: 'SpO₂ (%)', ph: '98' },
+          { id: 'hr', label: 'Heart Rate (bpm)', ph: '72' },
+          { id: 'sbp', label: 'Systolic BP', ph: '120' },
+          { id: 'dbp', label: 'Diastolic BP', ph: '80' },
+          { id: 'rr', label: 'Resp. Rate (/min)', ph: '16' },
+          { id: 'temp', label: 'Temp (°C)', ph: '36.8' },
+        ].map((f) => (
+          <div key={f.id}>
+            <label className={labelCls}>{f.label}</label>
+            <input
+              type="number"
+              placeholder={f.ph}
+              className={fieldCls}
+              value={(form as any)[f.id]}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, [f.id]: e.target.value }))
+              }
+            />
+          </div>
+        ))}
+      </div>
+      <div>
+        <label className={labelCls}>Recorded At</label>
+        <input
+          type="datetime-local"
+          className={`${fieldCls} max-w-xs`}
+          value={form.recordedAt}
+          onChange={(e) =>
+            setForm((s) => ({ ...s, recordedAt: e.target.value }))
+          }
+        />
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Saving…' : 'Save Vitals'}
+      </button>
+    </div>
+  );
+};
+
+const AddExamForm: React.FC<AddFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  onDone,
+}) => {
+  const [form, setForm] = useState({
+    bodySystem: BODY_SYSTEMS[0].code,
+    finding: '',
+    isNormal: true,
+  });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    if (!form.finding.trim()) {
+      setErr('Enter the examination finding.');
+      return;
+    }
+    const sys = BODY_SYSTEMS.find((s) => s.code === form.bodySystem)!;
+    const obs = {
+      resourceType: 'Observation' as const,
+      status: 'final' as const,
+      category: [
+        {
+          coding: [
+            {
+              system:
+                'http://terminology.hl7.org/CodeSystem/observation-category',
+              code: 'exam',
+              display: 'Exam',
+            },
+          ],
+        },
+      ],
+      code: {
+        coding: [
+          {
+            system: 'http://snomed.info/sct',
+            code: sys.code,
+            display: sys.display,
+          },
+        ],
+        text: sys.display,
+      },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      effectiveDateTime: nowFHIR(),
+      interpretation: form.isNormal
+        ? [
+            {
+              coding: [
+                {
+                  system:
+                    'http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation',
+                  code: 'N',
+                  display: 'Normal',
+                },
+              ],
+            },
+          ]
+        : [
+            {
+              coding: [
+                {
+                  system:
+                    'http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation',
+                  code: 'A',
+                  display: 'Abnormal',
+                },
+              ],
+            },
+          ],
+      valueString: form.finding.trim(),
+    };
+    const res = await createResource({
+      resourceType: 'Observation',
+      resource: obs as any,
+    });
+    if ('data' in res) {
+      onDone?.();
+    } else {
+      setErr('Failed to save. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Body System</label>
+          <select
+            className={fieldCls}
+            value={form.bodySystem}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, bodySystem: e.target.value }))
+            }
+          >
+            {BODY_SYSTEMS.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.display}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Finding</label>
+          <input
+            type="text"
+            placeholder="Describe finding…"
+            className={fieldCls}
+            value={form.finding}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, finding: e.target.value }))
+            }
+          />
+        </div>
+      </div>
+      <div className="flex gap-4">
+        {[
+          { label: 'Normal', val: true, cls: 'text-green-700' },
+          { label: 'Abnormal', val: false, cls: 'text-red-600' },
+        ].map((o) => (
+          <label
+            key={o.label}
+            className={`flex items-center gap-2 cursor-pointer text-sm ${o.cls}`}
+          >
+            <input
+              type="radio"
+              checked={form.isNormal === o.val}
+              onChange={() => setForm((s) => ({ ...s, isNormal: o.val }))}
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Saving…' : 'Add Finding'}
+      </button>
+    </div>
+  );
+};
+
+const AddOrderForm: React.FC<AddFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  onDone,
+}) => {
+  const [form, setForm] = useState({
+    category: INVESTIGATION_CATEGORIES[0].code,
+    testName: '',
+    priority: 'routine',
+    notes: '',
+  });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    if (!form.testName.trim()) {
+      setErr('Enter the test name.');
+      return;
+    }
+    const cat = INVESTIGATION_CATEGORIES.find((c) => c.code === form.category)!;
+    const sr = {
+      resourceType: 'ServiceRequest' as const,
+      status: 'active' as const,
+      intent: 'order' as const,
+      priority: form.priority as any,
+      code: {
+        concept: {
+          coding: [
+            {
+              system: 'http://snomed.info/sct',
+              code: cat.code,
+              display: cat.display,
+            },
+          ],
+          text: form.testName.trim(),
+        },
+      },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      authoredOn: nowFHIR(),
+      ...(form.notes ? { note: [{ text: form.notes }] } : {}),
+    };
+    const res = await createResource({
+      resourceType: 'ServiceRequest',
+      resource: sr as any,
+    });
+    if ('data' in res) {
+      onDone?.();
+    } else {
+      setErr('Failed to place order. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Category</label>
+          <select
+            className={fieldCls}
+            value={form.category}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, category: e.target.value }))
+            }
+          >
+            {INVESTIGATION_CATEGORIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.display}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>
+            Test Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Full Blood Count, ECG…"
+            className={fieldCls}
+            value={form.testName}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, testName: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Priority</label>
+          <select
+            className={fieldCls}
+            value={form.priority}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, priority: e.target.value }))
+            }
+          >
+            <option value="routine">Routine</option>
+            <option value="urgent">Urgent</option>
+            <option value="stat">STAT</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Clinical Indication</label>
+          <input
+            type="text"
+            placeholder="Optional note…"
+            className={fieldCls}
+            value={form.notes}
+            onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))}
+          />
+        </div>
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Saving…' : 'Place Order'}
+      </button>
+    </div>
+  );
+};
+
+const AddDiagnosisForm: React.FC<AddFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  onDone,
+}) => {
+  const [form, setForm] = useState({
+    diagnosis: '',
+    snomedCode: '',
+    severity: 'moderate',
+    verification: 'confirmed',
+  });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    if (!form.diagnosis.trim()) {
+      setErr('Enter a diagnosis.');
+      return;
+    }
+    const sev = SEVERITY_SNOMED[form.severity as keyof typeof SEVERITY_SNOMED];
+    const cond = {
+      resourceType: 'Condition' as const,
+      clinicalStatus: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+            code: 'active',
+            display: 'Active',
+          },
+        ],
+      },
+      verificationStatus: {
+        coding: [
+          {
+            system:
+              'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+            code: form.verification,
+            display:
+              form.verification === 'confirmed' ? 'Confirmed' : 'Provisional',
+          },
+        ],
+      },
+      category: [
+        {
+          coding: [
+            {
+              system:
+                'http://terminology.hl7.org/CodeSystem/condition-category',
+              code: 'encounter-diagnosis',
+              display: 'Encounter Diagnosis',
+            },
+          ],
+        },
+      ],
+      severity: { coding: [{ system: 'http://snomed.info/sct', ...sev }] },
+      code: {
+        coding: form.snomedCode
+          ? [
+              {
+                system: 'http://snomed.info/sct',
+                code: form.snomedCode,
+                display: form.diagnosis.trim(),
+              },
+            ]
+          : [],
+        text: form.diagnosis.trim(),
+      },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      onsetDateTime: nowFHIR(),
+      recordedDate: nowFHIR().slice(0, 10),
+    };
+    const res = await createResource({
+      resourceType: 'Condition',
+      resource: cond as any,
+    });
+    if ('data' in res) {
+      onDone?.();
+    } else {
+      setErr('Failed to save. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className={labelCls}>
+            Diagnosis <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Acute decompensated heart failure"
+            className={fieldCls}
+            value={form.diagnosis}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, diagnosis: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className={labelCls}>SNOMED Code (optional)</label>
+          <input
+            type="text"
+            placeholder="e.g. 703328004"
+            className={fieldCls}
+            value={form.snomedCode}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, snomedCode: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Severity</label>
+          <select
+            className={fieldCls}
+            value={form.severity}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, severity: e.target.value }))
+            }
+          >
+            <option value="mild">Mild</option>
+            <option value="moderate">Moderate</option>
+            <option value="severe">Severe</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Verification</label>
+          <select
+            className={fieldCls}
+            value={form.verification}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, verification: e.target.value }))
+            }
+          >
+            <option value="confirmed">Confirmed</option>
+            <option value="provisional">Provisional</option>
+          </select>
+        </div>
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Saving…' : 'Save Diagnosis'}
+      </button>
+    </div>
+  );
+};
+
+const AddMedicationForm: React.FC<AddFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  onDone,
+}) => {
+  const [form, setForm] = useState({
+    drugName: '',
+    dose: '',
+    unit: 'mg',
+    route: 'oral',
+    frequency: '',
+    instructions: '',
+  });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    if (!form.drugName.trim()) {
+      setErr('Enter a drug name.');
+      return;
+    }
+    const parts = [
+      form.dose ? `${form.dose} ${form.unit}` : '',
+      form.route,
+      form.frequency,
+      form.instructions,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const med = {
+      resourceType: 'MedicationRequest' as const,
+      status: 'active' as const,
+      intent: 'order' as const,
+      medication: { concept: { text: form.drugName.trim() } },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      authoredOn: nowFHIR(),
+      dosageInstruction: [
+        {
+          text: parts || form.drugName.trim(),
+          route: {
+            coding: [
+              {
+                system: 'http://snomed.info/sct',
+                ...ROUTE_SNOMED[form.route as keyof typeof ROUTE_SNOMED],
+              },
+            ],
+          },
+          ...(form.dose
+            ? {
+                doseAndRate: [
+                  {
+                    doseQuantity: {
+                      value: +form.dose,
+                      unit: form.unit,
+                      system: 'http://unitsofmeasure.org',
+                      code: form.unit,
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+      ],
+    };
+    const res = await createResource({
+      resourceType: 'MedicationRequest',
+      resource: med as any,
+    });
+    if ('data' in res) {
+      onDone?.();
+    } else {
+      setErr('Failed to save. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>
+            Drug Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Furosemide"
+            className={fieldCls}
+            value={form.drugName}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, drugName: e.target.value }))
+            }
+          />
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className={labelCls}>Dose</label>
+            <input
+              type="text"
+              placeholder="40"
+              className={fieldCls}
+              value={form.dose}
+              onChange={(e) => setForm((s) => ({ ...s, dose: e.target.value }))}
+            />
+          </div>
+          <div className="w-20">
+            <label className={labelCls}>Unit</label>
+            <select
+              className={fieldCls}
+              value={form.unit}
+              onChange={(e) => setForm((s) => ({ ...s, unit: e.target.value }))}
+            >
+              {['mg', 'mcg', 'g', 'mL', 'units'].map((u) => (
+                <option key={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Route</label>
+          <select
+            className={fieldCls}
+            value={form.route}
+            onChange={(e) => setForm((s) => ({ ...s, route: e.target.value }))}
+          >
+            {Object.keys(ROUTE_SNOMED).map((r) => (
+              <option key={r} value={r}>
+                {r.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Frequency</label>
+          <select
+            className={fieldCls}
+            value={form.frequency}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, frequency: e.target.value }))
+            }
+          >
+            <option value="">— Select —</option>
+            {[
+              'OD (once daily)',
+              'BD (twice daily)',
+              'TDS',
+              'QDS',
+              'Q6H',
+              'Q8H',
+              'STAT',
+              'PRN',
+            ].map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className={labelCls}>Special Instructions</label>
+          <input
+            type="text"
+            placeholder="e.g. With food, monitor K⁺…"
+            className={fieldCls}
+            value={form.instructions}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, instructions: e.target.value }))
+            }
+          />
+        </div>
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Saving…' : 'Add Medication'}
+      </button>
+    </div>
+  );
+};
+
+const AddCarePlanForm: React.FC<AddFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  onDone,
+}) => {
+  const [form, setForm] = useState({ title: '', description: '' });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    if (!form.description.trim()) {
+      setErr('Enter the care plan description.');
+      return;
+    }
+    const cp = {
+      resourceType: 'CarePlan' as const,
+      status: 'active' as const,
+      intent: 'order' as const,
+      title: form.title.trim() || 'Care Plan',
+      description: form.description.trim(),
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      created: nowFHIR().slice(0, 10),
+      period: { start: nowFHIR() },
+    };
+    const res = await createResource({
+      resourceType: 'CarePlan',
+      resource: cp as any,
+    });
+    if ('data' in res) {
+      onDone?.();
+    } else {
+      setErr('Failed to save. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className={labelCls}>Plan Title</label>
+        <input
+          type="text"
+          placeholder="e.g. HFrEF Management Plan"
+          className={fieldCls}
+          value={form.title}
+          onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>
+          Description / Goals <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          rows={3}
+          placeholder="Outline management goals, plan, referrals, follow-up…"
+          className={fieldCls}
+          value={form.description}
+          onChange={(e) =>
+            setForm((s) => ({ ...s, description: e.target.value }))
+          }
+        />
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Saving…' : 'Save Care Plan'}
+      </button>
+    </div>
+  );
+};
+
+interface AddAdmissionFormProps extends AddFormProps {
+  diagnosisItems: Array<{ id: string; display: string }>;
+}
+
+const AddAdmissionForm: React.FC<AddAdmissionFormProps> = ({
+  patientId,
+  patientName,
+  encounterId,
+  createResource,
+  isSaving,
+  diagnosisItems,
+  onDone,
+}) => {
+  const [form, setForm] = useState({
+    admDate: localNow(),
+    disDate: localDatePlusDays(5),
+    stayDays: '5',
+    reason: '',
+  });
+  const [err, setErr] = useState('');
+  const handleSave = async () => {
+    setErr('');
+    if (!form.reason.trim()) {
+      setErr('Enter the reason for admission.');
+      return;
+    }
+    const enc = {
+      resourceType: 'Encounter' as const,
+      status: 'in-progress' as const,
+      class: [
+        {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+              code: 'IMP',
+              display: 'inpatient encounter',
+            },
+          ],
+        },
+      ],
+      type: [
+        {
+          coding: [
+            {
+              system: 'http://snomed.info/sct',
+              code: '32485007',
+              display: 'Hospital admission (procedure)',
+            },
+          ],
+          text: 'Inpatient hospital admission',
+        },
+      ],
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      partOf: { reference: `Encounter/${encounterId}` },
+      actualPeriod: {
+        start: toFHIRDateTime(form.admDate),
+        end: toFHIRDateTime(form.disDate),
+      },
+      reason: [{ value: [{ concept: { text: form.reason.trim() } }] }],
+      ...(diagnosisItems.length > 0
+        ? {
+            diagnosis: diagnosisItems.map((d) => ({
+              condition: [
+                {
+                  reference: {
+                    reference: `Condition/${d.id}`,
+                    display: d.display,
+                  },
+                },
+              ],
+              use: [
+                {
+                  coding: [
+                    {
+                      system:
+                        'http://terminology.hl7.org/CodeSystem/diagnosis-role',
+                      code: 'AD',
+                      display: 'Admission diagnosis',
+                    },
+                  ],
+                },
+              ],
+            })),
+          }
+        : {}),
+    };
+    const res = await createResource({
+      resourceType: 'Encounter',
+      resource: enc as any,
+    });
+    if ('data' in res) {
+      onDone?.();
+    } else {
+      setErr('Failed to create admission. Please retry.');
+    }
+  };
+  return (
+    <div className="space-y-3">
+      {diagnosisItems.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-xs text-blue-700">
+          <strong>Admission diagnoses:</strong>{' '}
+          {diagnosisItems.map((d) => d.display).join(', ')}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Admission Date & Time</label>
+          <input
+            type="datetime-local"
+            className={fieldCls}
+            value={form.admDate}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, admDate: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Planned Discharge</label>
+          <input
+            type="datetime-local"
+            className={fieldCls}
+            value={form.disDate}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, disDate: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Stay Duration</label>
+          <select
+            className={fieldCls}
+            value={form.stayDays}
+            onChange={(e) => {
+              const days = parseInt(e.target.value);
+              setForm((s) => ({
+                ...s,
+                stayDays: e.target.value,
+                disDate: localDatePlusDays(days),
+              }));
+            }}
+          >
+            {['1', '2', '3', '5', '7', '10', '14', '21'].map((d) => (
+              <option key={d} value={d}>
+                {d} day{parseInt(d) !== 1 ? 's' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>
+            Reason for Admission <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Acute decompensated HF"
+            className={fieldCls}
+            value={form.reason}
+            onChange={(e) => setForm((s) => ({ ...s, reason: e.target.value }))}
+          />
+        </div>
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-1.5 px-5 rounded-md disabled:opacity-50 transition-colors"
+      >
+        {isSaving ? 'Admitting…' : 'Confirm Admission'}
+      </button>
+    </div>
+  );
+};
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+const ConsultNoteDetailPage: React.FC = () => {
+  const { id: patientId, encounterId } = useParams<{
+    id: string;
+    encounterId: string;
+  }>();
+  const [createResource, { isLoading: isSaving }] = useCreateResourceMutation();
+
+  const { data: patient } = useGetPatientQuery(patientId!);
+  const { data: encounterResource, isLoading: encounterLoading } =
+    useGetResourceByIdQuery(
+      { resourceType: 'Encounter', id: encounterId! },
+      { skip: !encounterId },
+    );
+  const { data: obsBundle, isLoading: obsLoading } = useSearchByEncounterQuery(
+    { resourceType: 'Observation', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
+  const { data: srBundle, isLoading: srLoading } = useSearchByEncounterQuery(
+    { resourceType: 'ServiceRequest', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
+  const { data: condBundle, isLoading: condLoading } =
+    useSearchByEncounterQuery(
+      { resourceType: 'Condition', encounterId: encounterId! },
+      { skip: !encounterId },
+    );
+  const { data: medBundle, isLoading: medLoading } = useSearchByEncounterQuery(
+    { resourceType: 'MedicationRequest', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
+  const { data: cpBundle, isLoading: cpLoading } = useSearchByEncounterQuery(
+    { resourceType: 'CarePlan', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
+  const { data: childEncBundle, isLoading: childEncLoading } =
+    useSearchChildEncountersQuery(encounterId!, { skip: !encounterId });
+
+  const encounter = encounterResource as Encounter | undefined;
+  const allObs = extractResources<Observation>(obsBundle);
+  const serviceRequests = extractResources<ServiceRequest>(srBundle);
+  const conditions = extractResources<Condition>(condBundle);
+  const medications = extractResources<MedicationRequest>(medBundle);
+  const carePlans = extractResources<CarePlan>(cpBundle);
+  const childEncounters = extractResources<Encounter>(childEncBundle);
+
+  const vitals = allObs.filter((o) =>
+    o.category?.some((c) => c.coding?.some((cd) => cd.code === 'vital-signs')),
+  );
+  const examFindings = allObs.filter((o) =>
+    o.category?.some((c) => c.coding?.some((cd) => cd.code === 'exam')),
+  );
+  const otherObs = allObs.filter(
+    (o) =>
+      !o.category?.some((c) =>
+        c.coding?.some((cd) => cd.code === 'vital-signs' || cd.code === 'exam'),
+      ),
+  );
+
+  const patientName = patient
+    ? patient.name?.[0]?.text ||
+      [
+        patient.name?.[0]?.prefix?.join(' '),
+        patient.name?.[0]?.given?.join(' '),
+        patient.name?.[0]?.family,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : '';
+
+  const encounterReason =
+    (encounter as any)?.reason?.[0]?.value?.[0]?.concept?.text ||
+    encounter?.type?.[0]?.text ||
+    'Encounter';
+  const encounterClass =
+    encounter?.class?.[0]?.coding?.[0]?.display ||
+    encounter?.class?.[0]?.coding?.[0]?.code ||
+    '—';
+  const isEditable = encounter?.status === 'in-progress';
+  const inpatientAdmission = childEncounters.find((e) =>
+    e.class?.some((c) => c.coding?.some((cd) => cd.code === 'IMP')),
+  );
+  const diagnosisItemsForAdmission = conditions.map((c) => ({
+    id: c.id || '',
+    display: c.code?.text || c.code?.coding?.[0]?.display || 'Diagnosis',
+  }));
+
+  const isLoading =
+    encounterLoading ||
+    obsLoading ||
+    srLoading ||
+    condLoading ||
+    medLoading ||
+    cpLoading ||
+    childEncLoading;
+
+  // Latest vital per LOINC code for the summary strip
+  const latestVitals = vitals.reduce<Record<string, Observation>>(
+    (acc, obs) => {
+      const code = obs.code?.coding?.[0]?.code || '';
+      const existing = acc[code];
+      if (
+        !existing ||
+        (obs.effectiveDateTime &&
+          (!existing.effectiveDateTime ||
+            obs.effectiveDateTime > existing.effectiveDateTime))
+      )
+        acc[code] = obs;
+      return acc;
+    },
+    {},
+  );
+
+  const formProps: Omit<AddFormProps, 'onDone'> = {
+    patientId: patientId!,
+    patientName,
+    encounterId: encounterId!,
+    createResource,
+    isSaving,
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-6 max-w-4xl">
+      {/* Breadcrumb */}
+      <nav className="text-sm text-gray-500 mb-4 flex items-center gap-1 flex-wrap">
+        <Link to="/patients" className="hover:text-blue-600 transition-colors">
+          Patients
+        </Link>
+        <span>/</span>
+        <Link
+          to={`/patient/${patientId}/encounter`}
+          className="hover:text-blue-600 transition-colors"
+        >
+          {patientName || patientId}
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 font-medium">Consult Note</span>
+      </nav>
+
+      {/* ── Clinical Header ── */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
+        {isEditable && (
+          <div className="bg-amber-500 px-5 py-2 flex items-center justify-between">
+            <span className="text-white text-xs font-bold uppercase tracking-widest">
+              Active Consult — In Progress
+            </span>
+            <Link
+              to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+              className="text-xs bg-white text-amber-700 font-semibold px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
+            >
+              Open Full Consult Wizard →
+            </Link>
+          </div>
+        )}
+        <div className="p-5">
+          <div className="flex flex-col sm:flex-row gap-5">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="bg-slate-700 rounded-full h-14 w-14 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                {patientName.charAt(0).toUpperCase() || '?'}
+              </div>
+              <div className="min-w-0">
+                <div className="font-bold text-gray-900 text-xl leading-tight">
+                  {patientName}
+                </div>
+                <div className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                  <span>
+                    DOB:{' '}
+                    <strong className="text-gray-700">
+                      {patient?.birthDate || '—'}
+                    </strong>
+                  </span>
+                  <span>
+                    Sex:{' '}
+                    <strong className="text-gray-700">
+                      {patient?.gender
+                        ? patient.gender.charAt(0).toUpperCase() +
+                          patient.gender.slice(1)
+                        : '—'}
+                    </strong>
+                  </span>
+                  {patient?.identifier?.[0]?.value && (
+                    <span>
+                      ID:{' '}
+                      <strong className="text-gray-700 font-mono">
+                        {patient.identifier[0].value}
+                      </strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="border-t sm:border-t-0 sm:border-l border-gray-200 sm:pl-5 pt-4 sm:pt-0 flex-shrink-0 min-w-48">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Visit Details
+              </div>
+              <div className="font-semibold text-gray-800 text-base">
+                {encounterReason}
+              </div>
+              <div className="text-sm text-gray-500 mt-1">
+                {formatDT(encounter?.actualPeriod?.start)}
+              </div>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {encounter && <StatusPill status={encounter.status} />}
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  {encounterClass}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Latest vitals strip */}
+        {Object.keys(latestVitals).length > 0 && (
+          <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Latest Vitals
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {Object.entries(latestVitals).map(([code, obs]) => {
+                const val = obs.valueQuantity?.value ?? null;
+                const unit = obs.valueQuantity?.unit || '';
+                const trend =
+                  val !== null ? interpretVital(code, val) : 'normal';
+                const name =
+                  VITAL_LOINC_NAMES[code] ||
+                  obs.code?.coding?.[0]?.display ||
+                  code;
+                return (
+                  <div
+                    key={code}
+                    className={`border rounded-lg px-3 py-2 ${vitalCardCls(trend)}`}
+                  >
+                    <div className="text-xs text-gray-500 font-medium">
+                      {name}
+                    </div>
+                    <div
+                      className={`text-lg font-bold tabular-nums ${vitalValCls(trend)}`}
+                    >
+                      {val !== null ? val : '—'}{' '}
+                      <span className="text-xs font-normal">{unit}</span>
+                      {trend === 'critical' && (
+                        <span className="ml-1 text-red-600 text-sm font-bold">
+                          !
+                        </span>
+                      )}
+                      {trend === 'abnormal' && (
+                        <span className="ml-1 text-amber-600 text-xs">▲</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {formatDT(obs.effectiveDateTime)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center items-center h-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      ) : (
+        <div>
+          {/* ── 1. Vital Signs ── */}
+          <Section
+            sectionKey="vitals"
+            icon="V"
+            title="Vital Signs"
+            count={vitals.length}
+            isEditable={isEditable}
+            addLabel="Record Vitals"
+            addForm={<AddVitalsForm {...formProps} />}
+          >
+            {vitals.length === 0 ? (
+              <EmptyNote label="No vital signs recorded for this encounter." />
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {vitals.map((obs) => {
+                  const code = obs.code?.coding?.[0]?.code || '';
+                  const name =
+                    VITAL_LOINC_NAMES[code] ||
+                    obs.code?.text ||
+                    obs.code?.coding?.[0]?.display ||
+                    'Observation';
+                  const val = obs.valueQuantity?.value ?? null;
+                  const unit = obs.valueQuantity?.unit || obs.valueString || '';
+                  const trend =
+                    val !== null ? interpretVital(code, val) : 'normal';
+                  return (
+                    <div
+                      key={obs.id}
+                      className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}
+                    >
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        {name}
+                      </div>
+                      <div
+                        className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}
+                      >
+                        {val !== null ? val : obs.valueString || '—'}
+                        <span className="text-sm font-normal ml-1">
+                          {obs.valueQuantity ? unit : ''}
+                        </span>
+                        {trend === 'critical' && (
+                          <span className="ml-1 text-red-600 text-sm">!</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {formatDT(obs.effectiveDateTime)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+
+          {/* ── 2. Physical Examination ── */}
+          <Section
+            sectionKey="exam"
+            icon="E"
+            title="Physical Examination"
+            count={examFindings.length}
+            isEditable={isEditable}
+            addLabel="Add Finding"
+            addForm={<AddExamForm {...formProps} />}
+          >
+            {examFindings.length === 0 ? (
+              <EmptyNote label="No examination findings recorded." />
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-gray-400 border-b border-gray-100">
+                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                      System
+                    </th>
+                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                      Finding
+                    </th>
+                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                      Result
+                    </th>
+                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                      Time
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {examFindings.map((obs) => {
+                    const system =
+                      obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                    const finding = obs.valueString || '—';
+                    const isNormal =
+                      obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                    return (
+                      <tr key={obs.id} className="hover:bg-gray-50">
+                        <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">
+                          {system}
+                        </td>
+                        <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
+                        <td className="py-2.5 pr-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                          >
+                            {isNormal ? '✓ Normal' : '! Abnormal'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                          {formatDT(obs.effectiveDateTime)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </Section>
+
+          {/* ── 3. Investigations ── */}
+          <Section
+            sectionKey="investigations"
+            icon="Ix"
+            title="Investigations"
+            count={serviceRequests.length + otherObs.length}
+            isEditable={isEditable}
+            addLabel="Place Order"
+            addForm={<AddOrderForm {...formProps} />}
+          >
+            {serviceRequests.length === 0 && otherObs.length === 0 ? (
+              <EmptyNote label="No investigation orders or results recorded." />
+            ) : (
+              <div className="space-y-5">
+                {serviceRequests.length > 0 && (
+                  <div>
+                    <SectionDivider label="Orders" />
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Test
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Category
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Priority
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Ordered
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {serviceRequests.map((sr) => (
+                          <tr key={sr.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                              {(sr as any).code?.concept?.text ||
+                                sr.code?.text ||
+                                '—'}
+                            </td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-500">
+                              {(sr as any).code?.concept?.coding?.[0]
+                                ?.display || '—'}
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              {sr.priority && (
+                                <StatusPill status={sr.priority} />
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              <StatusPill status={sr.status} />
+                            </td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                              {formatDT(sr.authoredOn)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {otherObs.length > 0 && (
+                  <div>
+                    <SectionDivider label="Results" />
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Test
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Result
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Interpretation
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Time
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {otherObs.map((obs) => {
+                          const name =
+                            obs.code?.text ||
+                            obs.code?.coding?.[0]?.display ||
+                            '—';
+                          const val = obs.valueQuantity
+                            ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`
+                            : obs.valueString || '—';
+                          const interp =
+                            obs.interpretation?.[0]?.coding?.[0]?.code;
+                          const interpDisplay =
+                            obs.interpretation?.[0]?.coding?.[0]?.display ||
+                            interp;
+                          const interpCls =
+                            interp === 'H' || interp === 'HH'
+                              ? 'bg-red-100 text-red-700'
+                              : interp === 'L' || interp === 'LL'
+                                ? 'bg-blue-100 text-blue-700'
+                                : interp === 'N'
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-gray-100 text-gray-600';
+                          return (
+                            <tr
+                              key={obs.id}
+                              className={`hover:bg-gray-50 ${interp === 'HH' || interp === 'LL' ? 'bg-red-50/30' : ''}`}
+                            >
+                              <td className="py-2.5 pr-4 font-medium text-gray-800">
+                                {name}
+                              </td>
+                              <td className="py-2.5 pr-4 font-mono font-semibold text-gray-700 tabular-nums">
+                                {val}
+                              </td>
+                              <td className="py-2.5 pr-4">
+                                {interpDisplay && (
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${interpCls}`}
+                                  >
+                                    {interpDisplay}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                {formatDT(obs.effectiveDateTime)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
+
+          {/* ── 4. Assessment / Diagnosis ── */}
+          <Section
+            sectionKey="assessment"
+            icon="Dx"
+            title="Assessment / Diagnosis"
+            count={conditions.length}
+            isEditable={isEditable}
+            addLabel="Add Diagnosis"
+            addForm={<AddDiagnosisForm {...formProps} />}
+          >
+            {conditions.length === 0 ? (
+              <EmptyNote label="No diagnoses recorded for this encounter." />
+            ) : (
+              <div className="space-y-2">
+                {conditions.map((cond, i) => {
+                  const diagText =
+                    cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                  const sevText = cond.severity?.coding?.[0]?.display;
+                  const verifCode =
+                    cond.verificationStatus?.coding?.[0]?.code || '';
+                  const clinCode = cond.clinicalStatus?.coding?.[0]?.code || '';
+                  const accCls =
+                    sevText === 'Severe'
+                      ? 'border-l-4 border-red-500'
+                      : sevText === 'Moderate'
+                        ? 'border-l-4 border-amber-400'
+                        : 'border-l-4 border-gray-200';
+                  return (
+                    <div
+                      key={cond.id}
+                      className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-400 mr-2">
+                            {i + 1}.
+                          </span>
+                          <span className="font-semibold text-gray-900 text-sm">
+                            {diagText}
+                          </span>
+                          {cond.code?.coding?.[0]?.code && (
+                            <span className="ml-2 text-xs font-mono text-gray-400">
+                              [{cond.code.coding[0].code}]
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                          {sevText && (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}
+                            >
+                              {sevText}
+                            </span>
+                          )}
+                          {verifCode && <StatusPill status={verifCode} />}
+                          {clinCode && <StatusPill status={clinCode} />}
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1 ml-4">
+                        Onset: {formatDate(cond.onsetDateTime)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+
+          {/* ── 5. Management ── */}
+          <Section
+            sectionKey="management"
+            icon="Rx"
+            title="Management Plan"
+            count={medications.length + carePlans.length}
+            isEditable={isEditable}
+            addLabel="Add Medication / Plan"
+            addForm={
+              <div className="space-y-5">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                    Medication
+                  </p>
+                  <AddMedicationForm {...formProps} />
+                </div>
+                <div className="border-t border-blue-100 pt-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                    Care Plan
+                  </p>
+                  <AddCarePlanForm {...formProps} />
+                </div>
+              </div>
+            }
+          >
+            {medications.length === 0 && carePlans.length === 0 ? (
+              <EmptyNote label="No medications or care plan recorded." />
+            ) : (
+              <div className="space-y-5">
+                {medications.length > 0 && (
+                  <div>
+                    <SectionDivider label="Medications" />
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Drug
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Dosage
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                            Ordered
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {medications.map((med) => (
+                          <tr key={med.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                              {(med.medication as any)?.concept?.text ||
+                                (med.medication as any)?.concept?.coding?.[0]
+                                  ?.display ||
+                                '—'}
+                            </td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-600">
+                              {med.dosageInstruction?.[0]?.text || '—'}
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              <StatusPill status={med.status} />
+                            </td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                              {formatDT(med.authoredOn)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {carePlans.length > 0 && (
+                  <div>
+                    <SectionDivider label="Care Plan" />
+                    <div className="space-y-3">
+                      {carePlans.map((cp) => (
+                        <div
+                          key={cp.id}
+                          className="bg-emerald-50 border border-emerald-200 rounded-lg p-4"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-gray-900 text-sm">
+                              {cp.title || 'Care Plan'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <StatusPill status={cp.status} />
+                              <span className="text-xs text-gray-400">
+                                {formatDate(cp.created)}
+                              </span>
+                            </div>
+                          </div>
+                          {cp.description && (
+                            <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                              {cp.description}
+                            </p>
+                          )}
+                          {cp.note?.[0]?.text && (
+                            <div className="mt-2 border-t border-emerald-100 pt-2">
+                              <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+                                {cp.note[0].text}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
+
+          {/* ── 6. Inpatient Admission ── */}
+          <Section
+            sectionKey="admission"
+            icon="Adm"
+            title="Inpatient Admission"
+            count={inpatientAdmission ? 1 : 0}
+            isEditable={isEditable && !inpatientAdmission}
+            addLabel="Admit Patient"
+            addForm={
+              <AddAdmissionForm
+                {...formProps}
+                diagnosisItems={diagnosisItemsForAdmission}
+              />
+            }
+          >
+            {!inpatientAdmission ? (
+              <EmptyNote label="No inpatient admission linked to this encounter." />
+            ) : (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-200 text-orange-800 uppercase tracking-wide">
+                    Inpatient
+                  </span>
+                  <StatusPill status={inpatientAdmission.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
+                      Admission
+                    </div>
+                    <div className="font-medium text-gray-800">
+                      {formatDT(inpatientAdmission.actualPeriod?.start)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
+                      Planned Discharge
+                    </div>
+                    <div className="font-medium text-gray-800">
+                      {formatDT(inpatientAdmission.actualPeriod?.end)}
+                    </div>
+                  </div>
+                  {(inpatientAdmission as any).reason?.[0]?.value?.[0]?.concept
+                    ?.text && (
+                    <div className="col-span-2">
+                      <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
+                        Reason for Admission
+                      </div>
+                      <div className="text-gray-800">
+                        {
+                          (inpatientAdmission as any).reason[0].value[0].concept
+                            .text
+                        }
+                      </div>
+                    </div>
+                  )}
+                  {inpatientAdmission.diagnosis?.[0]?.condition?.[0]?.reference
+                    ?.display && (
+                    <div className="col-span-2">
+                      <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
+                        Admission Diagnosis
+                      </div>
+                      <div className="text-gray-800">
+                        {
+                          inpatientAdmission.diagnosis[0].condition[0].reference
+                            .display
+                        }
+                      </div>
+                    </div>
+                  )}
+                  <div className="col-span-2 text-xs font-mono text-gray-400">
+                    Encounter ID: {inpatientAdmission.id}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Section>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="mt-6 flex items-center justify-between">
+        <div className="flex gap-2">
+          <Link
+            to="/patients"
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm"
+          >
+            ← Search Patients
+          </Link>
+          <Link
+            to={`/patient/${patientId}/encounter`}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm"
+          >
+            Visit History
+          </Link>
+        </div>
+        {isEditable && (
+          <Link
+            to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+            className="bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 px-5 rounded-md transition-colors text-sm"
+          >
+            Open Full Consult Wizard →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ConsultNoteDetailPage;

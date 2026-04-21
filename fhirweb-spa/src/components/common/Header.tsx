@@ -39,6 +39,22 @@ const Header: React.FC = () => {
                   Patients
                 </Link>
               </li>
+              <li>
+                <Link
+                  to="/events"
+                  className="hover:text-blue-200 transition-colors"
+                >
+                  Events
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/webhooks"
+                  className="hover:text-blue-200 transition-colors"
+                >
+                  Webhooks
+                </Link>
+              </li>
               {isAuthenticated ? (
                 <>
                   <li>

@@ -120,16 +120,6 @@ const PatientPage: React.FC = () => {
           <nav>
             <div className="flex space-x-8">
               <Link
-                to={`/patient/${patientId}`}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  location.pathname === `/patient/${patientId}`
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Summary
-              </Link>
-              <Link
                 to={`/patient/${patientId}/encounter`}
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   isActive('/encounter')
@@ -178,8 +168,7 @@ const PatientPage: React.FC = () => {
           {/* Render the "New" button when appropriate tabs are active but not when on CRUD pages */}
           {(isActive('/careplan') ||
             isActive('/observation') ||
-            isActive('/medication') ||
-            isActive('/encounter')) &&
+            isActive('/medication')) &&
             !isOnCrudPage() && (
               <div className="absolute right-0 top-0">
                 <Link
@@ -187,10 +176,8 @@ const PatientPage: React.FC = () => {
                     isActive('/careplan')
                       ? 'careplan/new'
                       : isActive('/observation')
-                      ? 'observation/new'
-                      : isActive('/medication')
-                      ? 'medication/new'
-                      : 'encounter/new'
+                        ? 'observation/new'
+                        : 'medication/new'
                   }`}
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
@@ -198,10 +185,8 @@ const PatientPage: React.FC = () => {
                   {isActive('/careplan')
                     ? 'Care Plan'
                     : isActive('/observation')
-                    ? 'Observation'
-                    : isActive('/medication')
-                    ? 'Medication'
-                    : 'Encounter'}
+                      ? 'Observation'
+                      : 'Medication'}
                 </Link>
               </div>
             )}

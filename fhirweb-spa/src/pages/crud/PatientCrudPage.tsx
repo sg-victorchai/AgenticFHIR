@@ -526,9 +526,10 @@ const PatientCrudPage: React.FC = () => {
     }
   };
 
-  // Handle navigation back to patients list
+  // Handle navigation back — respects the backTo state passed by the caller
   const handleBackToSearch = () => {
-    navigate('/patients');
+    const backTo = (location.state as any)?.backTo;
+    navigate(backTo ?? '/patients');
   };
 
   // Add new telecom
@@ -722,10 +723,10 @@ const PatientCrudPage: React.FC = () => {
                   {formData.gender === 'male'
                     ? 'Male'
                     : formData.gender === 'female'
-                    ? 'Female'
-                    : formData.gender === 'other'
-                    ? 'Other'
-                    : 'Unknown'}
+                      ? 'Female'
+                      : formData.gender === 'other'
+                        ? 'Other'
+                        : 'Unknown'}
                 </div>
               )}
             </div>
