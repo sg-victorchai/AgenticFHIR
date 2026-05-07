@@ -990,8 +990,37 @@ export const fhirApi = createApi({
       ],
     }),
 
-    searchChildEncounters: builder.query<Bundle<Resource>, string>({
-      queryFn: async (encounterId) => {
+    getTodayEncounters: builder.query<Bundle<Resource>, void>({
+      queryFn: async () => {
+        try {
+          const client = await createFHIRClient();
+          const today = new Date().toISOString().split('T')[0];
+          const results = await client.search({
+            resourceType: 'Encounter',
+            searchParams: {
+              date: today,
+              _count: '200',
+              _sort: '-date',
+            },
+          });
+          return { data: results as Bundle<Resource> };
+        } catch (error: any) {
+          console.error('Error fetching today encounters:', error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+      providesTags: ['Encounter'],
+    }),
+
+    searchChildEncounters: builder.query<Bundle<Resource>, string>({      queryFn: async (encounterId) => {
         try {
           const client = await createFHIRClient();
           const results = await client.search({
@@ -1076,4 +1105,5 @@ export const {
   useGetLocationsQuery,
   useSearchByEncounterQuery,
   useSearchChildEncountersQuery,
+  useGetTodayEncountersQuery,
 } = fhirApi;

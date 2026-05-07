@@ -117,7 +117,7 @@ const VisitRegistrationPage: React.FC = () => {
       resource: encounter as any,
     });
     if ('data' in result && result.data?.id) {
-      navigate(`/patient/${id}/encounter/${result.data.id}/consult`);
+      navigate('/queue');
     } else {
       setError('Failed to register visit. Please try again.');
     }

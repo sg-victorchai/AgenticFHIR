@@ -21,6 +21,7 @@ interface PatientResult {
 
 const PatientSearchPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchType, setSearchType] = useState<'name' | 'identifier'>('name');
   const [shouldSearch, setShouldSearch] = useState(false);
   const [searchParams, setSearchParams] = useState<Record<string, string>>({});
   const [currentBundle, setCurrentBundle] = useState<
@@ -163,8 +164,11 @@ const PatientSearchPage: React.FC = () => {
     }
 
     // Set up the search parameters for the FHIR query
-    // The 'name:contains' search parameter allows for partial name matching
-    setSearchParams({ 'name:contains': searchTerm });
+    if (searchType === 'identifier') {
+      setSearchParams({ identifier: searchTerm });
+    } else {
+      setSearchParams({ 'name:contains': searchTerm });
+    }
     setShouldSearch(true);
   };
 
@@ -179,11 +183,36 @@ const PatientSearchPage: React.FC = () => {
 
       <div className="bg-white shadow-md rounded-lg p-6 mb-6">
         <form onSubmit={handleSearch} className="mb-4">
+          {/* Search type toggle */}
+          <div className="flex gap-4 mb-3">
+            <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="radio"
+                name="searchType"
+                value="name"
+                checked={searchType === 'name'}
+                onChange={() => setSearchType('name')}
+                className="accent-blue-600"
+              />
+              Search by Name
+            </label>
+            <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="radio"
+                name="searchType"
+                value="identifier"
+                checked={searchType === 'identifier'}
+                onChange={() => setSearchType('identifier')}
+                className="accent-blue-600"
+              />
+              Search by Identifier / MRN
+            </label>
+          </div>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-grow">
               <input
                 type="text"
-                placeholder="Search by patient name..."
+                placeholder={searchType === 'name' ? 'Search by patient name…' : 'Enter identifier or MRN…'}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}

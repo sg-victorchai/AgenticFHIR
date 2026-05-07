@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   useGetPatientQuery,
@@ -1427,10 +1427,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     (encounter as any)?.reason?.[0]?.value?.[0]?.concept?.text ||
     encounter?.type?.[0]?.text ||
     'Encounter';
-  const encounterClass =
-    encounter?.class?.[0]?.coding?.[0]?.display ||
-    encounter?.class?.[0]?.coding?.[0]?.code ||
-    '—';
   const isEditable = encounter?.status === 'in-progress';
   const inpatientAdmission = childEncounters.find((e) =>
     e.class?.some((c) => c.coding?.some((cd) => cd.code === 'IMP')),
@@ -1449,23 +1445,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     cpLoading ||
     childEncLoading;
 
-  // Latest vital per LOINC code for the summary strip
-  const latestVitals = vitals.reduce<Record<string, Observation>>(
-    (acc, obs) => {
-      const code = obs.code?.coding?.[0]?.code || '';
-      const existing = acc[code];
-      if (
-        !existing ||
-        (obs.effectiveDateTime &&
-          (!existing.effectiveDateTime ||
-            obs.effectiveDateTime > existing.effectiveDateTime))
-      )
-        acc[code] = obs;
-      return acc;
-    },
-    {},
-  );
-
   const formProps: Omit<AddFormProps, 'onDone'> = {
     patientId: patientId!,
     patientName,
@@ -1474,694 +1453,517 @@ const ConsultNoteDetailPage: React.FC = () => {
     isSaving,
   };
 
-  return (
-    <div className="container mx-auto px-4 py-6 max-w-4xl">
-      {/* Breadcrumb */}
-      <nav className="text-sm text-gray-500 mb-4 flex items-center gap-1 flex-wrap">
-        <Link to="/patients" className="hover:text-blue-600 transition-colors">
-          Patients
-        </Link>
-        <span>/</span>
-        <Link
-          to={`/patient/${patientId}/encounter`}
-          className="hover:text-blue-600 transition-colors"
-        >
-          {patientName || patientId}
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 font-medium">Consult Note</span>
-      </nav>
+  // ── Sidebar sections ──────────────────────────────────────────────────────
+  const SIDEBAR_SECTIONS = [
+    { id: 'section-top', label: 'Patient Notes', icon: '📋' },
+    { id: 'section-vitals', label: 'Vitals', icon: '♥' },
+    { id: 'section-exam', label: 'Physical Exam', icon: 'E' },
+    { id: 'section-investigations', label: 'Investigations', icon: 'Ix' },
+    { id: 'section-assessment', label: 'Assessment', icon: 'Dx' },
+    { id: 'section-management', label: 'Management', icon: 'Rx' },
+    { id: 'section-admission', label: 'Admission', icon: '🏥' },
+  ];
 
-      {/* ── Clinical Header ── */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
-        {isEditable && (
-          <div className="bg-amber-500 px-5 py-2 flex items-center justify-between">
-            <span className="text-white text-xs font-bold uppercase tracking-widest">
-              Active Consult — In Progress
+  const [activeSection, setActiveSection] = useState('section-top');
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  useEffect(() => {
+    const observers: IntersectionObserver[] = [];
+    SIDEBAR_SECTIONS.forEach(({ id }) => {
+      const el = sectionRefs.current[id];
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) setActiveSection(id);
+        },
+        { rootMargin: '-30% 0px -60% 0px', threshold: 0 },
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+    return () => observers.forEach((o) => o.disconnect());
+  }, [isLoading]);
+
+  const scrollToSection = (id: string) => {
+    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  return (
+    // Escape the container's px-4 py-8 padding to go full-width
+    <div className="-mx-4 -mt-8 flex flex-col min-h-screen">
+
+      {/* ── Sticky demographic bar ─────────────────────────────────────────── */}
+      <div
+        className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1"
+        ref={(el) => { sectionRefs.current['section-top'] = el; }}
+        id="section-top"
+      >
+        {/* Avatar + name */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="bg-slate-700 rounded-full h-9 w-9 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
+            {patientName.charAt(0).toUpperCase() || '?'}
+          </div>
+          <div className="min-w-0">
+            <span className="font-bold text-gray-900 text-base leading-tight block truncate">
+              {patientName || '—'}
             </span>
+            <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-gray-500">
+              {patient?.birthDate && <span>DOB: <strong className="text-gray-700">{patient.birthDate}</strong></span>}
+              {patient?.gender && (
+                <span>Sex: <strong className="text-gray-700 capitalize">{patient.gender}</strong></span>
+              )}
+              {patient?.identifier?.[0]?.value && (
+                <span>ID: <strong className="text-gray-700 font-mono">{patient.identifier[0].value}</strong></span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="hidden sm:block h-8 border-l border-gray-200 mx-1" />
+
+        {/* Encounter info */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-600">
+          <span className="font-medium text-gray-800">{encounterReason}</span>
+          {encounter && (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                encounter.status === 'in-progress'
+                  ? 'bg-blue-100 text-blue-800'
+                  : (encounter.status as string) === 'finished' || encounter.status === 'completed'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {encounter.status}
+            </span>
+          )}
+          {encounter?.actualPeriod?.start && (
+            <span className="text-xs text-gray-400">{formatDT(encounter.actualPeriod.start)}</span>
+          )}
+        </div>
+
+        {/* Actions on the right */}
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {isEditable && (
             <Link
               to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-              className="text-xs bg-white text-amber-700 font-semibold px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
+              className="text-xs bg-amber-500 text-white font-semibold px-3 py-1.5 rounded-md hover:bg-amber-600 transition-colors"
             >
-              Open Full Consult Wizard →
+              Open Consult Wizard →
             </Link>
-          </div>
-        )}
-        <div className="p-5">
-          <div className="flex flex-col sm:flex-row gap-5">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="bg-slate-700 rounded-full h-14 w-14 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
-                {patientName.charAt(0).toUpperCase() || '?'}
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold text-gray-900 text-xl leading-tight">
-                  {patientName}
-                </div>
-                <div className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                  <span>
-                    DOB:{' '}
-                    <strong className="text-gray-700">
-                      {patient?.birthDate || '—'}
-                    </strong>
-                  </span>
-                  <span>
-                    Sex:{' '}
-                    <strong className="text-gray-700">
-                      {patient?.gender
-                        ? patient.gender.charAt(0).toUpperCase() +
-                          patient.gender.slice(1)
-                        : '—'}
-                    </strong>
-                  </span>
-                  {patient?.identifier?.[0]?.value && (
-                    <span>
-                      ID:{' '}
-                      <strong className="text-gray-700 font-mono">
-                        {patient.identifier[0].value}
-                      </strong>
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="border-t sm:border-t-0 sm:border-l border-gray-200 sm:pl-5 pt-4 sm:pt-0 flex-shrink-0 min-w-48">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Visit Details
-              </div>
-              <div className="font-semibold text-gray-800 text-base">
-                {encounterReason}
-              </div>
-              <div className="text-sm text-gray-500 mt-1">
-                {formatDT(encounter?.actualPeriod?.start)}
-              </div>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {encounter && <StatusPill status={encounter.status} />}
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  {encounterClass}
-                </span>
-              </div>
-            </div>
-          </div>
+          )}
+          <Link
+            to="/queue"
+            className="text-xs bg-gray-100 text-gray-700 font-medium px-3 py-1.5 rounded-md hover:bg-gray-200 transition-colors"
+          >
+            ← Queue
+          </Link>
         </div>
-
-        {/* Latest vitals strip */}
-        {Object.keys(latestVitals).length > 0 && (
-          <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-              Latest Vitals
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {Object.entries(latestVitals).map(([code, obs]) => {
-                const val = obs.valueQuantity?.value ?? null;
-                const unit = obs.valueQuantity?.unit || '';
-                const trend =
-                  val !== null ? interpretVital(code, val) : 'normal';
-                const name =
-                  VITAL_LOINC_NAMES[code] ||
-                  obs.code?.coding?.[0]?.display ||
-                  code;
-                return (
-                  <div
-                    key={code}
-                    className={`border rounded-lg px-3 py-2 ${vitalCardCls(trend)}`}
-                  >
-                    <div className="text-xs text-gray-500 font-medium">
-                      {name}
-                    </div>
-                    <div
-                      className={`text-lg font-bold tabular-nums ${vitalValCls(trend)}`}
-                    >
-                      {val !== null ? val : '—'}{' '}
-                      <span className="text-xs font-normal">{unit}</span>
-                      {trend === 'critical' && (
-                        <span className="ml-1 text-red-600 text-sm font-bold">
-                          !
-                        </span>
-                      )}
-                      {trend === 'abnormal' && (
-                        <span className="ml-1 text-amber-600 text-xs">▲</span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {formatDT(obs.effectiveDateTime)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center items-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-        </div>
-      ) : (
-        <div>
-          {/* ── 1. Vital Signs ── */}
-          <Section
-            sectionKey="vitals"
-            icon="V"
-            title="Vital Signs"
-            count={vitals.length}
-            isEditable={isEditable}
-            addLabel="Record Vitals"
-            addForm={<AddVitalsForm {...formProps} />}
-          >
-            {vitals.length === 0 ? (
-              <EmptyNote label="No vital signs recorded for this encounter." />
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {vitals.map((obs) => {
-                  const code = obs.code?.coding?.[0]?.code || '';
-                  const name =
-                    VITAL_LOINC_NAMES[code] ||
-                    obs.code?.text ||
-                    obs.code?.coding?.[0]?.display ||
-                    'Observation';
-                  const val = obs.valueQuantity?.value ?? null;
-                  const unit = obs.valueQuantity?.unit || obs.valueString || '';
-                  const trend =
-                    val !== null ? interpretVital(code, val) : 'normal';
-                  return (
-                    <div
-                      key={obs.id}
-                      className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}
-                    >
-                      <div className="text-xs text-gray-500 font-medium mb-1">
-                        {name}
-                      </div>
-                      <div
-                        className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}
-                      >
-                        {val !== null ? val : obs.valueString || '—'}
-                        <span className="text-sm font-normal ml-1">
-                          {obs.valueQuantity ? unit : ''}
-                        </span>
-                        {trend === 'critical' && (
-                          <span className="ml-1 text-red-600 text-sm">!</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {formatDT(obs.effectiveDateTime)}
-                      </div>
+      {/* ── Body: sidebar + content ────────────────────────────────────────── */}
+      <div className="flex flex-1">
+
+        {/* Left sidebar */}
+        <aside className="w-48 flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:block">
+          <nav className="py-3">
+            {SIDEBAR_SECTIONS.map(({ id, label, icon }) => (
+              <button
+                key={id}
+                onClick={() => scrollToSection(id)}
+                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
+                  activeSection === id
+                    ? 'bg-blue-50 text-blue-700 font-semibold border-r-2 border-blue-600'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                }`}
+              >
+                <span className="text-xs w-5 text-center flex-shrink-0 opacity-70">{icon}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Main scrollable content */}
+        <main className="flex-1 min-w-0 px-5 py-5">
+
+          {/* Active consult banner */}
+          {isEditable && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-2.5 mb-4 flex items-center justify-between">
+              <span className="text-amber-800 text-sm font-semibold">⚡ Active Consult — In Progress</span>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <>
+              {/* ── 1. Vital Signs ── */}
+              <section
+                id="section-vitals"
+                ref={(el) => { sectionRefs.current['section-vitals'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="vitals"
+                  icon="V"
+                  title="Vital Signs"
+                  count={vitals.length}
+                  isEditable={isEditable}
+                  addLabel="Record Vitals"
+                  addForm={<AddVitalsForm {...formProps} />}
+                >
+                  {vitals.length === 0 ? (
+                    <EmptyNote label="No vital signs recorded for this encounter." />
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {vitals.map((obs) => {
+                        const code = obs.code?.coding?.[0]?.code || '';
+                        const name =
+                          VITAL_LOINC_NAMES[code] ||
+                          obs.code?.text ||
+                          obs.code?.coding?.[0]?.display ||
+                          'Observation';
+                        const val = obs.valueQuantity?.value ?? null;
+                        const unit = obs.valueQuantity?.unit || obs.valueString || '';
+                        const trend = val !== null ? interpretVital(code, val) : 'normal';
+                        return (
+                          <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                            <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
+                            <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
+                              {val !== null ? val : obs.valueString || '—'}
+                              <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
+                              {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </Section>
+                  )}
+                </Section>
+              </section>
 
-          {/* ── 2. Physical Examination ── */}
-          <Section
-            sectionKey="exam"
-            icon="E"
-            title="Physical Examination"
-            count={examFindings.length}
-            isEditable={isEditable}
-            addLabel="Add Finding"
-            addForm={<AddExamForm {...formProps} />}
-          >
-            {examFindings.length === 0 ? (
-              <EmptyNote label="No examination findings recorded." />
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-400 border-b border-gray-100">
-                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                      System
-                    </th>
-                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                      Finding
-                    </th>
-                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                      Result
-                    </th>
-                    <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                      Time
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {examFindings.map((obs) => {
-                    const system =
-                      obs.code?.text || obs.code?.coding?.[0]?.display || '—';
-                    const finding = obs.valueString || '—';
-                    const isNormal =
-                      obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
-                    return (
-                      <tr key={obs.id} className="hover:bg-gray-50">
-                        <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">
-                          {system}
-                        </td>
-                        <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
-                        <td className="py-2.5 pr-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
-                          >
-                            {isNormal ? '✓ Normal' : '! Abnormal'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
-                          {formatDT(obs.effectiveDateTime)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </Section>
-
-          {/* ── 3. Investigations ── */}
-          <Section
-            sectionKey="investigations"
-            icon="Ix"
-            title="Investigations"
-            count={serviceRequests.length + otherObs.length}
-            isEditable={isEditable}
-            addLabel="Place Order"
-            addForm={<AddOrderForm {...formProps} />}
-          >
-            {serviceRequests.length === 0 && otherObs.length === 0 ? (
-              <EmptyNote label="No investigation orders or results recorded." />
-            ) : (
-              <div className="space-y-5">
-                {serviceRequests.length > 0 && (
-                  <div>
-                    <SectionDivider label="Orders" />
+              {/* ── 2. Physical Examination ── */}
+              <section
+                id="section-exam"
+                ref={(el) => { sectionRefs.current['section-exam'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="exam"
+                  icon="E"
+                  title="Physical Examination"
+                  count={examFindings.length}
+                  isEditable={isEditable}
+                  addLabel="Add Finding"
+                  addForm={<AddExamForm {...formProps} />}
+                >
+                  {examFindings.length === 0 ? (
+                    <EmptyNote label="No examination findings recorded." />
+                  ) : (
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Test
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Category
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Priority
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Ordered
-                          </th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {serviceRequests.map((sr) => (
-                          <tr key={sr.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                              {(sr as any).code?.concept?.text ||
-                                sr.code?.text ||
-                                '—'}
-                            </td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-500">
-                              {(sr as any).code?.concept?.coding?.[0]
-                                ?.display || '—'}
-                            </td>
-                            <td className="py-2.5 pr-4">
-                              {sr.priority && (
-                                <StatusPill status={sr.priority} />
-                              )}
-                            </td>
-                            <td className="py-2.5 pr-4">
-                              <StatusPill status={sr.status} />
-                            </td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
-                              {formatDT(sr.authoredOn)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {otherObs.length > 0 && (
-                  <div>
-                    <SectionDivider label="Results" />
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Test
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Result
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Interpretation
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Time
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {otherObs.map((obs) => {
-                          const name =
-                            obs.code?.text ||
-                            obs.code?.coding?.[0]?.display ||
-                            '—';
-                          const val = obs.valueQuantity
-                            ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`
-                            : obs.valueString || '—';
-                          const interp =
-                            obs.interpretation?.[0]?.coding?.[0]?.code;
-                          const interpDisplay =
-                            obs.interpretation?.[0]?.coding?.[0]?.display ||
-                            interp;
-                          const interpCls =
-                            interp === 'H' || interp === 'HH'
-                              ? 'bg-red-100 text-red-700'
-                              : interp === 'L' || interp === 'LL'
-                                ? 'bg-blue-100 text-blue-700'
-                                : interp === 'N'
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-gray-100 text-gray-600';
+                        {examFindings.map((obs) => {
+                          const system = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                          const finding = obs.valueString || '—';
+                          const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
                           return (
-                            <tr
-                              key={obs.id}
-                              className={`hover:bg-gray-50 ${interp === 'HH' || interp === 'LL' ? 'bg-red-50/30' : ''}`}
-                            >
-                              <td className="py-2.5 pr-4 font-medium text-gray-800">
-                                {name}
+                            <tr key={obs.id} className="hover:bg-gray-50">
+                              <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{system}</td>
+                              <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
+                              <td className="py-2.5 pr-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {isNormal ? '✓ Normal' : '! Abnormal'}
+                                </span>
                               </td>
-                              <td className="py-2.5 pr-4 font-mono font-semibold text-gray-700 tabular-nums">
-                                {val}
-                              </td>
-                              <td className="py-2.5 pr-4">
-                                {interpDisplay && (
-                                  <span
-                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${interpCls}`}
-                                  >
-                                    {interpDisplay}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
-                                {formatDT(obs.effectiveDateTime)}
-                              </td>
+                              <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </Section>
+                  )}
+                </Section>
+              </section>
 
-          {/* ── 4. Assessment / Diagnosis ── */}
-          <Section
-            sectionKey="assessment"
-            icon="Dx"
-            title="Assessment / Diagnosis"
-            count={conditions.length}
-            isEditable={isEditable}
-            addLabel="Add Diagnosis"
-            addForm={<AddDiagnosisForm {...formProps} />}
-          >
-            {conditions.length === 0 ? (
-              <EmptyNote label="No diagnoses recorded for this encounter." />
-            ) : (
-              <div className="space-y-2">
-                {conditions.map((cond, i) => {
-                  const diagText =
-                    cond.code?.text || cond.code?.coding?.[0]?.display || '—';
-                  const sevText = cond.severity?.coding?.[0]?.display;
-                  const verifCode =
-                    cond.verificationStatus?.coding?.[0]?.code || '';
-                  const clinCode = cond.clinicalStatus?.coding?.[0]?.code || '';
-                  const accCls =
-                    sevText === 'Severe'
-                      ? 'border-l-4 border-red-500'
-                      : sevText === 'Moderate'
-                        ? 'border-l-4 border-amber-400'
-                        : 'border-l-4 border-gray-200';
-                  return (
-                    <div
-                      key={cond.id}
-                      className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
+              {/* ── 3. Investigations ── */}
+              <section
+                id="section-investigations"
+                ref={(el) => { sectionRefs.current['section-investigations'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="investigations"
+                  icon="Ix"
+                  title="Investigations"
+                  count={serviceRequests.length + otherObs.length}
+                  isEditable={isEditable}
+                  addLabel="Place Order"
+                  addForm={<AddOrderForm {...formProps} />}
+                >
+                  {serviceRequests.length === 0 && otherObs.length === 0 ? (
+                    <EmptyNote label="No investigation orders or results recorded." />
+                  ) : (
+                    <div className="space-y-5">
+                      {serviceRequests.length > 0 && (
                         <div>
-                          <span className="text-xs font-semibold text-gray-400 mr-2">
-                            {i + 1}.
-                          </span>
-                          <span className="font-semibold text-gray-900 text-sm">
-                            {diagText}
-                          </span>
-                          {cond.code?.coding?.[0]?.code && (
-                            <span className="ml-2 text-xs font-mono text-gray-400">
-                              [{cond.code.coding[0].code}]
-                            </span>
-                          )}
+                          <SectionDivider label="Orders" />
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {serviceRequests.map((sr) => (
+                                <tr key={sr.id} className="hover:bg-gray-50">
+                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                    {(sr.code as any)?.concept?.text || (sr.code as any)?.concept?.coding?.[0]?.display || '—'}
+                                  </td>
+                                  <td className="py-2.5 pr-4 text-xs text-gray-500">
+                                    {(sr.code as any)?.concept?.coding?.[0]?.display || '—'}
+                                  </td>
+                                  <td className="py-2.5 pr-4">
+                                    <StatusPill status={sr.priority || 'routine'} />
+                                  </td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                        <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                          {sevText && (
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}
-                            >
-                              {sevText}
-                            </span>
-                          )}
-                          {verifCode && <StatusPill status={verifCode} />}
-                          {clinCode && <StatusPill status={clinCode} />}
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-400 mt-1 ml-4">
-                        Onset: {formatDate(cond.onsetDateTime)}
-                      </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </Section>
+                  )}
+                </Section>
+              </section>
 
-          {/* ── 5. Management ── */}
-          <Section
-            sectionKey="management"
-            icon="Rx"
-            title="Management Plan"
-            count={medications.length + carePlans.length}
-            isEditable={isEditable}
-            addLabel="Add Medication / Plan"
-            addForm={
-              <div className="space-y-5">
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    Medication
-                  </p>
-                  <AddMedicationForm {...formProps} />
-                </div>
-                <div className="border-t border-blue-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    Care Plan
-                  </p>
-                  <AddCarePlanForm {...formProps} />
-                </div>
-              </div>
-            }
-          >
-            {medications.length === 0 && carePlans.length === 0 ? (
-              <EmptyNote label="No medications or care plan recorded." />
-            ) : (
-              <div className="space-y-5">
-                {medications.length > 0 && (
-                  <div>
-                    <SectionDivider label="Medications" />
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Drug
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Dosage
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">
-                            Ordered
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {medications.map((med) => (
-                          <tr key={med.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                              {(med.medication as any)?.concept?.text ||
-                                (med.medication as any)?.concept?.coding?.[0]
-                                  ?.display ||
-                                '—'}
-                            </td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-600">
-                              {med.dosageInstruction?.[0]?.text || '—'}
-                            </td>
-                            <td className="py-2.5 pr-4">
-                              <StatusPill status={med.status} />
-                            </td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
-                              {formatDT(med.authoredOn)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {carePlans.length > 0 && (
-                  <div>
-                    <SectionDivider label="Care Plan" />
-                    <div className="space-y-3">
-                      {carePlans.map((cp) => (
-                        <div
-                          key={cp.id}
-                          className="bg-emerald-50 border border-emerald-200 rounded-lg p-4"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-gray-900 text-sm">
-                              {cp.title || 'Care Plan'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <StatusPill status={cp.status} />
-                              <span className="text-xs text-gray-400">
-                                {formatDate(cp.created)}
-                              </span>
+              {/* ── 4. Assessment ── */}
+              <section
+                id="section-assessment"
+                ref={(el) => { sectionRefs.current['section-assessment'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="assessment"
+                  icon="Dx"
+                  title="Assessment / Diagnosis"
+                  count={conditions.length}
+                  isEditable={isEditable}
+                  addLabel="Add Diagnosis"
+                  addForm={<AddDiagnosisForm {...formProps} />}
+                >
+                  {conditions.length === 0 ? (
+                    <EmptyNote label="No diagnoses recorded." />
+                  ) : (
+                    <div className="space-y-2">
+                      {conditions.map((cond, i) => {
+                        const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                        const sevCode = cond.severity?.coding?.[0]?.code;
+                        const sevText = sevCode === '24484000' ? 'Severe' : sevCode === '6736007' ? 'Moderate' : sevCode === '255604002' ? 'Mild' : undefined;
+                        const verifCode = cond.verificationStatus?.coding?.[0]?.code;
+                        const clinCode = cond.clinicalStatus?.coding?.[0]?.code;
+                        const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500' : sevText === 'Moderate' ? 'border-l-4 border-amber-400' : 'border-l-4 border-gray-200';
+                        return (
+                          <div key={cond.id} className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
+                                <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
+                                {cond.code?.coding?.[0]?.code && (
+                                  <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
+                                )}
+                              </div>
+                              <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                                {sevText && (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    {sevText}
+                                  </span>
+                                )}
+                                {verifCode && <StatusPill status={verifCode} />}
+                                {clinCode && <StatusPill status={clinCode} />}
+                              </div>
                             </div>
+                            <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
                           </div>
-                          {cp.description && (
-                            <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
-                              {cp.description}
-                            </p>
-                          )}
-                          {cp.note?.[0]?.text && (
-                            <div className="mt-2 border-t border-emerald-100 pt-2">
-                              <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
-                                {cp.note[0].text}
-                              </p>
-                            </div>
-                          )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </Section>
+              </section>
+
+              {/* ── 5. Management ── */}
+              <section
+                id="section-management"
+                ref={(el) => { sectionRefs.current['section-management'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="management"
+                  icon="Rx"
+                  title="Management Plan"
+                  count={medications.length + carePlans.length}
+                  isEditable={isEditable}
+                  addLabel="Add Medication / Plan"
+                  addForm={
+                    <div className="space-y-5">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Medication</p>
+                        <AddMedicationForm {...formProps} />
+                      </div>
+                      <div className="border-t border-blue-100 pt-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Care Plan</p>
+                        <AddCarePlanForm {...formProps} />
+                      </div>
+                    </div>
+                  }
+                >
+                  {medications.length === 0 && carePlans.length === 0 ? (
+                    <EmptyNote label="No medications or care plan recorded." />
+                  ) : (
+                    <div className="space-y-5">
+                      {medications.length > 0 && (
+                        <div>
+                          <SectionDivider label="Medications" />
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {medications.map((med) => (
+                                <tr key={med.id} className="hover:bg-gray-50">
+                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                    {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                  </td>
+                                  <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
+                                  <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      ))}
+                      )}
+                      {carePlans.length > 0 && (
+                        <div>
+                          <SectionDivider label="Care Plan" />
+                          <div className="space-y-3">
+                            {carePlans.map((cp) => (
+                              <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
+                                  <div className="flex items-center gap-2">
+                                    <StatusPill status={cp.status} />
+                                    <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
+                                  </div>
+                                </div>
+                                {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
+                                {cp.note?.[0]?.text && (
+                                  <div className="mt-2 border-t border-emerald-100 pt-2">
+                                    <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </Section>
+                  )}
+                </Section>
+              </section>
 
-          {/* ── 6. Inpatient Admission ── */}
-          <Section
-            sectionKey="admission"
-            icon="Adm"
-            title="Inpatient Admission"
-            count={inpatientAdmission ? 1 : 0}
-            isEditable={isEditable && !inpatientAdmission}
-            addLabel="Admit Patient"
-            addForm={
-              <AddAdmissionForm
-                {...formProps}
-                diagnosisItems={diagnosisItemsForAdmission}
-              />
-            }
-          >
-            {!inpatientAdmission ? (
-              <EmptyNote label="No inpatient admission linked to this encounter." />
-            ) : (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-200 text-orange-800 uppercase tracking-wide">
-                    Inpatient
-                  </span>
-                  <StatusPill status={inpatientAdmission.status} />
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
-                      Admission
-                    </div>
-                    <div className="font-medium text-gray-800">
-                      {formatDT(inpatientAdmission.actualPeriod?.start)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
-                      Planned Discharge
-                    </div>
-                    <div className="font-medium text-gray-800">
-                      {formatDT(inpatientAdmission.actualPeriod?.end)}
-                    </div>
-                  </div>
-                  {(inpatientAdmission as any).reason?.[0]?.value?.[0]?.concept
-                    ?.text && (
-                    <div className="col-span-2">
-                      <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
-                        Reason for Admission
+              {/* ── 6. Inpatient Admission ── */}
+              <section
+                id="section-admission"
+                ref={(el) => { sectionRefs.current['section-admission'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="admission"
+                  icon="Adm"
+                  title="Inpatient Admission"
+                  count={inpatientAdmission ? 1 : 0}
+                  isEditable={isEditable && !inpatientAdmission}
+                  addLabel="Admit Patient"
+                  addForm={<AddAdmissionForm {...formProps} diagnosisItems={diagnosisItemsForAdmission} />}
+                >
+                  {!inpatientAdmission ? (
+                    <EmptyNote label="No inpatient admission linked to this encounter." />
+                  ) : (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-200 text-orange-800 uppercase tracking-wide">Inpatient</span>
+                        <StatusPill status={inpatientAdmission.status} />
                       </div>
-                      <div className="text-gray-800">
-                        {
-                          (inpatientAdmission as any).reason[0].value[0].concept
-                            .text
-                        }
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission</div>
+                          <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.start)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Planned Discharge</div>
+                          <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.end)}</div>
+                        </div>
+                        {(inpatientAdmission as any).reason?.[0]?.value?.[0]?.concept?.text && (
+                          <div className="col-span-2">
+                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Reason for Admission</div>
+                            <div className="text-gray-800">{(inpatientAdmission as any).reason[0].value[0].concept.text}</div>
+                          </div>
+                        )}
+                        {inpatientAdmission.diagnosis?.[0]?.condition?.[0]?.reference?.display && (
+                          <div className="col-span-2">
+                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission Diagnosis</div>
+                            <div className="text-gray-800">{inpatientAdmission.diagnosis[0].condition[0].reference.display}</div>
+                          </div>
+                        )}
+                        <div className="col-span-2 text-xs font-mono text-gray-400">Encounter ID: {inpatientAdmission.id}</div>
                       </div>
                     </div>
                   )}
-                  {inpatientAdmission.diagnosis?.[0]?.condition?.[0]?.reference
-                    ?.display && (
-                    <div className="col-span-2">
-                      <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">
-                        Admission Diagnosis
-                      </div>
-                      <div className="text-gray-800">
-                        {
-                          inpatientAdmission.diagnosis[0].condition[0].reference
-                            .display
-                        }
-                      </div>
-                    </div>
-                  )}
-                  <div className="col-span-2 text-xs font-mono text-gray-400">
-                    Encounter ID: {inpatientAdmission.id}
-                  </div>
-                </div>
-              </div>
-            )}
-          </Section>
-        </div>
-      )}
+                </Section>
+              </section>
+            </>
+          )}
 
-      {/* Footer */}
-      <div className="mt-6 flex items-center justify-between">
-        <div className="flex gap-2">
-          <Link
-            to="/patients"
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm"
-          >
-            ← Search Patients
-          </Link>
-          <Link
-            to={`/patient/${patientId}/encounter`}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm"
-          >
-            Visit History
-          </Link>
-        </div>
-        {isEditable && (
-          <Link
-            to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-            className="bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 px-5 rounded-md transition-colors text-sm"
-          >
-            Open Full Consult Wizard →
-          </Link>
-        )}
+          {/* Footer */}
+          <div className="mt-6 flex items-center justify-between pb-8">
+            <div className="flex gap-2">
+              <Link to="/queue" className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm">
+                ← Queue
+              </Link>
+              <Link to={`/patient/${patientId}/encounter`} className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm">
+                Visit History
+              </Link>
+            </div>
+            {isEditable && (
+              <Link to={`/patient/${patientId}/encounter/${encounterId}/consult`} className="bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 px-5 rounded-md transition-colors text-sm">
+                Open Full Consult Wizard →
+              </Link>
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+export type UserRole = 'psa' | 'clinician';
+
 interface UiState {
   sidebarOpen: boolean;
   theme: 'light' | 'dark';
@@ -8,12 +10,14 @@ interface UiState {
     type: 'info' | 'success' | 'warning' | 'error';
     message: string;
   }>;
+  role: UserRole | null;
 }
 
 const initialState: UiState = {
   sidebarOpen: false,
   theme: 'light',
   notifications: [],
+  role: (sessionStorage.getItem('userRole') as UserRole | null) ?? null,
 };
 
 const uiSlice = createSlice({
@@ -44,10 +48,18 @@ const uiSlice = createSlice({
         (notification) => notification.id !== action.payload,
       );
     },
+    setRole: (state, action: PayloadAction<UserRole>) => {
+      state.role = action.payload;
+      sessionStorage.setItem('userRole', action.payload);
+    },
+    clearRole: (state) => {
+      state.role = null;
+      sessionStorage.removeItem('userRole');
+    },
   },
 });
 
-export const { toggleSidebar, setTheme, addNotification, removeNotification } =
+export const { toggleSidebar, setTheme, addNotification, removeNotification, setRole, clearRole } =
   uiSlice.actions;
 
 export default uiSlice.reducer;

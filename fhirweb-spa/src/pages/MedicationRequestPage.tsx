@@ -92,7 +92,7 @@ const MedicationRequestPage: React.FC = () => {
     if (currentBundle) {
       const result = await triggerNextPage(currentBundle);
       if ('data' in result) {
-        setCurrentBundle(result.data);
+        setCurrentBundle(result.data as unknown as typeof currentBundle);
       }
     }
   };
@@ -101,7 +101,7 @@ const MedicationRequestPage: React.FC = () => {
     if (currentBundle) {
       const result = await triggerPreviousPage(currentBundle);
       if ('data' in result) {
-        setCurrentBundle(result.data);
+        setCurrentBundle(result.data as unknown as typeof currentBundle);
       }
     }
   };
@@ -110,7 +110,7 @@ const MedicationRequestPage: React.FC = () => {
     if (currentBundle) {
       const result = await triggerFirstPage(currentBundle);
       if ('data' in result) {
-        setCurrentBundle(result.data);
+        setCurrentBundle(result.data as unknown as typeof currentBundle);
       }
     }
   };
@@ -119,7 +119,7 @@ const MedicationRequestPage: React.FC = () => {
     if (currentBundle) {
       const result = await triggerLastPage(currentBundle);
       if ('data' in result) {
-        setCurrentBundle(result.data);
+        setCurrentBundle(result.data as unknown as typeof currentBundle);
       }
     }
   };
@@ -131,7 +131,7 @@ const MedicationRequestPage: React.FC = () => {
         pageNumber,
       });
       if ('data' in result) {
-        setCurrentBundle(result.data);
+        setCurrentBundle(result.data as unknown as typeof currentBundle);
       }
     }
   };

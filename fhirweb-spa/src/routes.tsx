@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import LaunchPage from './pages/LaunchPage';
-import HomePage from './pages/HomePage';
+import RoleSelectionPage from './pages/RoleSelectionPage';
+import PatientQueuePage from './pages/PatientQueuePage';
 import PatientPage from './pages/PatientPage';
 import PatientSearchPage from './pages/PatientSearchPage';
 import CarePlanPage from './pages/CarePlanPage';
@@ -20,65 +20,68 @@ import MedicationRequestCrudPage from './pages/crud/MedicationRequestCrudPage';
 import EncounterCrudPage from './pages/crud/EncounterCrudPage';
 import PatientCrudPage from './pages/crud/PatientCrudPage';
 import NotFound from './pages/NotFound';
+import RoleGuard from './components/common/RoleGuard';
 
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
-      <Route path="/launch" element={<LaunchPage />} />
+      {/* Landing — role selection */}
+      <Route path="/" element={<RoleSelectionPage />} />
+
+      {/* Shared */}
+      <Route path="/launch" element={<RoleSelectionPage />} />
+      <Route path="/queue" element={<PatientQueuePage />} />
       <Route path="/webhooks" element={<WebhookManagementPage />} />
       <Route path="/events" element={<EventMonitorPage />} />
-      <Route path="/" element={<HomePage />} />
-      <Route path="/patients" element={<PatientSearchPage />} />
-      <Route path="/patient/new" element={<PatientCrudPage />} />
-      <Route path="/patient/:id/details" element={<PatientCrudPage />} />
+
+      {/* PSA-only routes */}
       <Route
-        path="/patient/:id/visit/new"
-        element={<VisitRegistrationPage />}
+        path="/patients"
+        element={<RoleGuard allowed={['psa']}><PatientSearchPage /></RoleGuard>}
       />
       <Route
+        path="/patient/new"
+        element={<RoleGuard allowed={['psa']}><PatientCrudPage /></RoleGuard>}
+      />
+      <Route
+        path="/patient/:id/details"
+        element={<RoleGuard allowed={['psa']}><PatientCrudPage /></RoleGuard>}
+      />
+      <Route
+        path="/patient/:id/visit/new"
+        element={<RoleGuard allowed={['psa']}><VisitRegistrationPage /></RoleGuard>}
+      />
+
+      {/* Clinician-only routes */}
+      <Route
         path="/patient/:id/encounter/:encounterId/consult"
-        element={<ClinicalConsultPage />}
+        element={<RoleGuard allowed={['clinician']}><ClinicalConsultPage /></RoleGuard>}
       />
       <Route
         path="/patient/:id/encounter/:encounterId/notes"
-        element={<ConsultNoteDetailPage />}
+        element={<RoleGuard allowed={['clinician']}><ConsultNoteDetailPage /></RoleGuard>}
       />
+
+      {/* Patient detail (nested) — accessible to both roles */}
       <Route path="/patient/:id" element={<PatientPage />}>
-        {/* CarePlan becomes a nested route under patient */}
         <Route path="careplan" element={<CarePlanPage />} />
         <Route path="careplan/new" element={<CarePlanCrudPage />} />
-        {/* Observation as a nested route under patient */}
         <Route path="observation" element={<ObservationPage />} />
         <Route path="observation/new" element={<ObservationCrudPage />} />
-        {/* MedicationRequest as a nested route under patient */}
         <Route path="medication" element={<MedicationRequestPage />} />
         <Route path="medication/new" element={<MedicationRequestCrudPage />} />
-        {/* Encounter as a nested route under patient */}
         <Route path="encounter" element={<EncounterPage />} />
         <Route path="encounter/new" element={<EncounterCrudPage />} />
-
-        {/* CRUD routes */}
         <Route path="careplan/crud" element={<CarePlanCrudPage />} />
-        <Route
-          path="careplan/crud/:resourceId"
-          element={<CarePlanCrudPage />}
-        />
+        <Route path="careplan/crud/:resourceId" element={<CarePlanCrudPage />} />
         <Route path="observation/crud" element={<ObservationCrudPage />} />
-        <Route
-          path="observation/crud/:resourceId"
-          element={<ObservationCrudPage />}
-        />
+        <Route path="observation/crud/:resourceId" element={<ObservationCrudPage />} />
         <Route path="medication/crud" element={<MedicationRequestCrudPage />} />
-        <Route
-          path="medication/crud/:resourceId"
-          element={<MedicationRequestCrudPage />}
-        />
+        <Route path="medication/crud/:resourceId" element={<MedicationRequestCrudPage />} />
         <Route path="encounter/crud" element={<EncounterCrudPage />} />
-        <Route
-          path="encounter/crud/:resourceId"
-          element={<EncounterCrudPage />}
-        />
+        <Route path="encounter/crud/:resourceId" element={<EncounterCrudPage />} />
       </Route>
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
