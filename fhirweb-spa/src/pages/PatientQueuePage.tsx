@@ -251,7 +251,9 @@ const QueueSection: React.FC<QueueSectionProps> = ({
 
 const PatientQueuePage: React.FC = () => {
   const role = useSelector((state: RootState) => state.ui.role);
-  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery();
+  const todayISO = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState<string>(todayISO);
+  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery(selectedDate);
   const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
 
   const encounters: Encounter[] = (bundle as Bundle<Resource> | undefined)?.entry
@@ -274,12 +276,13 @@ const PatientQueuePage: React.FC = () => {
     refetch();
   };
 
-  const today = new Date().toLocaleDateString('en-SG', {
+  const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-SG', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
+  const isToday = selectedDate === todayISO;
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
@@ -287,16 +290,34 @@ const PatientQueuePage: React.FC = () => {
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Patient Queue</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{today}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {displayDate}{!isToday && <span className="ml-2 text-amber-600 font-medium">(past date)</span>}
+          </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Date picker */}
+          <input
+            type="date"
+            value={selectedDate}
+            max={todayISO}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+          />
+          {!isToday && (
+            <button
+              onClick={() => setSelectedDate(todayISO)}
+              className="px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              Today
+            </button>
+          )}
           {role === 'psa' && (
-            <a
-              href="/patients"
+            <Link
+              to="/patients"
               className="inline-flex items-center px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
             >
               + Register Patient
-            </a>
+            </Link>
           )}
           <button
             onClick={() => refetch()}
