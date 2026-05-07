@@ -990,15 +990,18 @@ export const fhirApi = createApi({
       ],
     }),
 
-    getTodayEncounters: builder.query<Bundle<Resource>, string | void>({
-      queryFn: async (date) => {
+    getTodayEncounters: builder.query<Bundle<Resource>, { from: string; to: string } | void>({
+      queryFn: async (range) => {
         try {
           const client = await createFHIRClient();
-          const queryDate = (date as string) || new Date().toISOString().split('T')[0];
+          const today = new Date().toISOString().split('T')[0];
+          const from = (range as { from: string; to: string })?.from ?? today;
+          const to = (range as { from: string; to: string })?.to ?? today;
+          const dateParam = from === to ? from : [`ge${from}`, `le${to}`];
           const results = await client.search({
             resourceType: 'Encounter',
             searchParams: {
-              date: queryDate,
+              date: dateParam,
               _count: '200',
               _sort: '-date',
             },

@@ -252,8 +252,24 @@ const QueueSection: React.FC<QueueSectionProps> = ({
 const PatientQueuePage: React.FC = () => {
   const role = useSelector((state: RootState) => state.ui.role);
   const todayISO = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState<string>(todayISO);
-  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery(selectedDate);
+  const currentYearMonth = todayISO.slice(0, 7); // YYYY-MM
+
+  const [fromMonth, setFromMonth] = useState<string>(currentYearMonth);
+  const [toMonth, setToMonth] = useState<string>(currentYearMonth);
+
+  // Derive first/last day of selected month range
+  const fromISO = `${fromMonth}-01`;
+  const toISO = (() => {
+    const [y, m] = toMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate(); // day 0 of next month = last day of this month
+    const candidate = `${toMonth}-${String(lastDay).padStart(2, '0')}`;
+    return candidate > todayISO ? todayISO : candidate; // don't exceed today
+  })();
+
+  const isCurrentMonth = fromMonth === currentYearMonth && toMonth === currentYearMonth;
+  const isSingleMonth = fromMonth === toMonth;
+
+  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery({ from: fromISO, to: toISO });
   const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
 
   const encounters: Encounter[] = (bundle as Bundle<Resource> | undefined)?.entry
@@ -276,55 +292,79 @@ const PatientQueuePage: React.FC = () => {
     refetch();
   };
 
-  const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-SG', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const isToday = selectedDate === todayISO;
+  const formatMonthLabel = (ym: string) => {
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
+  };
+  const rangeLabel = isSingleMonth
+    ? formatMonthLabel(fromMonth)
+    : `${formatMonthLabel(fromMonth)} – ${formatMonthLabel(toMonth)}`;
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
       {/* Page header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Patient Queue</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {displayDate}{!isToday && <span className="ml-2 text-amber-600 font-medium">(past date)</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Date picker */}
-          <input
-            type="date"
-            value={selectedDate}
-            max={todayISO}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-          />
-          {!isToday && (
+      <div className="mb-6">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Patient Queue</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {rangeLabel}
+              {!isCurrentMonth && <span className="ml-2 text-amber-600 font-medium">(past period)</span>}
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            {role === 'psa' && (
+              <Link
+                to="/patients"
+                className="inline-flex items-center px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                + Patient Search
+              </Link>
+            )}
             <button
-              onClick={() => setSelectedDate(todayISO)}
-              className="px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
             >
-              Today
+              ↻ Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Date range controls */}
+        <div className="flex items-center gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <span className="text-sm font-medium text-gray-600 shrink-0">Date range:</span>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">From</label>
+            <input
+              type="month"
+              value={fromMonth}
+              max={currentYearMonth}
+              onChange={(e) => {
+                setFromMonth(e.target.value);
+                if (e.target.value > toMonth) setToMonth(e.target.value);
+              }}
+              className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">To</label>
+            <input
+              type="month"
+              value={toMonth}
+              min={fromMonth}
+              max={currentYearMonth}
+              onChange={(e) => setToMonth(e.target.value)}
+              className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+          {!isCurrentMonth && (
+            <button
+              onClick={() => { setFromMonth(currentYearMonth); setToMonth(currentYearMonth); }}
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              This month
             </button>
           )}
-          {role === 'psa' && (
-            <Link
-              to="/patients"
-              className="inline-flex items-center px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              + Register Patient
-            </Link>
-          )}
-          <button
-            onClick={() => refetch()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
-          >
-            ↻ Refresh
-          </button>
         </div>
       </div>
 
@@ -345,7 +385,7 @@ const PatientQueuePage: React.FC = () => {
       {isLoading && (
         <div className="flex justify-center items-center py-16">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" />
-          <p className="ml-3 text-gray-500">Loading today's queue…</p>
+          <p className="ml-3 text-gray-500">Loading encounters…</p>
         </div>
       )}
 

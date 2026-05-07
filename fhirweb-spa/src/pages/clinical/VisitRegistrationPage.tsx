@@ -288,7 +288,7 @@ const VisitRegistrationPage: React.FC = () => {
             >
               {isCreating
                 ? 'Registering...'
-                : 'Register & Start Clinical Consult'}
+                : 'Register'}
             </button>
             <Link
               to={`/patient/${id}/details`}
