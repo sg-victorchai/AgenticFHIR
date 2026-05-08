@@ -307,6 +307,18 @@ const EmptyNote: React.FC<{ label: string }> = ({ label }) => (
   <p className="text-sm text-gray-400 italic">{label}</p>
 );
 
+const FilterBar = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+  <div className="mb-4">
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Filter records..."
+      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+    />
+  </div>
+);
+
 // ─── Inline add forms ─────────────────────────────────────────────────────────
 
 interface AddFormProps {
@@ -1537,6 +1549,10 @@ const ConsultNoteDetailPage: React.FC = () => {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeSection, setActiveSection] = useState('notes');
+  const [filterText, setFilterText] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => { setFilterText(''); setExpandedId(null); }, [activeSection]);
 
   return (
     // Escape the container's px-4 py-8 padding to go full-width
@@ -1660,26 +1676,6 @@ const ConsultNoteDetailPage: React.FC = () => {
                     <p className="text-sm text-gray-500 mt-1">{encounterReason}</p>
                   </div>
 
-                  {/* Clinical summary always visible */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                    {[
-                      { label: 'Vital Signs', count: vitals.length, color: 'bg-blue-50 border-blue-200 text-blue-700', section: 'vitals' },
-                      { label: 'Exam Findings', count: examFindings.length, color: 'bg-green-50 border-green-200 text-green-700', section: 'exam' },
-                      { label: 'Conditions', count: conditions.length, color: 'bg-amber-50 border-amber-200 text-amber-700', section: 'assessment' },
-                      { label: 'Medications', count: medications.length, color: 'bg-purple-50 border-purple-200 text-purple-700', section: 'medication-request' },
-                    ].map(({ label, count, color, section }) => (
-                      <button
-                        key={label}
-                        onClick={() => setActiveSection(section)}
-                        className={`border rounded-lg p-3 text-left hover:opacity-80 transition-opacity ${color}`}
-                      >
-                        <div className="text-2xl font-bold">{count}</div>
-                        <div className="text-xs font-medium mt-0.5">{label}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Free-text notes */}
                   {isEditable ? (
                     <div className="space-y-4">
                       <div>
@@ -1701,18 +1697,316 @@ const ConsultNoteDetailPage: React.FC = () => {
                         {isSavingNote ? 'Saving...' : 'Save Notes'}
                       </button>
                     </div>
-                  ) : noteText ? (
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Doctor's Notes</h3>
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{noteText}</p>
+                  ) : (() => {
+                    const hasAnyData = !!(noteText || vitals.length || examFindings.length || conditions.length ||
+                      labOrders.length || radOrders.length || labReports.length || radReports.length ||
+                      medications.length || procedures.length || carePlans.length);
+                    const NotesSectionHeading = ({ children }: { children: React.ReactNode }) => (
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 border-b border-gray-100 pb-1">{children}</h3>
+                    );
+                    if (!hasAnyData) {
+                      return <EmptyNote label="No consultation notes recorded." />;
+                    }
+                    return (
+                      <div className="space-y-8">
+                        {/* Notes header */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center gap-3">
+                          <div>
+                            <div className="font-semibold text-gray-800">{encounterReason}</div>
+                            <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                              <span>{formatDT(encounter?.actualPeriod?.start)}</span>
+                              {encounter?.status && <StatusPill status={encounter.status} />}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Doctor's free-text notes */}
+                        <div>
+                          <NotesSectionHeading>Doctor's Notes</NotesSectionHeading>
+                          {noteText ? (
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{noteText}</p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-400 italic">No consultation notes recorded.</p>
+                          )}
+                        </div>
+
+                        {/* Vitals */}
+                        {vitals.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Vital Signs</NotesSectionHeading>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                              {vitals.map((obs) => {
+                                const code = obs.code?.coding?.[0]?.code || '';
+                                const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
+                                const val = obs.valueQuantity?.value ?? null;
+                                const unit = obs.valueQuantity?.unit || obs.valueString || '';
+                                const trend = val !== null ? interpretVital(code, val) : 'normal';
+                                return (
+                                  <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                                    <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
+                                    <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
+                                      {val !== null ? val : obs.valueString || '—'}
+                                      <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
+                                      {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                                    </div>
+                                    <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Physical Examination */}
+                        {examFindings.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Physical Examination</NotesSectionHeading>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {examFindings.map((obs) => {
+                                  const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                                  return (
+                                    <tr key={obs.id}>
+                                      <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{obs.code?.text || obs.code?.coding?.[0]?.display || '—'}</td>
+                                      <td className="py-2.5 pr-4 text-gray-800">{obs.valueString || '—'}</td>
+                                      <td className="py-2.5 pr-4 whitespace-nowrap">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                          {isNormal ? '✓ Normal' : '! Abnormal'}
+                                        </span>
+                                      </td>
+                                      <td className="py-2.5 text-xs text-gray-400">{formatDT(obs.effectiveDateTime)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Assessment / Diagnosis */}
+                        {conditions.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Assessment / Diagnosis</NotesSectionHeading>
+                            <div className="space-y-2">
+                              {conditions.map((cond, i) => {
+                                const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                                const sevCode = cond.severity?.coding?.[0]?.code;
+                                const sevText = sevCode === '24484000' ? 'Severe' : sevCode === '6736007' ? 'Moderate' : sevCode === '255604002' ? 'Mild' : undefined;
+                                const verifCode = cond.verificationStatus?.coding?.[0]?.code;
+                                const clinCode = cond.clinicalStatus?.coding?.[0]?.code;
+                                const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500' : sevText === 'Moderate' ? 'border-l-4 border-amber-400' : 'border-l-4 border-gray-200';
+                                return (
+                                  <div key={cond.id} className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
+                                        <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
+                                        {cond.code?.coding?.[0]?.code && (
+                                          <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
+                                        )}
+                                      </div>
+                                      <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                                        {sevText && (
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                            {sevText}
+                                          </span>
+                                        )}
+                                        {verifCode && <StatusPill status={verifCode} />}
+                                        {clinCode && <StatusPill status={clinCode} />}
+                                      </div>
+                                    </div>
+                                    <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lab Orders */}
+                        {labOrders.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Lab Orders</NotesSectionHeading>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {labOrders.map((sr) => (
+                                  <tr key={sr.id}>
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                                    <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                                    <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Radiology Orders */}
+                        {radOrders.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Radiology Orders</NotesSectionHeading>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {radOrders.map((sr) => (
+                                  <tr key={sr.id}>
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                                    <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Lab Results */}
+                        {labReports.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Lab Results</NotesSectionHeading>
+                            <div className="space-y-3">
+                              {labReports.map((dr) => (
+                                <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-gray-800 text-sm">{dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}</span>
+                                    <div className="flex items-center gap-2">
+                                      <StatusPill status={dr.status} />
+                                      <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                                    </div>
+                                  </div>
+                                  {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                                  {dr.result && dr.result.length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1">{dr.result.length} observation(s) linked</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Radiology Reports */}
+                        {radReports.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Radiology Reports</NotesSectionHeading>
+                            <div className="space-y-3">
+                              {radReports.map((dr) => (
+                                <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-gray-800 text-sm">{dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}</span>
+                                    <div className="flex items-center gap-2">
+                                      <StatusPill status={dr.status} />
+                                      <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                                    </div>
+                                  </div>
+                                  {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Medications */}
+                        {medications.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Medications</NotesSectionHeading>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {medications.map((med) => (
+                                  <tr key={med.id}>
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                                    <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
+                                    <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Procedures */}
+                        {procedures.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Procedures</NotesSectionHeading>
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Procedure</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Performed</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Notes</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {procedures.map((proc) => (
+                                  <tr key={proc.id}>
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{proc.code?.text || proc.code?.coding?.[0]?.display || '—'}</td>
+                                    <td className="py-2.5 pr-4"><StatusPill status={proc.status} /></td>
+                                    <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">{formatDT((proc as any).occurrenceDateTime || proc.occurrencePeriod?.start)}</td>
+                                    <td className="py-2.5 text-xs text-gray-600">{proc.note?.[0]?.text || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Care Plan */}
+                        {carePlans.length > 0 && (
+                          <div>
+                            <NotesSectionHeading>Care Plan</NotesSectionHeading>
+                            <div className="space-y-3">
+                              {carePlans.map((cp) => (
+                                <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
+                                    <div className="flex items-center gap-2">
+                                      <StatusPill status={cp.status} />
+                                      <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
+                                    </div>
+                                  </div>
+                                  {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-400 italic border border-dashed border-gray-200 rounded-lg p-4 text-center">
-                      No free-text notes documented. Use the sidebar to review individual clinical records.
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1727,30 +2021,38 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Record Vitals"
                   addForm={<AddVitalsForm {...formProps} />}
                 >
-                  {vitals.length === 0 ? (
-                    <EmptyNote label="No vital signs recorded for this encounter." />
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {vitals.map((obs) => {
-                        const code = obs.code?.coding?.[0]?.code || '';
-                        const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
-                        const val = obs.valueQuantity?.value ?? null;
-                        const unit = obs.valueQuantity?.unit || obs.valueString || '';
-                        const trend = val !== null ? interpretVital(code, val) : 'normal';
-                        return (
-                          <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
-                            <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
-                            <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
-                              {val !== null ? val : obs.valueString || '—'}
-                              <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
-                              {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = vitals.filter((obs) => {
+                      const code = obs.code?.coding?.[0]?.code || '';
+                      const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || '';
+                      return name.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No vital signs recorded for this encounter." />
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {filtered.map((obs) => {
+                          const code = obs.code?.coding?.[0]?.code || '';
+                          const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
+                          const val = obs.valueQuantity?.value ?? null;
+                          const unit = obs.valueQuantity?.unit || obs.valueString || '';
+                          const trend = val !== null ? interpretVital(code, val) : 'normal';
+                          return (
+                            <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                              <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
+                              <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
+                                {val !== null ? val : obs.valueString || '—'}
+                                <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
+                                {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -1765,39 +2067,67 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Add Finding"
                   addForm={<AddExamForm {...formProps} />}
                 >
-                  {examFindings.length === 0 ? (
-                    <EmptyNote label="No examination findings recorded." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {examFindings.map((obs) => {
-                          const system = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
-                          const finding = obs.valueString || '—';
-                          const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
-                          return (
-                            <tr key={obs.id} className="hover:bg-gray-50">
-                              <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{system}</td>
-                              <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
-                              <td className="py-2.5 pr-4 whitespace-nowrap">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                  {isNormal ? '✓ Normal' : '! Abnormal'}
-                                </span>
-                              </td>
-                              <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = examFindings.filter((obs) => {
+                      const text = obs.code?.text || obs.code?.coding?.[0]?.display || obs.valueString || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No examination findings recorded." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
+                            <th className="pb-2" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((obs) => {
+                            const system = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                            const finding = obs.valueString || '—';
+                            const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                            const loincCode = obs.code?.coding?.[0]?.code;
+                            const interpCode = obs.interpretation?.[0]?.coding?.[0]?.code;
+                            return (
+                              <React.Fragment key={obs.id}>
+                                <tr
+                                  className="hover:bg-gray-50 cursor-pointer"
+                                  onClick={() => setExpandedId(expandedId === obs.id ? null : (obs.id ?? null))}
+                                >
+                                  <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{system}</td>
+                                  <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
+                                  <td className="py-2.5 pr-4 whitespace-nowrap">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                      {isNormal ? '✓ Normal' : '! Abnormal'}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
+                                  <td className="py-2.5 text-xs text-gray-400">{expandedId === obs.id ? '▲' : '▼'}</td>
+                                </tr>
+                                {expandedId === obs.id && (
+                                  <tr>
+                                    <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                        {loincCode && <div><span className="text-gray-500 font-medium">LOINC:</span> <span className="font-mono">{loincCode}</span></div>}
+                                        {interpCode && <div><span className="text-gray-500 font-medium">Interpretation Code:</span> {interpCode}</div>}
+                                        <div><span className="text-gray-500 font-medium">Date/Time:</span> {formatDT(obs.effectiveDateTime)}</div>
+                                        {obs.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {obs.note[0].text}</div>}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -1843,30 +2173,55 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Place Lab Order"
                   addForm={<AddOrderForm {...formProps} />}
                 >
-                  {labOrders.length === 0 ? (
-                    <EmptyNote label="No lab orders placed for this encounter." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {labOrders.map((sr) => (
-                          <tr key={sr.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
-                            <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = labOrders.filter((sr) => {
+                      const text = (sr.code as any)?.concept?.text || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No lab orders placed for this encounter." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((sr) => (
+                            <React.Fragment key={sr.id}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => setExpandedId(expandedId === sr.id ? null : (sr.id ?? null))}
+                              >
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                                <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === sr.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === sr.id && (
+                                <tr>
+                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      <div><span className="text-gray-500 font-medium">Authored On:</span> {formatDT(sr.authoredOn)}</div>
+                                      <div><span className="text-gray-500 font-medium">Priority:</span> {sr.priority || 'routine'}</div>
+                                      {sr.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Notes:</span> {sr.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -1881,28 +2236,52 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Place Radiology Order"
                   addForm={<AddOrderForm {...formProps} />}
                 >
-                  {radOrders.length === 0 ? (
-                    <EmptyNote label="No radiology orders placed for this encounter." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {radOrders.map((sr) => (
-                          <tr key={sr.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
-                            <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = radOrders.filter((sr) => {
+                      const text = (sr.code as any)?.concept?.text || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No radiology orders placed for this encounter." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((sr) => (
+                            <React.Fragment key={sr.id}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => setExpandedId(expandedId === sr.id ? null : (sr.id ?? null))}
+                              >
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                                <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === sr.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === sr.id && (
+                                <tr>
+                                  <td colSpan={4} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      <div><span className="text-gray-500 font-medium">Authored On:</span> {formatDT(sr.authoredOn)}</div>
+                                      {sr.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Notes:</span> {sr.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -1917,29 +2296,56 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel=""
                   addForm={null}
                 >
-                  {labReports.length === 0 ? (
-                    <EmptyNote label="No lab results available for this encounter." />
-                  ) : (
-                    <div className="space-y-3">
-                      {labReports.map((dr) => (
-                        <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-semibold text-gray-800 text-sm">
-                              {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <StatusPill status={dr.status} />
-                              <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = labReports.filter((dr) => {
+                      const text = dr.code?.text || dr.code?.coding?.[0]?.display || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No lab results available for this encounter." />
+                    ) : (
+                      <div className="space-y-3">
+                        {filtered.map((dr) => (
+                          <div
+                            key={dr.id}
+                            className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-300 transition-colors"
+                            onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-semibold text-gray-800 text-sm">
+                                {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <StatusPill status={dr.status} />
+                                <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                                <span className="text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</span>
+                              </div>
                             </div>
+                            {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                            {dr.result && dr.result.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">{dr.result.length} observation(s) linked</div>
+                            )}
+                            {expandedId === dr.id && (
+                              <div className="mt-3 pt-3 border-t border-blue-100 bg-blue-50 -mx-4 -mb-4 px-4 pb-3 rounded-b-lg">
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                  {dr.result && <div><span className="text-gray-500 font-medium">Result References:</span> {dr.result.length}</div>}
+                                  {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Presenter:</span> {dr.performer[0].display}</div>}
+                                  {dr.category?.[0]?.text && <div><span className="text-gray-500 font-medium">Category:</span> {dr.category[0].text}</div>}
+                                  {(dr.effectivePeriod?.start || dr.effectivePeriod?.end) && (
+                                    <div className="col-span-2">
+                                      <span className="text-gray-500 font-medium">Effective Period:</span>{' '}
+                                      {formatDT(dr.effectivePeriod?.start)} – {formatDT(dr.effectivePeriod?.end)}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
-                          {dr.result && dr.result.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">{dr.result.length} observation(s) linked</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -1954,26 +2360,52 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel=""
                   addForm={null}
                 >
-                  {radReports.length === 0 ? (
-                    <EmptyNote label="No radiology reports available for this encounter." />
-                  ) : (
-                    <div className="space-y-3">
-                      {radReports.map((dr) => (
-                        <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-semibold text-gray-800 text-sm">
-                              {dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <StatusPill status={dr.status} />
-                              <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = radReports.filter((dr) => {
+                      const text = dr.code?.text || dr.code?.coding?.[0]?.display || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No radiology reports available for this encounter." />
+                    ) : (
+                      <div className="space-y-3">
+                        {filtered.map((dr) => (
+                          <div
+                            key={dr.id}
+                            className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-300 transition-colors"
+                            onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-semibold text-gray-800 text-sm">
+                                {dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <StatusPill status={dr.status} />
+                                <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                                <span className="text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</span>
+                              </div>
                             </div>
+                            {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                            {expandedId === dr.id && (
+                              <div className="mt-3 pt-3 border-t border-blue-100 bg-blue-50 -mx-4 -mb-4 px-4 pb-3 rounded-b-lg">
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                  {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
+                                  {(dr.effectivePeriod?.start || dr.effectivePeriod?.end) && (
+                                    <div className="col-span-2">
+                                      <span className="text-gray-500 font-medium">Effective Period:</span>{' '}
+                                      {formatDT(dr.effectivePeriod?.start)} – {formatDT(dr.effectivePeriod?.end)}
+                                    </div>
+                                  )}
+                                  {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -1988,43 +2420,65 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Add Diagnosis"
                   addForm={<AddDiagnosisForm {...formProps} />}
                 >
-                  {conditions.length === 0 ? (
-                    <EmptyNote label="No diagnoses recorded." />
-                  ) : (
-                    <div className="space-y-2">
-                      {conditions.map((cond, i) => {
-                        const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
-                        const sevCode = cond.severity?.coding?.[0]?.code;
-                        const sevText = sevCode === '24484000' ? 'Severe' : sevCode === '6736007' ? 'Moderate' : sevCode === '255604002' ? 'Mild' : undefined;
-                        const verifCode = cond.verificationStatus?.coding?.[0]?.code;
-                        const clinCode = cond.clinicalStatus?.coding?.[0]?.code;
-                        const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500' : sevText === 'Moderate' ? 'border-l-4 border-amber-400' : 'border-l-4 border-gray-200';
-                        return (
-                          <div key={cond.id} className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
-                                <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
-                                {cond.code?.coding?.[0]?.code && (
-                                  <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
-                                )}
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = conditions.filter((cond) => {
+                      const text = cond.code?.text || cond.code?.coding?.[0]?.display || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No diagnoses recorded." />
+                    ) : (
+                      <div className="space-y-2">
+                        {filtered.map((cond, i) => {
+                          const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                          const sevCode = cond.severity?.coding?.[0]?.code;
+                          const sevText = sevCode === '24484000' ? 'Severe' : sevCode === '6736007' ? 'Moderate' : sevCode === '255604002' ? 'Mild' : undefined;
+                          const verifCode = cond.verificationStatus?.coding?.[0]?.code;
+                          const clinCode = cond.clinicalStatus?.coding?.[0]?.code;
+                          const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500' : sevText === 'Moderate' ? 'border-l-4 border-amber-400' : 'border-l-4 border-gray-200';
+                          return (
+                            <div
+                              key={cond.id}
+                              className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls} cursor-pointer hover:bg-gray-100 transition-colors`}
+                              onClick={() => setExpandedId(expandedId === cond.id ? null : (cond.id ?? null))}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
+                                  <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
+                                  {cond.code?.coding?.[0]?.code && (
+                                    <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
+                                  )}
+                                </div>
+                                <div className="flex gap-1.5 flex-shrink-0 flex-wrap items-center justify-end">
+                                  {sevText && (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                      {sevText}
+                                    </span>
+                                  )}
+                                  {verifCode && <StatusPill status={verifCode} />}
+                                  {clinCode && <StatusPill status={clinCode} />}
+                                  <span className="text-xs text-gray-400 ml-1">{expandedId === cond.id ? '▲' : '▼'}</span>
+                                </div>
                               </div>
-                              <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                                {sevText && (
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                                    {sevText}
-                                  </span>
-                                )}
-                                {verifCode && <StatusPill status={verifCode} />}
-                                {clinCode && <StatusPill status={clinCode} />}
-                              </div>
+                              <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
+                              {expandedId === cond.id && (
+                                <div className="mt-3 pt-3 border-t border-blue-100 bg-blue-50 -mx-4 -mb-3 px-4 pb-3 rounded-b-lg">
+                                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                    {cond.code?.coding?.[0]?.code && <div><span className="text-gray-500 font-medium">Code:</span> <span className="font-mono">{cond.code.coding[0].system?.includes('snomed') ? 'SNOMED ' : ''}{cond.code.coding[0].code}</span></div>}
+                                    {cond.onsetDateTime && <div><span className="text-gray-500 font-medium">Onset:</span> {formatDate(cond.onsetDateTime)}</div>}
+                                    {(cond as any).recorder?.display && <div><span className="text-gray-500 font-medium">Recorder:</span> {(cond as any).recorder.display}</div>}
+                                    {cond.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {cond.note[0].text}</div>}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -2069,32 +2523,63 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Add Medication"
                   addForm={<AddMedicationForm {...formProps} />}
                 >
-                  {medications.length === 0 ? (
-                    <EmptyNote label="No medication requests recorded." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {medications.map((med) => (
-                          <tr key={med.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                              {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                            </td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
-                            <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = medications.filter((med) => {
+                      const text = (med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No medication requests recorded." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((med) => (
+                            <React.Fragment key={med.id}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => setExpandedId(expandedId === med.id ? null : (med.id ?? null))}
+                              >
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                </td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
+                                <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === med.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === med.id && (
+                                <tr>
+                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {med.dosageInstruction?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Full Dosage:</span> {med.dosageInstruction[0].text}</div>}
+                                      {med.dosageInstruction?.[0]?.route?.coding?.[0]?.display && <div><span className="text-gray-500 font-medium">Route:</span> {med.dosageInstruction[0].route.coding[0].display}</div>}
+                                      {med.dosageInstruction?.[0]?.doseAndRate?.[0]?.doseQuantity && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">Dose:</span>{' '}
+                                          {med.dosageInstruction[0].doseAndRate[0].doseQuantity.value} {med.dosageInstruction[0].doseAndRate[0].doseQuantity.unit}
+                                        </div>
+                                      )}
+                                      {med.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {med.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -2109,34 +2594,60 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel=""
                   addForm={null}
                 >
-                  {medicationDispenses.length === 0 ? (
-                    <EmptyNote label="No medication dispenses recorded." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Quantity</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {medicationDispenses.map((disp) => (
-                          <tr key={disp.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                              {(disp.medication as any)?.concept?.text || (disp.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                            </td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-600">
-                              {disp.quantity?.value ? `${disp.quantity.value} ${disp.quantity.unit || ''}` : '—'}
-                            </td>
-                            <td className="py-2.5 pr-4"><StatusPill status={disp.status} /></td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(disp.whenHandedOver)}</td>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = medicationDispenses.filter((disp) => {
+                      const text = (disp.medication as any)?.concept?.text || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No medication dispenses recorded." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Quantity</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((disp) => (
+                            <React.Fragment key={disp.id}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => setExpandedId(expandedId === disp.id ? null : (disp.id ?? null))}
+                              >
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {(disp.medication as any)?.concept?.text || (disp.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                </td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-600">
+                                  {disp.quantity?.value ? `${disp.quantity.value} ${disp.quantity.unit || ''}` : '—'}
+                                </td>
+                                <td className="py-2.5 pr-4"><StatusPill status={disp.status} /></td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(disp.whenHandedOver)}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === disp.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === disp.id && (
+                                <tr>
+                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {disp.quantity && <div><span className="text-gray-500 font-medium">Quantity:</span> {disp.quantity.value} {disp.quantity.unit}</div>}
+                                      {(disp as any).daysSupply?.value && <div><span className="text-gray-500 font-medium">Days Supply:</span> {(disp as any).daysSupply.value}</div>}
+                                      {disp.whenHandedOver && <div><span className="text-gray-500 font-medium">When Handed Over:</span> {formatDT(disp.whenHandedOver)}</div>}
+                                      {disp.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {disp.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -2151,32 +2662,58 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel=""
                   addForm={null}
                 >
-                  {medicationStatements.length === 0 ? (
-                    <EmptyNote label="No medication statements recorded." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {medicationStatements.map((stmt) => (
-                          <tr key={stmt.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                              {(stmt.medication as any)?.concept?.text || (stmt.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                            </td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-600">{stmt.dosage?.[0]?.text || '—'}</td>
-                            <td className="py-2.5 pr-4"><StatusPill status={stmt.status} /></td>
-                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT((stmt as any).dateAsserted)}</td>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = medicationStatements.filter((stmt) => {
+                      const text = (stmt.medication as any)?.concept?.text || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No medication statements recorded." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((stmt) => (
+                            <React.Fragment key={stmt.id}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => setExpandedId(expandedId === stmt.id ? null : (stmt.id ?? null))}
+                              >
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {(stmt.medication as any)?.concept?.text || (stmt.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                </td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-600">{stmt.dosage?.[0]?.text || '—'}</td>
+                                <td className="py-2.5 pr-4"><StatusPill status={stmt.status} /></td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT((stmt as any).dateAsserted)}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === stmt.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === stmt.id && (
+                                <tr>
+                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {stmt.dosage?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Dosage:</span> {stmt.dosage[0].text}</div>}
+                                      {(stmt as any).effectivePeriod?.start && <div><span className="text-gray-500 font-medium">Effective Start:</span> {formatDate((stmt as any).effectivePeriod.start)}</div>}
+                                      {(stmt as any).effectivePeriod?.end && <div><span className="text-gray-500 font-medium">Effective End:</span> {formatDate((stmt as any).effectivePeriod.end)}</div>}
+                                      {stmt.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {stmt.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -2191,34 +2728,60 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel=""
                   addForm={null}
                 >
-                  {procedures.length === 0 ? (
-                    <EmptyNote label="No procedures recorded for this encounter." />
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-400 border-b border-gray-100">
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Procedure</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Performed</th>
-                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Notes</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {procedures.map((proc) => (
-                          <tr key={proc.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                              {proc.code?.text || proc.code?.coding?.[0]?.display || '—'}
-                            </td>
-                            <td className="py-2.5 pr-4"><StatusPill status={proc.status} /></td>
-                            <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">
-                              {formatDT((proc as any).occurrenceDateTime || proc.occurrencePeriod?.start)}
-                            </td>
-                            <td className="py-2.5 text-xs text-gray-600">{proc.note?.[0]?.text || '—'}</td>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = procedures.filter((proc) => {
+                      const text = proc.code?.text || proc.code?.coding?.[0]?.display || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No procedures recorded for this encounter." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Procedure</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Performed</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Notes</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((proc) => (
+                            <React.Fragment key={proc.id}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => setExpandedId(expandedId === proc.id ? null : (proc.id ?? null))}
+                              >
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {proc.code?.text || proc.code?.coding?.[0]?.display || '—'}
+                                </td>
+                                <td className="py-2.5 pr-4"><StatusPill status={proc.status} /></td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT((proc as any).occurrenceDateTime || proc.occurrencePeriod?.start)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-600">{proc.note?.[0]?.text || '—'}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === proc.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === proc.id && (
+                                <tr>
+                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {proc.code?.coding?.[0]?.code && <div><span className="text-gray-500 font-medium">SNOMED Code:</span> <span className="font-mono">{proc.code.coding[0].code}</span></div>}
+                                      {(proc as any).location?.display && <div><span className="text-gray-500 font-medium">Location:</span> {(proc as any).location.display}</div>}
+                                      {proc.performer?.[0]?.actor?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {proc.performer[0].actor.display}</div>}
+                                      {proc.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {proc.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </Section>
               )}
 
@@ -2233,29 +2796,36 @@ const ConsultNoteDetailPage: React.FC = () => {
                   addLabel="Add Care Plan"
                   addForm={<AddCarePlanForm {...formProps} />}
                 >
-                  {carePlans.length === 0 ? (
-                    <EmptyNote label="No care plan recorded for this encounter." />
-                  ) : (
-                    <div className="space-y-3">
-                      {carePlans.map((cp) => (
-                        <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
-                            <div className="flex items-center gap-2">
-                              <StatusPill status={cp.status} />
-                              <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
+                  <FilterBar value={filterText} onChange={setFilterText} />
+                  {(() => {
+                    const filtered = carePlans.filter((cp) => {
+                      const text = cp.title || cp.description || '';
+                      return text.toLowerCase().includes(filterText.toLowerCase());
+                    });
+                    return filtered.length === 0 ? (
+                      <EmptyNote label="No care plan recorded for this encounter." />
+                    ) : (
+                      <div className="space-y-3">
+                        {filtered.map((cp) => (
+                          <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
+                              <div className="flex items-center gap-2">
+                                <StatusPill status={cp.status} />
+                                <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
+                              </div>
                             </div>
+                            {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
+                            {cp.note?.[0]?.text && (
+                              <div className="mt-2 border-t border-emerald-100 pt-2">
+                                <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
+                              </div>
+                            )}
                           </div>
-                          {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
-                          {cp.note?.[0]?.text && (
-                            <div className="mt-2 border-t border-emerald-100 pt-2">
-                              <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </Section>
               )}
 
