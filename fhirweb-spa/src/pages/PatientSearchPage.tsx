@@ -140,17 +140,9 @@ const PatientSearchPage: React.FC = () => {
                 .join(' ')
             : 'Unknown Name');
 
-        // Extract the primary identifier (usually MRN or National ID)
+        // Extract the primary identifier value
         const idEntry = patient.identifier?.[0];
-        const idLabel =
-          idEntry?.type?.text ||
-          idEntry?.type?.coding?.[0]?.display ||
-          (idEntry?.system
-            ? idEntry.system.split('/').filter(Boolean).pop()
-            : '');
-        const primaryIdentifier = idEntry
-          ? `${idLabel ? idLabel + ': ' : ''}${idEntry.value || ''}`
-          : 'Unknown';
+        const primaryIdentifier = idEntry?.value || 'Unknown';
 
         return {
           id: patient.id || '',
