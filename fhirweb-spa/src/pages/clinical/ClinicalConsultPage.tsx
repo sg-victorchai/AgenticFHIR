@@ -5,8 +5,11 @@ import {
   useGetResourceByIdQuery,
   useCreateResourceMutation,
   useUpdateResourceMutation,
+  useSearchByEncounterQuery,
+  useSearchChildEncountersQuery,
 } from '../../services/fhir/client';
 import { Encounter } from 'fhir/r5';
+import type { Observation, ServiceRequest, Condition, MedicationRequest, CarePlan } from 'fhir/r5';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,6 +120,34 @@ const toFHIRDateTime = (localDT: string): string => {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+const ExistingRecords: React.FC<{
+  items: RecordedItem[];
+  label: string;
+  onAddMore: () => void;
+}> = ({ items, label, onAddMore }) => (
+  <div>
+    <div className="flex items-center justify-between mb-3">
+      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        {label} ({items.length})
+      </h4>
+      <button
+        onClick={onAddMore}
+        className="text-xs font-semibold text-blue-600 border border-blue-300 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+      >
+        + Add More
+      </button>
+    </div>
+    <ul className="space-y-2">
+      {items.map((item) => (
+        <li key={item.id} className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
+          <span className="font-medium text-gray-700">{item.display}</span>
+          {item.note && <span className="text-gray-500 text-xs flex-shrink-0">{item.note}</span>}
+        </li>
+      ))}
+    </ul>
+  </div>
+);
+
 const RecordedList: React.FC<{ items: RecordedItem[]; emptyLabel: string }> = ({
   items,
   emptyLabel,
@@ -180,6 +211,28 @@ const ClinicalConsultPage: React.FC = () => {
   );
   const encounter = encounterResource as Encounter | undefined;
 
+  const { data: obsBundle, isLoading: obsLoading } = useSearchByEncounterQuery(
+    { resourceType: 'Observation', encounterId: encounterId! },
+    { skip: !encounterId }
+  );
+  const { data: srBundle, isLoading: srLoading } = useSearchByEncounterQuery(
+    { resourceType: 'ServiceRequest', encounterId: encounterId! },
+    { skip: !encounterId }
+  );
+  const { data: condBundle, isLoading: condLoading } = useSearchByEncounterQuery(
+    { resourceType: 'Condition', encounterId: encounterId! },
+    { skip: !encounterId }
+  );
+  const { data: medBundle, isLoading: medLoading } = useSearchByEncounterQuery(
+    { resourceType: 'MedicationRequest', encounterId: encounterId! },
+    { skip: !encounterId }
+  );
+  const { data: cpBundle, isLoading: cpLoading } = useSearchByEncounterQuery(
+    { resourceType: 'CarePlan', encounterId: encounterId! },
+    { skip: !encounterId }
+  );
+  const { data: childEncBundle } = useSearchChildEncountersQuery(encounterId!, { skip: !encounterId });
+
   const patientName = patient
     ? patient.name?.[0]?.text ||
       [
@@ -207,6 +260,96 @@ const ClinicalConsultPage: React.FC = () => {
   const [medicationItems, setMedicationItems] = useState<RecordedItem[]>([]);
   const [carePlanItem, setCarePlanItem] = useState<RecordedItem | null>(null);
   const [admissionItem, setAdmissionItem] = useState<RecordedItem | null>(null);
+
+  const preloadedRef = React.useRef(false);
+
+  useEffect(() => {
+    if (preloadedRef.current) return;
+    if (obsLoading || srLoading || condLoading || medLoading || cpLoading) return;
+    preloadedRef.current = true;
+
+    const observations = (obsBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as Observation[]) || [];
+    const vitalsFromFHIR = observations.filter(
+      (o) => o.category?.[0]?.coding?.[0]?.code === 'vital-signs'
+    );
+    const examFromFHIR = observations.filter(
+      (o) => o.category?.[0]?.coding?.[0]?.code === 'exam'
+    );
+
+    const vitalsLoaded: RecordedItem[] = vitalsFromFHIR.map((o) => {
+      const code = o.code?.coding?.[0]?.display || o.code?.text || 'Vital';
+      const val = o.valueQuantity?.value ?? o.valueString ?? '—';
+      const unit = o.valueQuantity?.unit || '';
+      return { id: o.id!, display: `${code}: ${val} ${unit}`.trim() };
+    });
+    if (vitalsLoaded.length > 0) setVitalsItems(vitalsLoaded);
+
+    const examLoaded: RecordedItem[] = examFromFHIR.map((o) => {
+      const system = o.code?.text || o.code?.coding?.[0]?.display || 'System';
+      const finding = o.valueString || '—';
+      const isNormal = o.interpretation?.[0]?.coding?.[0]?.code === 'N';
+      return { id: o.id!, display: `[${system}] ${finding}`, note: isNormal ? 'Normal' : 'Abnormal' };
+    });
+    if (examLoaded.length > 0) setExamItems(examLoaded);
+
+    const serviceRequests = (srBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as ServiceRequest[]) || [];
+    const labLoaded: RecordedItem[] = [];
+    const radLoaded: RecordedItem[] = [];
+    serviceRequests.forEach((sr) => {
+      const catCode = (sr.code as any)?.concept?.coding?.[0]?.code;
+      const testName = (sr.code as any)?.concept?.text || 'Order';
+      const catDisplay = (sr.code as any)?.concept?.coding?.[0]?.display || '';
+      const item: RecordedItem = {
+        id: sr.id!,
+        display: testName,
+        note: `${catDisplay} · ${sr.priority || 'routine'}`.toUpperCase(),
+      };
+      if (catCode === '394914008') {
+        radLoaded.push(item);
+      } else {
+        labLoaded.push(item);
+      }
+    });
+    if (labLoaded.length > 0) setLabOrderItems(labLoaded);
+    if (radLoaded.length > 0) setRadOrderItems(radLoaded);
+
+    const conditions = (condBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as Condition[]) || [];
+    const diagLoaded: RecordedItem[] = conditions.map((c) => {
+      const text = c.code?.text || c.code?.coding?.[0]?.display || 'Diagnosis';
+      const severity = c.severity?.coding?.[0]?.display || '';
+      const verif = c.verificationStatus?.coding?.[0]?.code || '';
+      return { id: c.id!, display: text, note: `${severity} · ${verif}`.replace(/^ · | · $/, '') };
+    });
+    if (diagLoaded.length > 0) setDiagnosisItems(diagLoaded);
+
+    const medReqs = (medBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as MedicationRequest[]) || [];
+    const medLoaded: RecordedItem[] = medReqs.map((mr) => {
+      const drug = (mr.medication as any)?.concept?.text || 'Medication';
+      const dosage = mr.dosageInstruction?.[0]?.text || '';
+      return { id: mr.id!, display: drug, note: dosage };
+    });
+    if (medLoaded.length > 0) setMedicationItems(medLoaded);
+
+    const carePlans = (cpBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as CarePlan[]) || [];
+    if (carePlans.length > 0) {
+      const cp = carePlans[0];
+      setCarePlanItem({ id: cp.id!, display: cp.title || 'Care Plan', note: cp.description || '' });
+    }
+
+    const childEncs = (childEncBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as any[]) || [];
+    const inpatient = childEncs.find((e) => e.class?.[0]?.coding?.[0]?.code === 'IMP');
+    if (inpatient) {
+      setAdmissionItem({
+        id: inpatient.id,
+        display: 'Inpatient Admission (pre-existing)',
+        note: inpatient.reason?.[0]?.value?.[0]?.concept?.text || '',
+      });
+    }
+  }, [obsLoading, srLoading, condLoading, medLoading, cpLoading, obsBundle, srBundle, condBundle, medBundle, cpBundle, childEncBundle]);
+
+  const [isAddingMore, setIsAddingMore] = useState<Record<TabId, boolean>>({
+    vitals: false, exam: false, lab: false, rad: false, assessment: false, management: false, admission: false,
+  });
 
   // ── VITALS ────────────────────────────────────────────────────────────────
 
@@ -1027,6 +1170,14 @@ const ClinicalConsultPage: React.FC = () => {
               Record the patient's vital signs. Leave fields blank to skip.
             </p>
 
+            {vitalsItems.length > 0 && !isAddingMore.vitals ? (
+              <ExistingRecords
+                items={vitalsItems}
+                label="Recorded Vitals"
+                onAddMore={() => setIsAddingMore((m) => ({ ...m, vitals: true }))}
+              />
+            ) : (
+              <>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className={labelCls}>SpO₂ (%)</label>
@@ -1146,6 +1297,8 @@ const ClinicalConsultPage: React.FC = () => {
               items={vitalsItems}
               emptyLabel="No vitals recorded yet."
             />
+              </>
+            )}
           </div>
         )}
 
@@ -1159,6 +1312,14 @@ const ClinicalConsultPage: React.FC = () => {
               Record findings by body system. Add one finding at a time.
             </p>
 
+            {examItems.length > 0 && !isAddingMore.exam ? (
+              <ExistingRecords
+                items={examItems}
+                label="Recorded Findings"
+                onAddMore={() => setIsAddingMore((m) => ({ ...m, exam: true }))}
+              />
+            ) : (
+              <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Body System</label>
@@ -1231,6 +1392,8 @@ const ClinicalConsultPage: React.FC = () => {
               items={examItems}
               emptyLabel="No examination findings recorded yet."
             />
+              </>
+            )}
           </div>
         )}
 
@@ -1244,6 +1407,14 @@ const ClinicalConsultPage: React.FC = () => {
               Place laboratory investigation orders for this encounter.
             </p>
 
+            {labOrderItems.length > 0 && !isAddingMore.lab ? (
+              <ExistingRecords
+                items={labOrderItems}
+                label="Lab Orders"
+                onAddMore={() => setIsAddingMore((m) => ({ ...m, lab: true }))}
+              />
+            ) : (
+              <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Category</label>
@@ -1320,6 +1491,8 @@ const ClinicalConsultPage: React.FC = () => {
               items={labOrderItems}
               emptyLabel="No lab orders placed yet."
             />
+              </>
+            )}
           </div>
         )}
 
@@ -1333,6 +1506,14 @@ const ClinicalConsultPage: React.FC = () => {
               Place radiology and imaging orders for this encounter.
             </p>
 
+            {radOrderItems.length > 0 && !isAddingMore.rad ? (
+              <ExistingRecords
+                items={radOrderItems}
+                label="Radiology Orders"
+                onAddMore={() => setIsAddingMore((m) => ({ ...m, rad: true }))}
+              />
+            ) : (
+              <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Modality / Study</label>
@@ -1391,6 +1572,8 @@ const ClinicalConsultPage: React.FC = () => {
               items={radOrderItems}
               emptyLabel="No radiology orders placed yet."
             />
+              </>
+            )}
           </div>
         )}
 
@@ -1404,6 +1587,14 @@ const ClinicalConsultPage: React.FC = () => {
               Record the clinical diagnosis for this encounter.
             </p>
 
+            {diagnosisItems.length > 0 && !isAddingMore.assessment ? (
+              <ExistingRecords
+                items={diagnosisItems}
+                label="Diagnoses"
+                onAddMore={() => setIsAddingMore((m) => ({ ...m, assessment: true }))}
+              />
+            ) : (
+              <>
             {/* Summary of findings */}
             {(vitalsItems.length > 0 ||
               examItems.length > 0 ||
@@ -1499,12 +1690,45 @@ const ClinicalConsultPage: React.FC = () => {
               items={diagnosisItems}
               emptyLabel="No diagnoses recorded yet."
             />
+              </>
+            )}
           </div>
         )}
 
         {/* ── MANAGEMENT ── */}
         {activeTab === 'management' && (
           <div className="space-y-8">
+            {(medicationItems.length > 0 || carePlanItem != null) && !isAddingMore.management ? (
+              <>
+                {medicationItems.length > 0 && (
+                  <ExistingRecords
+                    items={medicationItems}
+                    label="Medications"
+                    onAddMore={() => setIsAddingMore((m) => ({ ...m, management: true }))}
+                  />
+                )}
+                {carePlanItem && (
+                  <div className="border-t border-gray-100 pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Care Plan</h4>
+                      {medicationItems.length === 0 && (
+                        <button
+                          onClick={() => setIsAddingMore((m) => ({ ...m, management: true }))}
+                          className="text-xs font-semibold text-blue-600 border border-blue-300 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                        >
+                          + Add More
+                        </button>
+                      )}
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
+                      <span className="font-medium text-gray-700">{carePlanItem.display}</span>
+                      {carePlanItem.note && <span className="text-gray-500 text-xs flex-shrink-0">{carePlanItem.note}</span>}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
             {/* Medications */}
             <div>
               <h2 className="text-lg font-semibold text-gray-800 mb-1">
@@ -1709,6 +1933,8 @@ const ClinicalConsultPage: React.FC = () => {
                 </>
               )}
             </div>
+              </>
+            )}
           </div>
         )}
 
