@@ -35,11 +35,6 @@ const Header: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/queue" className="hover:text-blue-200 transition-colors">
-                  Queue
-                </Link>
-              </li>
-              <li>
                 <Link
                   to="/events"
                   className="hover:text-blue-200 transition-colors"
