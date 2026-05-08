@@ -1004,6 +1004,7 @@ export const fhirApi = createApi({
               date: dateParam,
               _count: '200',
               _sort: '-date',
+              _include: 'Encounter:subject',
             },
           });
           return { data: results as Bundle<Resource> };

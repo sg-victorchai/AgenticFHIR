@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Bundle, Patient as FHIRPatient } from 'fhir/r5';
 import {
   useSearchPatientsQuery,
@@ -10,6 +11,7 @@ import {
   useGoToPageMutation,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
+import { RootState } from '../store';
 
 interface PatientResult {
   id: string;
@@ -20,6 +22,7 @@ interface PatientResult {
 }
 
 const PatientSearchPage: React.FC = () => {
+  const role = useSelector((state: RootState) => state.ui.role);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'identifier'>('name');
   const [shouldSearch, setShouldSearch] = useState(false);
@@ -138,12 +141,15 @@ const PatientSearchPage: React.FC = () => {
             : 'Unknown Name');
 
         // Extract the primary identifier (usually MRN or National ID)
-        const primaryIdentifier = patient.identifier?.length
-          ? `${
-              patient.identifier[0].system
-                ? patient.identifier[0].system.split('/').pop() + ': '
-                : ''
-            }${patient.identifier[0].value || ''}`
+        const idEntry = patient.identifier?.[0];
+        const idLabel =
+          idEntry?.type?.text ||
+          idEntry?.type?.coding?.[0]?.display ||
+          (idEntry?.system
+            ? idEntry.system.split('/').filter(Boolean).pop()
+            : '');
+        const primaryIdentifier = idEntry
+          ? `${idLabel ? idLabel + ': ' : ''}${idEntry.value || ''}`
           : 'Unknown';
 
         return {
@@ -323,18 +329,30 @@ const PatientSearchPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex flex-row gap-2">
-                        <Link
-                          to={`/patient/${patient.id}/visit/new`}
-                          className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-                        >
-                          Register
-                        </Link>
-                        <Link
-                          to={`/patient/${patient.id}/encounter`}
-                          className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-                        >
-                          Consult
-                        </Link>
+                        {role === 'psa' && (
+                          <Link
+                            to={`/patient/${patient.id}/visit/new`}
+                            className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                          >
+                            Register
+                          </Link>
+                        )}
+                        {role === 'psa' && (
+                          <Link
+                            to={`/patient/${patient.id}/details`}
+                            className="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                          >
+                            View Notes
+                          </Link>
+                        )}
+                        {role === 'clinician' && (
+                          <Link
+                            to={`/patient/${patient.id}/encounter`}
+                            className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                          >
+                            Consult
+                          </Link>
+                        )}
                       </div>
                     </td>
                   </tr>

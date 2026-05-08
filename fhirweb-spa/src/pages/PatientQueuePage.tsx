@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Encounter, Bundle, Resource } from 'fhir/r5';
+import { Encounter, Bundle, Resource, Patient } from 'fhir/r5';
 import {
   useGetTodayEncountersQuery,
   useUpdateResourceMutation,
@@ -30,8 +30,25 @@ const getPatientId = (encounter: Encounter): string => {
   return ref ? ref.replace('Patient/', '') : '';
 };
 
-const getPatientName = (encounter: Encounter): string =>
-  encounter.subject?.display || '(Unknown Patient)';
+const resolvePatientName = (encounter: Encounter, patientMap: Map<string, Patient>): string => {
+  const p = patientMap.get(getPatientId(encounter));
+  if (p) {
+    const n = p.name?.[0];
+    if (n) return n.text || [n.prefix?.join(' '), n.given?.join(' '), n.family].filter(Boolean).join(' ') || '(Unknown)';
+  }
+  return encounter.subject?.display || '(Unknown Patient)';
+};
+
+const resolvePatientIdentifier = (encounter: Encounter, patientMap: Map<string, Patient>): string => {
+  const p = patientMap.get(getPatientId(encounter));
+  if (!p?.identifier?.length) return '—';
+  const id = p.identifier[0];
+  const label =
+    id.type?.text ||
+    id.type?.coding?.[0]?.display ||
+    (id.system ? id.system.split('/').filter(Boolean).pop() : '');
+  return `${label ? label + ': ' : ''}${id.value || '—'}`;
+};
 
 const getChiefComplaint = (encounter: Encounter): string =>
   (encounter as any)?.reason?.[0]?.value?.[0]?.concept?.text || '—';
@@ -79,6 +96,7 @@ interface QueueRowProps {
   onStatusUpdate: (id: string, status: string) => void;
   isUpdating: boolean;
   showDate: boolean;
+  patientMap: Map<string, Patient>;
 }
 
 const QueueRow: React.FC<QueueRowProps> = ({
@@ -87,6 +105,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
   onStatusUpdate,
   isUpdating,
   showDate,
+  patientMap,
 }) => {
   const patientId = getPatientId(encounter);
   const encounterId = encounter.id!;
@@ -96,8 +115,11 @@ const QueueRow: React.FC<QueueRowProps> = ({
 
   return (
     <tr className="hover:bg-gray-50 transition-colors">
+      <td className="px-4 py-3 text-xs text-gray-500 font-mono">
+        {resolvePatientIdentifier(encounter, patientMap)}
+      </td>
       <td className="px-4 py-3 text-sm font-medium text-gray-800">
-        {getPatientName(encounter)}
+        {resolvePatientName(encounter, patientMap)}
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">
         {getChiefComplaint(encounter)}
@@ -190,6 +212,7 @@ interface QueueSectionProps {
   onStatusUpdate: (id: string, status: string) => void;
   isUpdating: boolean;
   showDate: boolean;
+  patientMap: Map<string, Patient>;
 }
 
 const QueueSection: React.FC<QueueSectionProps> = ({
@@ -200,6 +223,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
   onStatusUpdate,
   isUpdating,
   showDate,
+  patientMap,
 }) => {
   const [collapsed, setCollapsed] = useState(false);
   const headerCls = STATUS_HEADER_CLS[queueStatus];
@@ -227,7 +251,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Patient', 'Chief Complaint', showDate ? 'Date & Time' : 'Time', 'Type', 'Status', 'Actions'].map(
+                  {['ID', 'Patient', 'Chief Complaint', showDate ? 'Date & Time' : 'Time', 'Type', 'Status', 'Actions'].map(
                     (h) => (
                       <th
                         key={h}
@@ -248,6 +272,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                     onStatusUpdate={onStatusUpdate}
                     isUpdating={isUpdating}
                     showDate={showDate}
+                    patientMap={patientMap}
                   />
                 ))}
               </tbody>
@@ -302,6 +327,15 @@ const PatientQueuePage: React.FC = () => {
 
   const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery({ from: fromISO, to: toISO });
   const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
+
+  // Build a patientId → Patient lookup from included Patient resources
+  const patientMap = new Map<string, Patient>();
+  ((bundle as Bundle<Resource> | undefined)?.entry ?? []).forEach((e) => {
+    if (e.resource?.resourceType === 'Patient') {
+      const p = e.resource as Patient;
+      if (p.id) patientMap.set(p.id, p);
+    }
+  });
 
   // Client-side date guard — ensures only encounters whose actualPeriod.start
   // falls within [fromISO, toISO] are shown, regardless of server filtering.
@@ -455,6 +489,7 @@ const PatientQueuePage: React.FC = () => {
             onStatusUpdate={handleStatusUpdate}
             isUpdating={isUpdating}
             showDate={showDate}
+            patientMap={patientMap}
           />
           <QueueSection
             label="In Progress"
@@ -464,6 +499,7 @@ const PatientQueuePage: React.FC = () => {
             onStatusUpdate={handleStatusUpdate}
             isUpdating={isUpdating}
             showDate={showDate}
+            patientMap={patientMap}
           />
           <QueueSection
             label="Completed"
@@ -473,6 +509,7 @@ const PatientQueuePage: React.FC = () => {
             onStatusUpdate={handleStatusUpdate}
             isUpdating={isUpdating}
             showDate={showDate}
+            patientMap={patientMap}
           />
           {cancelled.length > 0 && (
             <QueueSection
@@ -483,6 +520,7 @@ const PatientQueuePage: React.FC = () => {
               onStatusUpdate={handleStatusUpdate}
               isUpdating={isUpdating}
               showDate={showDate}
+              patientMap={patientMap}
             />
           )}
         </>
