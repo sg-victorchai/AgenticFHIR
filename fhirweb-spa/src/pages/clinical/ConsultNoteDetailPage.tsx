@@ -16,6 +16,7 @@ import {
   MedicationDispense,
   MedicationStatement,
   CarePlan,
+  Procedure,
   Bundle,
   Resource,
   ServiceRequest,
@@ -1401,6 +1402,10 @@ const ConsultNoteDetailPage: React.FC = () => {
     { resourceType: 'MedicationStatement', encounterId: encounterId! },
     { skip: !encounterId },
   );
+  const { data: procBundle, isLoading: procLoading } = useSearchByEncounterQuery(
+    { resourceType: 'Procedure', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
 
   const encounter = encounterResource as Encounter | undefined;
   const allObs = extractResources<Observation>(obsBundle);
@@ -1412,6 +1417,7 @@ const ConsultNoteDetailPage: React.FC = () => {
   const diagnosticReports = extractResources<DiagnosticReport>(drBundle);
   const medicationDispenses = extractResources<MedicationDispense>(medDispBundle);
   const medicationStatements = extractResources<MedicationStatement>(medStatBundle);
+  const procedures = extractResources<Procedure>(procBundle);
 
   const RAD_SNOMED = '394914008';
   const labOrders = serviceRequests.filter(
@@ -1474,7 +1480,8 @@ const ConsultNoteDetailPage: React.FC = () => {
     childEncLoading ||
     drLoading ||
     medDispLoading ||
-    medStatLoading;
+    medStatLoading ||
+    procLoading;
 
   useEffect(() => {
     if ((encounterResource as any)?.note?.[0]?.text) {
@@ -1523,6 +1530,7 @@ const ConsultNoteDetailPage: React.FC = () => {
     { id: 'medication-request', label: 'Medication Request', icon: '💊', indent: true },
     { id: 'medication-dispense', label: 'Medication Dispense', icon: '💊', indent: true },
     { id: 'medication-statement', label: 'Medication Statement', icon: '💊', indent: true },
+    { id: 'procedure', label: 'Procedure', icon: '⚕️' },
     { id: 'care-plan', label: 'Care Plan', icon: '📝' },
     { id: 'admission', label: 'Admission', icon: '🏥' },
   ];
@@ -2164,6 +2172,48 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <td className="py-2.5 pr-4 text-xs text-gray-600">{stmt.dosage?.[0]?.text || '—'}</td>
                             <td className="py-2.5 pr-4"><StatusPill status={stmt.status} /></td>
                             <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT((stmt as any).dateAsserted)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </Section>
+              )}
+
+              {/* ── Procedure ── */}
+              {activeSection === 'procedure' && (
+                <Section
+                  sectionKey="procedure"
+                  icon="⚕️"
+                  title="Procedures"
+                  count={procedures.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  {procedures.length === 0 ? (
+                    <EmptyNote label="No procedures recorded for this encounter." />
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Procedure</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Performed</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {procedures.map((proc) => (
+                          <tr key={proc.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                              {proc.code?.text || proc.code?.coding?.[0]?.display || '—'}
+                            </td>
+                            <td className="py-2.5 pr-4"><StatusPill status={proc.status} /></td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">
+                              {formatDT((proc as any).occurrenceDateTime || proc.occurrencePeriod?.start)}
+                            </td>
+                            <td className="py-2.5 text-xs text-gray-600">{proc.note?.[0]?.text || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
