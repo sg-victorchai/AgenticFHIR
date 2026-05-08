@@ -303,9 +303,17 @@ const PatientQueuePage: React.FC = () => {
   const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery({ from: fromISO, to: toISO });
   const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
 
-  const encounters: Encounter[] = (bundle as Bundle<Resource> | undefined)?.entry
+  // Client-side date guard — ensures only encounters whose actualPeriod.start
+  // falls within [fromISO, toISO] are shown, regardless of server filtering.
+  const encounters: Encounter[] = ((bundle as Bundle<Resource> | undefined)?.entry
     ?.filter((e) => e.resource?.resourceType === 'Encounter')
-    .map((e) => e.resource as Encounter) ?? [];
+    .map((e) => e.resource as Encounter) ?? [])
+    .filter((enc) => {
+      const start = enc.actualPeriod?.start ?? (enc as any).period?.start;
+      if (!start) return false;
+      const encDate = start.split('T')[0]; // 'YYYY-MM-DD'
+      return encDate >= fromISO && encDate <= toISO;
+    });
 
   const pending = encounters.filter((e) => PENDING_STATUSES.has(e.status));
   const inProgress = encounters.filter((e) => INPROGRESS_STATUSES.has(e.status));
