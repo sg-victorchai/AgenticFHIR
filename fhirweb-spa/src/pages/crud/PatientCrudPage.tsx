@@ -482,14 +482,16 @@ const PatientCrudPage: React.FC = () => {
       };
 
       if (isNew) {
-        // Create new resource
-        await createPatient(cleanedFormData).unwrap();
+        // Create new resource, then go straight to encounter registration
+        const newPatient = await createPatient(cleanedFormData).unwrap();
+        navigate(`/patient/${newPatient.id}/encounter`);
+        return;
       } else {
         // Update existing resource
         await updatePatient(cleanedFormData).unwrap();
       }
 
-      // Only navigate back if operation was successful
+      // Only navigate back if operation was successful (update case)
       navigate('/patients');
     } catch (error: any) {
       console.error('Error saving patient:', error);

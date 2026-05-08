@@ -4,7 +4,6 @@ import {
   useGetPatientQuery,
   useGetResourceByIdQuery,
   useSearchByEncounterQuery,
-  useSearchChildEncountersQuery,
   useCreateResourceMutation,
   useUpdateResourceMutation,
 } from '../../services/fhir/client';
@@ -119,14 +118,6 @@ const nowFHIR = (): string => {
 
 const localNow = (): string => {
   const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-};
-
-const localDatePlusDays = (days: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 16);
@@ -1203,179 +1194,6 @@ const AddCarePlanForm: React.FC<AddFormProps> = ({
   );
 };
 
-interface AddAdmissionFormProps extends AddFormProps {
-  diagnosisItems: Array<{ id: string; display: string }>;
-}
-
-const AddAdmissionForm: React.FC<AddAdmissionFormProps> = ({
-  patientId,
-  patientName,
-  encounterId,
-  createResource,
-  isSaving,
-  diagnosisItems,
-  onDone,
-}) => {
-  const [form, setForm] = useState({
-    admDate: localNow(),
-    disDate: localDatePlusDays(5),
-    stayDays: '5',
-    reason: '',
-  });
-  const [err, setErr] = useState('');
-  const handleSave = async () => {
-    setErr('');
-    if (!form.reason.trim()) {
-      setErr('Enter the reason for admission.');
-      return;
-    }
-    const enc = {
-      resourceType: 'Encounter' as const,
-      status: 'in-progress' as const,
-      class: [
-        {
-          coding: [
-            {
-              system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-              code: 'IMP',
-              display: 'inpatient encounter',
-            },
-          ],
-        },
-      ],
-      type: [
-        {
-          coding: [
-            {
-              system: 'http://snomed.info/sct',
-              code: '32485007',
-              display: 'Hospital admission (procedure)',
-            },
-          ],
-          text: 'Inpatient hospital admission',
-        },
-      ],
-      subject: { reference: `Patient/${patientId}`, display: patientName },
-      partOf: { reference: `Encounter/${encounterId}` },
-      actualPeriod: {
-        start: toFHIRDateTime(form.admDate),
-        end: toFHIRDateTime(form.disDate),
-      },
-      reason: [{ value: [{ concept: { text: form.reason.trim() } }] }],
-      ...(diagnosisItems.length > 0
-        ? {
-            diagnosis: diagnosisItems.map((d) => ({
-              condition: [
-                {
-                  reference: {
-                    reference: `Condition/${d.id}`,
-                    display: d.display,
-                  },
-                },
-              ],
-              use: [
-                {
-                  coding: [
-                    {
-                      system:
-                        'http://terminology.hl7.org/CodeSystem/diagnosis-role',
-                      code: 'AD',
-                      display: 'Admission diagnosis',
-                    },
-                  ],
-                },
-              ],
-            })),
-          }
-        : {}),
-    };
-    const res = await createResource({
-      resourceType: 'Encounter',
-      resource: enc as any,
-    });
-    if ('data' in res) {
-      onDone?.();
-    } else {
-      setErr('Failed to create admission. Please retry.');
-    }
-  };
-  return (
-    <div className="space-y-3">
-      {diagnosisItems.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-xs text-blue-700">
-          <strong>Admission diagnoses:</strong>{' '}
-          {diagnosisItems.map((d) => d.display).join(', ')}
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={labelCls}>Admission Date & Time</label>
-          <input
-            type="datetime-local"
-            className={fieldCls}
-            value={form.admDate}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, admDate: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label className={labelCls}>Planned Discharge</label>
-          <input
-            type="datetime-local"
-            className={fieldCls}
-            value={form.disDate}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, disDate: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label className={labelCls}>Stay Duration</label>
-          <select
-            className={fieldCls}
-            value={form.stayDays}
-            onChange={(e) => {
-              const days = parseInt(e.target.value);
-              setForm((s) => ({
-                ...s,
-                stayDays: e.target.value,
-                disDate: localDatePlusDays(days),
-              }));
-            }}
-          >
-            {['1', '2', '3', '5', '7', '10', '14', '21'].map((d) => (
-              <option key={d} value={d}>
-                {d} day{parseInt(d) !== 1 ? 's' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className={labelCls}>
-            Reason for Admission <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            placeholder="e.g. Acute decompensated HF"
-            className={fieldCls}
-            value={form.reason}
-            onChange={(e) => setForm((s) => ({ ...s, reason: e.target.value }))}
-          />
-        </div>
-      </div>
-      {err && <p className="text-xs text-red-600">{err}</p>}
-      <button
-        onClick={handleSave}
-        disabled={isSaving}
-        className="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-1.5 px-5 rounded-md disabled:opacity-50 transition-colors"
-      >
-        {isSaving ? 'Admitting…' : 'Confirm Admission'}
-      </button>
-    </div>
-  );
-};
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const ConsultNoteDetailPage: React.FC = () => {
@@ -1413,8 +1231,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     { resourceType: 'CarePlan', encounterId: encounterId! },
     { skip: !encounterId },
   );
-  const { data: childEncBundle, isLoading: childEncLoading } =
-    useSearchChildEncountersQuery(encounterId!, { skip: !encounterId });
   const { data: drBundle, isLoading: drLoading } = useSearchByEncounterQuery(
     { resourceType: 'DiagnosticReport', encounterId: encounterId! },
     { skip: !encounterId },
@@ -1438,7 +1254,6 @@ const ConsultNoteDetailPage: React.FC = () => {
   const conditions = extractResources<Condition>(condBundle);
   const medications = extractResources<MedicationRequest>(medBundle);
   const carePlans = extractResources<CarePlan>(cpBundle);
-  const childEncounters = extractResources<Encounter>(childEncBundle);
   const diagnosticReports = extractResources<DiagnosticReport>(drBundle);
   const medicationDispenses = extractResources<MedicationDispense>(medDispBundle);
   const medicationStatements = extractResources<MedicationStatement>(medStatBundle);
@@ -1523,13 +1338,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     encounter?.type?.[0]?.text ||
     'Encounter';
   const isEditable = encounter?.status === 'in-progress';
-  const inpatientAdmission = childEncounters.find((e) =>
-    e.class?.some((c) => c.coding?.some((cd) => cd.code === 'IMP')),
-  );
-  const diagnosisItemsForAdmission = conditions.map((c) => ({
-    id: c.id || '',
-    display: c.code?.text || c.code?.coding?.[0]?.display || 'Diagnosis',
-  }));
 
   const isLoading =
     encounterLoading ||
@@ -1538,7 +1346,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     condLoading ||
     medLoading ||
     cpLoading ||
-    childEncLoading ||
     drLoading ||
     medDispLoading ||
     medStatLoading ||
@@ -1569,7 +1376,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     { id: 'medication-statement', label: 'Medication Statement', icon: '💊', indent: true },
     { id: 'procedure', label: 'Procedure', icon: '⚕️' },
     { id: 'care-plan', label: 'Care Plan', icon: '📝' },
-    { id: 'admission', label: 'Admission', icon: '🏥' },
   ];
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -2009,42 +1815,6 @@ const ConsultNoteDetailPage: React.FC = () => {
                     )}
                   </Section>
 
-                  {/* ── 6. Inpatient Admission ── */}
-                  <Section sectionKey="admission" icon="Adm" title="Inpatient Admission" count={inpatientAdmission ? 1 : 0} isEditable={isEditable && !inpatientAdmission} addLabel="Admit Patient" addForm={<AddAdmissionForm {...formProps} diagnosisItems={diagnosisItemsForAdmission} />}>
-                    {!inpatientAdmission ? (
-                      <EmptyNote label="No inpatient admission linked to this encounter." />
-                    ) : (
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-200 text-orange-800 uppercase tracking-wide">Inpatient</span>
-                          <StatusPill status={inpatientAdmission.status} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission</div>
-                            <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.start)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Planned Discharge</div>
-                            <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.end)}</div>
-                          </div>
-                          {(inpatientAdmission as any).reason?.[0]?.value?.[0]?.concept?.text && (
-                            <div className="col-span-2">
-                              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Reason for Admission</div>
-                              <div className="text-gray-800">{(inpatientAdmission as any).reason[0].value[0].concept.text}</div>
-                            </div>
-                          )}
-                          {inpatientAdmission.diagnosis?.[0]?.condition?.[0]?.reference?.display && (
-                            <div className="col-span-2">
-                              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission Diagnosis</div>
-                              <div className="text-gray-800">{inpatientAdmission.diagnosis[0].condition[0].reference.display}</div>
-                            </div>
-                          )}
-                          <div className="col-span-2 text-xs font-mono text-gray-400">Encounter ID: {inpatientAdmission.id}</div>
-                        </div>
-                      </div>
-                    )}
-                  </Section>
                 </div>
               )}
 
@@ -2921,51 +2691,7 @@ const ConsultNoteDetailPage: React.FC = () => {
               )}
 
               {/* ── Inpatient Admission ── */}
-              {activeSection === 'admission' && (
-                <Section
-                  sectionKey="admission"
-                  icon="Adm"
-                  title="Inpatient Admission"
-                  count={inpatientAdmission ? 1 : 0}
-                  isEditable={isEditable && !inpatientAdmission}
-                  addLabel="Admit Patient"
-                  addForm={<AddAdmissionForm {...formProps} diagnosisItems={diagnosisItemsForAdmission} />}
-                >
-                  {!inpatientAdmission ? (
-                    <EmptyNote label="No inpatient admission linked to this encounter." />
-                  ) : (
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-200 text-orange-800 uppercase tracking-wide">Inpatient</span>
-                        <StatusPill status={inpatientAdmission.status} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission</div>
-                          <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.start)}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Planned Discharge</div>
-                          <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.end)}</div>
-                        </div>
-                        {(inpatientAdmission as any).reason?.[0]?.value?.[0]?.concept?.text && (
-                          <div className="col-span-2">
-                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Reason for Admission</div>
-                            <div className="text-gray-800">{(inpatientAdmission as any).reason[0].value[0].concept.text}</div>
-                          </div>
-                        )}
-                        {inpatientAdmission.diagnosis?.[0]?.condition?.[0]?.reference?.display && (
-                          <div className="col-span-2">
-                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission Diagnosis</div>
-                            <div className="text-gray-800">{inpatientAdmission.diagnosis[0].condition[0].reference.display}</div>
-                          </div>
-                        )}
-                        <div className="col-span-2 text-xs font-mono text-gray-400">Encounter ID: {inpatientAdmission.id}</div>
-                      </div>
-                    </div>
-                  )}
-                </Section>
-              )}
+
             </>
           )}
 

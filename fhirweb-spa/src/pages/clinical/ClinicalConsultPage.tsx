@@ -6,7 +6,6 @@ import {
   useCreateResourceMutation,
   useUpdateResourceMutation,
   useSearchByEncounterQuery,
-  useSearchChildEncountersQuery,
 } from '../../services/fhir/client';
 import { Encounter } from 'fhir/r5';
 import type { Observation, ServiceRequest, Condition, MedicationRequest, CarePlan } from 'fhir/r5';
@@ -19,8 +18,7 @@ type TabId =
   | 'lab'
   | 'rad'
   | 'assessment'
-  | 'management'
-  | 'admission';
+  | 'management';
 
 interface RecordedItem {
   id: string;
@@ -37,7 +35,6 @@ const STEPS: { id: TabId; label: string; step: number; icon: string }[] = [
   { id: 'rad', label: 'Radiology Orders', step: 4, icon: '📡' },
   { id: 'assessment', label: 'Assessment', step: 5, icon: 'Dx' },
   { id: 'management', label: 'Management', step: 6, icon: 'Rx' },
-  { id: 'admission', label: 'Admission', step: 7, icon: '🏥' },
 ];
 
 const BODY_SYSTEMS = [
@@ -105,14 +102,6 @@ const nowFHIR = (): string => {
 
 const localNow = (): string => {
   const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-};
-
-const localDatePlusDays = (days: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 16);
@@ -240,7 +229,6 @@ const ClinicalConsultPage: React.FC = () => {
     { resourceType: 'CarePlan', encounterId: encounterId! },
     { skip: !encounterId }
   );
-  const { data: childEncBundle } = useSearchChildEncountersQuery(encounterId!, { skip: !encounterId });
 
   const patientName = patient
     ? patient.name?.[0]?.text ||
@@ -268,7 +256,6 @@ const ClinicalConsultPage: React.FC = () => {
   const [diagnosisItems, setDiagnosisItems] = useState<RecordedItem[]>([]);
   const [medicationItems, setMedicationItems] = useState<RecordedItem[]>([]);
   const [carePlanItem, setCarePlanItem] = useState<RecordedItem | null>(null);
-  const [admissionItem, setAdmissionItem] = useState<RecordedItem | null>(null);
   const [rawVitals, setRawVitals] = useState<Observation[]>([]);
   const [isEditingVitals, setIsEditingVitals] = useState(false);
 
@@ -355,19 +342,10 @@ const ClinicalConsultPage: React.FC = () => {
       setCarePlanItem({ id: cp.id!, display: cp.title || 'Care Plan', note: cp.description || '' });
     }
 
-    const childEncs = (childEncBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as any[]) || [];
-    const inpatient = childEncs.find((e) => e.class?.[0]?.coding?.[0]?.code === 'IMP');
-    if (inpatient) {
-      setAdmissionItem({
-        id: inpatient.id,
-        display: 'Inpatient Admission (pre-existing)',
-        note: inpatient.reason?.[0]?.value?.[0]?.concept?.text || '',
-      });
-    }
-  }, [obsLoading, srLoading, condLoading, medLoading, cpLoading, obsBundle, srBundle, condBundle, medBundle, cpBundle, childEncBundle]);
+  }, [obsLoading, srLoading, condLoading, medLoading, cpLoading, obsBundle, srBundle, condBundle, medBundle, cpBundle]);
 
   const [isAddingMore, setIsAddingMore] = useState<Record<TabId, boolean>>({
-    vitals: false, exam: false, lab: false, rad: false, assessment: false, management: false, admission: false,
+    vitals: false, exam: false, lab: false, rad: false, assessment: false, management: false,
   });
 
   // ── VITALS ────────────────────────────────────────────────────────────────
@@ -944,104 +922,6 @@ const ClinicalConsultPage: React.FC = () => {
     }
   };
 
-  // ── ADMISSION ─────────────────────────────────────────────────────────────
-
-  const [admForm, setAdmForm] = useState({
-    admissionDate: localNow(),
-    dischargeDate: localDatePlusDays(5),
-    reason: '',
-    stayDays: '5',
-  });
-  const [admError, setAdmError] = useState('');
-
-  const handleSaveAdmission = async () => {
-    setAdmError('');
-    if (!admForm.reason.trim()) {
-      setAdmError('Enter a reason for admission.');
-      return;
-    }
-    if (admissionItem) {
-      setAdmError('Inpatient admission already created for this encounter.');
-      return;
-    }
-    const inpatientEnc = {
-      resourceType: 'Encounter' as const,
-      status: 'in-progress' as const,
-      class: [
-        {
-          coding: [
-            {
-              system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-              code: 'IMP',
-              display: 'inpatient encounter',
-            },
-          ],
-        },
-      ],
-      type: [
-        {
-          coding: [
-            {
-              system: 'http://snomed.info/sct',
-              code: '32485007',
-              display: 'Hospital admission (procedure)',
-            },
-          ],
-          text: 'Inpatient hospital admission for observation and management',
-        },
-      ],
-      subject: { reference: `Patient/${patientId}`, display: patientName },
-      partOf: { reference: `Encounter/${encounterId}` },
-      actualPeriod: {
-        start: toFHIRDateTime(admForm.admissionDate),
-        end: toFHIRDateTime(admForm.dischargeDate),
-      },
-      reason: [{ value: [{ concept: { text: admForm.reason.trim() } }] }],
-      ...(diagnosisItems.length > 0
-        ? {
-            diagnosis: diagnosisItems.map((d) => ({
-              condition: [
-                {
-                  reference: {
-                    reference: `Condition/${d.id}`,
-                    display: d.display,
-                  },
-                },
-              ],
-              use: [
-                {
-                  coding: [
-                    {
-                      system:
-                        'http://terminology.hl7.org/CodeSystem/diagnosis-role',
-                      code: 'AD',
-                      display: 'Admission diagnosis',
-                    },
-                  ],
-                },
-              ],
-            })),
-          }
-        : {}),
-    };
-    const result = await createResource({
-      resourceType: 'Encounter',
-      resource: inpatientEnc as any,
-    });
-    if ('data' in result && result.data?.id) {
-      const admitDate = new Date(admForm.admissionDate).toLocaleDateString();
-      const dischargeDate = new Date(
-        admForm.dischargeDate,
-      ).toLocaleDateString();
-      setAdmissionItem({
-        id: result.data.id,
-        display: `Inpatient Admission — ${admForm.stayDays} days`,
-        note: `${admitDate} → ${dischargeDate} · ${admForm.reason}`,
-      });
-    } else {
-      setAdmError('Failed to create admission record. Please try again.');
-    }
-  };
 
   // ─── Step badge counts ─────────────────────────────────────────────────────
 
@@ -1052,7 +932,6 @@ const ClinicalConsultPage: React.FC = () => {
     rad: radOrderItems.length,
     assessment: diagnosisItems.length,
     management: medicationItems.length + (carePlanItem ? 1 : 0),
-    admission: admissionItem ? 1 : 0,
   };
 
   // ─── Finish Consult ────────────────────────────────────────────────────────
@@ -2034,135 +1913,6 @@ const ClinicalConsultPage: React.FC = () => {
           </div>
         )}
 
-        {/* ── ADMIT PATIENT ── */}
-        {activeTab === 'admission' && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Admit Patient to Inpatient
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Create an inpatient admission linked to this outpatient encounter.
-              This is a new encounter record; the original visit remains
-              unchanged.
-            </p>
-
-            {admissionItem ? (
-              <div className="bg-green-50 border border-green-200 rounded-md p-5">
-                <div className="text-green-800 font-semibold text-sm mb-1">
-                  Inpatient admission created successfully
-                </div>
-                <div className="text-sm text-gray-700">
-                  {admissionItem.display}
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {admissionItem.note}
-                </div>
-                <div className="text-xs text-green-700 mt-2">
-                  Encounter ID: {admissionItem.id}
-                </div>
-                <div className="mt-3 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded p-2">
-                  This inpatient encounter is linked via{' '}
-                  <code>partOf: Encounter/{encounterId}</code>
-                </div>
-              </div>
-            ) : (
-              <>
-                {diagnosisItems.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-5 text-sm">
-                    <span className="font-medium text-blue-800">
-                      Admission diagnoses will be linked:{' '}
-                    </span>
-                    <span className="text-blue-700">
-                      {diagnosisItems.map((d) => d.display).join(', ')}
-                    </span>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>
-                      Admission Date &amp; Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      className={fieldCls}
-                      value={admForm.admissionDate}
-                      onChange={(e) =>
-                        setAdmForm((f) => ({
-                          ...f,
-                          admissionDate: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Planned Discharge</label>
-                    <input
-                      type="datetime-local"
-                      className={fieldCls}
-                      value={admForm.dischargeDate}
-                      onChange={(e) =>
-                        setAdmForm((f) => ({
-                          ...f,
-                          dischargeDate: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Stay Duration (days)</label>
-                    <select
-                      className={fieldCls}
-                      value={admForm.stayDays}
-                      onChange={(e) => {
-                        const days = parseInt(e.target.value);
-                        const newDischarge = localDatePlusDays(days);
-                        setAdmForm((f) => ({
-                          ...f,
-                          stayDays: e.target.value,
-                          dischargeDate: newDischarge,
-                        }));
-                      }}
-                    >
-                      {['1', '2', '3', '5', '7', '10', '14', '21', '28'].map(
-                        (d) => (
-                          <option key={d} value={d}>
-                            {d} day{parseInt(d) !== 1 ? 's' : ''}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>
-                      Reason for Admission{' '}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Acute decompensated heart failure, IV diuresis"
-                      className={fieldCls}
-                      value={admForm.reason}
-                      onChange={(e) =>
-                        setAdmForm((f) => ({ ...f, reason: e.target.value }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <ErrorBox msg={admError} />
-
-                <button
-                  onClick={handleSaveAdmission}
-                  disabled={isCreating}
-                  className="mt-4 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-2 px-6 rounded-md disabled:opacity-50 transition-colors"
-                >
-                  {isCreating ? 'Admitting...' : 'Confirm Admission'}
-                </button>
-              </>
-            )}
-          </div>
-        )}
       </div>
       </main>
       </div>
