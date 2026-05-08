@@ -1579,6 +1579,14 @@ const ConsultNoteDetailPage: React.FC = () => {
 
   useEffect(() => { setFilterText(''); setExpandedId(null); }, [activeSection]);
 
+  const codeBadge = (coding?: Array<{system?: string; code?: string}>) => {
+    if (!coding?.length) return null;
+    const c = coding[0];
+    if (!c.code) return null;
+    const prefix = c.system?.includes('snomed') ? 'SNOMED' : c.system?.includes('loinc') ? 'LOINC' : c.system?.includes('rxnorm') ? 'RxNorm' : '';
+    return `${prefix ? prefix + ' ' : ''}${c.code}`;
+  };
+
   return (
     // Escape the container's px-4 py-8 padding to go full-width
     <div className="-mx-4 -mt-8 flex flex-col min-h-screen">
@@ -2317,15 +2325,7 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Lab Results ── */}
               {activeSection === 'lab-results' && (
-                <Section
-                  sectionKey="investigations"
-                  icon="🧪"
-                  title="Lab Results"
-                  count={labReports.length}
-                  isEditable={false}
-                  addLabel=""
-                  addForm={null}
-                >
+                <Section sectionKey="investigations" icon="🧪" title="Lab Results" count={labReports.length} isEditable={false} addLabel="" addForm={null}>
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = labReports.filter((dr) => {
@@ -2335,45 +2335,56 @@ const ConsultNoteDetailPage: React.FC = () => {
                     return filtered.length === 0 ? (
                       <EmptyNote label="No lab results available for this encounter." />
                     ) : (
-                      <div className="space-y-3">
-                        {filtered.map((dr) => (
-                          <div
-                            key={dr.id}
-                            className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-300 transition-colors"
-                            onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-semibold text-gray-800 text-sm">
-                                {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <StatusPill status={dr.status} />
-                                <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
-                                <span className="text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</span>
-                              </div>
-                            </div>
-                            {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
-                            {dr.result && dr.result.length > 0 && (
-                              <div className="text-xs text-gray-500 mt-1">{dr.result.length} observation(s) linked</div>
-                            )}
-                            {expandedId === dr.id && (
-                              <div className="mt-3 pt-3 border-t border-blue-100 bg-blue-50 -mx-4 -mb-4 px-4 pb-3 rounded-b-lg">
-                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                  {dr.result && <div><span className="text-gray-500 font-medium">Result References:</span> {dr.result.length}</div>}
-                                  {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Presenter:</span> {dr.performer[0].display}</div>}
-                                  {dr.category?.[0]?.text && <div><span className="text-gray-500 font-medium">Category:</span> {dr.category[0].text}</div>}
-                                  {(dr.effectivePeriod?.start || dr.effectivePeriod?.end) && (
-                                    <div className="col-span-2">
-                                      <span className="text-gray-500 font-medium">Effective Period:</span>{' '}
-                                      {formatDT(dr.effectivePeriod?.start)} – {formatDT(dr.effectivePeriod?.end)}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
+                            <th className="pb-2" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((dr) => {
+                            const code = codeBadge(dr.code?.coding);
+                            const category = dr.category?.[0]?.coding?.[0]?.display || dr.category?.[0]?.text || '—';
+                            const conclusionCodes = dr.conclusionCode?.map((cc) => cc.coding?.[0]?.display).filter(Boolean).join(', ');
+                            return (
+                              <React.Fragment key={dr.id}>
+                                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}>
+                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                    {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
+                                    {code && <span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>}
+                                  </td>
+                                  <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
+                                  <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
+                                  <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
+                                </tr>
+                                {expandedId === dr.id && (
+                                  <tr>
+                                    <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                        {dr.code?.coding?.map((c, i) => (
+                                          <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
+                                        ))}
+                                        {(dr.effectiveDateTime || (dr as any).effectivePeriod?.start) && (
+                                          <div><span className="text-gray-500 font-medium">Effective:</span> {formatDT(dr.effectiveDateTime || (dr as any).effectivePeriod?.start)}</div>
+                                        )}
+                                        {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
+                                        {conclusionCodes && <div className="col-span-2"><span className="text-gray-500 font-medium">Finding Codes:</span> {conclusionCodes}</div>}
+                                        {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
+                                        {dr.basedOn?.[0]?.reference && <div><span className="text-gray-500 font-medium">Based On:</span> <span className="font-mono text-xs">{dr.basedOn[0].reference}</span></div>}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     );
                   })()}
                 </Section>
@@ -2381,15 +2392,7 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Rad Reports ── */}
               {activeSection === 'rad-reports' && (
-                <Section
-                  sectionKey="investigations"
-                  icon="📡"
-                  title="Radiology Reports"
-                  count={radReports.length}
-                  isEditable={false}
-                  addLabel=""
-                  addForm={null}
-                >
+                <Section sectionKey="investigations" icon="📡" title="Radiology Reports" count={radReports.length} isEditable={false} addLabel="" addForm={null}>
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = radReports.filter((dr) => {
@@ -2399,41 +2402,56 @@ const ConsultNoteDetailPage: React.FC = () => {
                     return filtered.length === 0 ? (
                       <EmptyNote label="No radiology reports available for this encounter." />
                     ) : (
-                      <div className="space-y-3">
-                        {filtered.map((dr) => (
-                          <div
-                            key={dr.id}
-                            className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-300 transition-colors"
-                            onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-semibold text-gray-800 text-sm">
-                                {dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <StatusPill status={dr.status} />
-                                <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
-                                <span className="text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</span>
-                              </div>
-                            </div>
-                            {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
-                            {expandedId === dr.id && (
-                              <div className="mt-3 pt-3 border-t border-blue-100 bg-blue-50 -mx-4 -mb-4 px-4 pb-3 rounded-b-lg">
-                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                  {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
-                                  {(dr.effectivePeriod?.start || dr.effectivePeriod?.end) && (
-                                    <div className="col-span-2">
-                                      <span className="text-gray-500 font-medium">Effective Period:</span>{' '}
-                                      {formatDT(dr.effectivePeriod?.start)} – {formatDT(dr.effectivePeriod?.end)}
-                                    </div>
-                                  )}
-                                  {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
+                            <th className="pb-2" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((dr) => {
+                            const code = codeBadge(dr.code?.coding);
+                            const category = dr.category?.[0]?.coding?.[0]?.display || dr.category?.[0]?.text || '—';
+                            const conclusionCodes = dr.conclusionCode?.map((cc) => cc.coding?.[0]?.display).filter(Boolean).join(', ');
+                            return (
+                              <React.Fragment key={dr.id}>
+                                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}>
+                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                    {dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}
+                                    {code && <span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>}
+                                  </td>
+                                  <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
+                                  <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
+                                  <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
+                                </tr>
+                                {expandedId === dr.id && (
+                                  <tr>
+                                    <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                        {dr.code?.coding?.map((c, i) => (
+                                          <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
+                                        ))}
+                                        {(dr.effectiveDateTime || (dr as any).effectivePeriod?.start) && (
+                                          <div><span className="text-gray-500 font-medium">Effective:</span> {formatDT(dr.effectiveDateTime || (dr as any).effectivePeriod?.start)}</div>
+                                        )}
+                                        {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
+                                        {conclusionCodes && <div className="col-span-2"><span className="text-gray-500 font-medium">Finding Codes:</span> {conclusionCodes}</div>}
+                                        {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
+                                        {dr.basedOn?.[0]?.reference && <div><span className="text-gray-500 font-medium">Based On:</span> <span className="font-mono text-xs">{dr.basedOn[0].reference}</span></div>}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     );
                   })()}
                 </Section>
@@ -2581,6 +2599,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
                                   {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                  {(() => { const c = codeBadge((med.medication as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
                                 </td>
                                 <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
                                 <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
@@ -2591,6 +2610,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 <tr>
                                   <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {(med.medication as any)?.concept?.coding?.[0]?.code && (
+                                        <div><span className="text-gray-500 font-medium">Med Code:</span> <span className="font-mono">{codeBadge((med.medication as any)?.concept?.coding) || (med.medication as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      )}
                                       {med.dosageInstruction?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Full Dosage:</span> {med.dosageInstruction[0].text}</div>}
                                       {med.dosageInstruction?.[0]?.route?.coding?.[0]?.display && <div><span className="text-gray-500 font-medium">Route:</span> {med.dosageInstruction[0].route.coding[0].display}</div>}
                                       {med.dosageInstruction?.[0]?.doseAndRate?.[0]?.doseQuantity && (
@@ -2652,6 +2674,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
                                   {(disp.medication as any)?.concept?.text || (disp.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                  {(() => { const c = codeBadge((disp.medication as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
                                 </td>
                                 <td className="py-2.5 pr-4 text-xs text-gray-600">
                                   {disp.quantity?.value ? `${disp.quantity.value} ${disp.quantity.unit || ''}` : '—'}
@@ -2664,6 +2687,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 <tr>
                                   <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {(disp.medication as any)?.concept?.coding?.[0]?.code && (
+                                        <div><span className="text-gray-500 font-medium">Med Code:</span> <span className="font-mono">{codeBadge((disp.medication as any)?.concept?.coding) || (disp.medication as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      )}
                                       {disp.quantity && <div><span className="text-gray-500 font-medium">Quantity:</span> {disp.quantity.value} {disp.quantity.unit}</div>}
                                       {(disp as any).daysSupply?.value && <div><span className="text-gray-500 font-medium">Days Supply:</span> {(disp as any).daysSupply.value}</div>}
                                       {disp.whenHandedOver && <div><span className="text-gray-500 font-medium">When Handed Over:</span> {formatDT(disp.whenHandedOver)}</div>}
@@ -2720,6 +2746,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
                                   {(stmt.medication as any)?.concept?.text || (stmt.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                  {(() => { const c = codeBadge((stmt.medication as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
                                 </td>
                                 <td className="py-2.5 pr-4 text-xs text-gray-600">{stmt.dosage?.[0]?.text || '—'}</td>
                                 <td className="py-2.5 pr-4"><StatusPill status={stmt.status} /></td>
@@ -2730,6 +2757,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 <tr>
                                   <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {(stmt.medication as any)?.concept?.coding?.[0]?.code && (
+                                        <div><span className="text-gray-500 font-medium">Med Code:</span> <span className="font-mono">{codeBadge((stmt.medication as any)?.concept?.coding) || (stmt.medication as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      )}
                                       {stmt.dosage?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Dosage:</span> {stmt.dosage[0].text}</div>}
                                       {(stmt as any).effectivePeriod?.start && <div><span className="text-gray-500 font-medium">Effective Start:</span> {formatDate((stmt as any).effectivePeriod.start)}</div>}
                                       {(stmt as any).effectivePeriod?.end && <div><span className="text-gray-500 font-medium">Effective End:</span> {formatDate((stmt as any).effectivePeriod.end)}</div>}
@@ -2817,15 +2847,7 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Care Plan ── */}
               {activeSection === 'care-plan' && (
-                <Section
-                  sectionKey="care-plan"
-                  icon="📝"
-                  title="Care Plan"
-                  count={carePlans.length}
-                  isEditable={isEditable}
-                  addLabel="Add Care Plan"
-                  addForm={<AddCarePlanForm {...formProps} />}
-                >
+                <Section sectionKey="care-plan" icon="📝" title="Care Plan" count={carePlans.length} isEditable={isEditable} addLabel="Add Care Plan" addForm={<AddCarePlanForm {...formProps} />}>
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = carePlans.filter((cp) => {
@@ -2835,25 +2857,50 @@ const ConsultNoteDetailPage: React.FC = () => {
                     return filtered.length === 0 ? (
                       <EmptyNote label="No care plan recorded for this encounter." />
                     ) : (
-                      <div className="space-y-3">
-                        {filtered.map((cp) => (
-                          <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
-                              <div className="flex items-center gap-2">
-                                <StatusPill status={cp.status} />
-                                <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
-                              </div>
-                            </div>
-                            {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
-                            {cp.note?.[0]?.text && (
-                              <div className="mt-2 border-t border-emerald-100 pt-2">
-                                <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Title</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Intent</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Created</th>
+                            <th className="pb-2" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((cp) => (
+                            <React.Fragment key={cp.id}>
+                              <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === cp.id ? null : (cp.id ?? null))}>
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {cp.title || 'Care Plan'}
+                                  {cp.category?.[0]?.coding?.[0]?.code && (
+                                    <span className="ml-2 text-xs font-mono text-gray-400">[{codeBadge(cp.category[0].coding) || cp.category[0].coding[0].code}]</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 pr-4"><StatusPill status={cp.status} /></td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-500 capitalize">{cp.intent || '—'}</td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDate(cp.created)}</td>
+                                <td className="py-2.5 text-xs text-gray-400">{expandedId === cp.id ? '▲' : '▼'}</td>
+                              </tr>
+                              {expandedId === cp.id && (
+                                <tr>
+                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {cp.category?.[0]?.coding?.[0]?.code && (
+                                        <div><span className="text-gray-500 font-medium">Category Code:</span> <span className="font-mono">{codeBadge(cp.category[0].coding) || cp.category[0].coding[0].code}</span></div>
+                                      )}
+                                      {cp.period?.start && <div><span className="text-gray-500 font-medium">Period Start:</span> {formatDate(cp.period.start)}</div>}
+                                      {cp.period?.end && <div><span className="text-gray-500 font-medium">Period End:</span> {formatDate(cp.period.end)}</div>}
+                                      {cp.description && <div className="col-span-2"><span className="text-gray-500 font-medium">Description:</span> {cp.description}</div>}
+                                      {cp.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {cp.note[0].text}</div>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
                     );
                   })()}
                 </Section>
