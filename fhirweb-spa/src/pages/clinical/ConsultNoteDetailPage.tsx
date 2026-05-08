@@ -13,6 +13,8 @@ import {
   Observation,
   Condition,
   MedicationRequest,
+  MedicationDispense,
+  MedicationStatement,
   CarePlan,
   Bundle,
   Resource,
@@ -220,15 +222,6 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-const SectionDivider: React.FC<{ label: string }> = ({ label }) => (
-  <div className="flex items-center gap-2 my-3">
-    <div className="flex-1 border-t border-gray-100" />
-    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-      {label}
-    </span>
-    <div className="flex-1 border-t border-gray-100" />
-  </div>
-);
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -1400,6 +1393,14 @@ const ConsultNoteDetailPage: React.FC = () => {
     { resourceType: 'DiagnosticReport', encounterId: encounterId! },
     { skip: !encounterId },
   );
+  const { data: medDispBundle, isLoading: medDispLoading } = useSearchByEncounterQuery(
+    { resourceType: 'MedicationDispense', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
+  const { data: medStatBundle, isLoading: medStatLoading } = useSearchByEncounterQuery(
+    { resourceType: 'MedicationStatement', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
 
   const encounter = encounterResource as Encounter | undefined;
   const allObs = extractResources<Observation>(obsBundle);
@@ -1409,6 +1410,16 @@ const ConsultNoteDetailPage: React.FC = () => {
   const carePlans = extractResources<CarePlan>(cpBundle);
   const childEncounters = extractResources<Encounter>(childEncBundle);
   const diagnosticReports = extractResources<DiagnosticReport>(drBundle);
+  const medicationDispenses = extractResources<MedicationDispense>(medDispBundle);
+  const medicationStatements = extractResources<MedicationStatement>(medStatBundle);
+
+  const RAD_SNOMED = '394914008';
+  const labOrders = serviceRequests.filter(
+    (sr) => !((sr.code as any)?.concept?.coding?.[0]?.code === RAD_SNOMED),
+  );
+  const radOrders = serviceRequests.filter(
+    (sr) => (sr.code as any)?.concept?.coding?.[0]?.code === RAD_SNOMED,
+  );
 
   const LAB_SYSTEM = 'http://terminology.hl7.org/CodeSystem/v2-0074';
   const labReports = diagnosticReports.filter((dr) =>
@@ -1427,12 +1438,6 @@ const ConsultNoteDetailPage: React.FC = () => {
   );
   const examFindings = allObs.filter((o) =>
     o.category?.some((c) => c.coding?.some((cd) => cd.code === 'exam')),
-  );
-  const otherObs = allObs.filter(
-    (o) =>
-      !o.category?.some((c) =>
-        c.coding?.some((cd) => cd.code === 'vital-signs' || cd.code === 'exam'),
-      ),
   );
 
   const patientName = patient
@@ -1467,7 +1472,9 @@ const ConsultNoteDetailPage: React.FC = () => {
     medLoading ||
     cpLoading ||
     childEncLoading ||
-    drLoading;
+    drLoading ||
+    medDispLoading ||
+    medStatLoading;
 
   useEffect(() => {
     if ((encounterResource as any)?.note?.[0]?.text) {
@@ -1507,10 +1514,16 @@ const ConsultNoteDetailPage: React.FC = () => {
     { id: 'vitals', label: 'Vital Signs', icon: '♥' },
     { id: 'exam', label: 'Physical Exam', icon: 'E' },
     { id: 'investigations', label: 'Investigations', icon: 'Ix' },
+    { id: 'lab-orders', label: 'Lab Orders', icon: '🔬', indent: true },
+    { id: 'rad-orders', label: 'Rad Orders', icon: '📷', indent: true },
     { id: 'lab-results', label: 'Lab Results', icon: '🧪', indent: true },
     { id: 'rad-reports', label: 'Rad Reports', icon: '📡', indent: true },
     { id: 'assessment', label: 'Assessment', icon: 'Dx' },
-    { id: 'management', label: 'Management', icon: 'Rx' },
+    { id: 'medications', label: 'Medications', icon: 'Rx' },
+    { id: 'medication-request', label: 'Medication Request', icon: '💊', indent: true },
+    { id: 'medication-dispense', label: 'Medication Dispense', icon: '💊', indent: true },
+    { id: 'medication-statement', label: 'Medication Statement', icon: '💊', indent: true },
+    { id: 'care-plan', label: 'Care Plan', icon: '📝' },
     { id: 'admission', label: 'Admission', icon: '🏥' },
   ];
 
@@ -1638,6 +1651,27 @@ const ConsultNoteDetailPage: React.FC = () => {
                     <h2 className="text-lg font-bold text-gray-800">Consultation Notes</h2>
                     <p className="text-sm text-gray-500 mt-1">{encounterReason}</p>
                   </div>
+
+                  {/* Clinical summary always visible */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                    {[
+                      { label: 'Vital Signs', count: vitals.length, color: 'bg-blue-50 border-blue-200 text-blue-700', section: 'vitals' },
+                      { label: 'Exam Findings', count: examFindings.length, color: 'bg-green-50 border-green-200 text-green-700', section: 'exam' },
+                      { label: 'Conditions', count: conditions.length, color: 'bg-amber-50 border-amber-200 text-amber-700', section: 'assessment' },
+                      { label: 'Medications', count: medications.length, color: 'bg-purple-50 border-purple-200 text-purple-700', section: 'medication-request' },
+                    ].map(({ label, count, color, section }) => (
+                      <button
+                        key={label}
+                        onClick={() => setActiveSection(section)}
+                        className={`border rounded-lg p-3 text-left hover:opacity-80 transition-opacity ${color}`}
+                      >
+                        <div className="text-2xl font-bold">{count}</div>
+                        <div className="text-xs font-medium mt-0.5">{label}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Free-text notes */}
                   {isEditable ? (
                     <div className="space-y-4">
                       <div>
@@ -1659,17 +1693,17 @@ const ConsultNoteDetailPage: React.FC = () => {
                         {isSavingNote ? 'Saving...' : 'Save Notes'}
                       </button>
                     </div>
-                  ) : (encounter as any)?.note?.length > 0 ? (
+                  ) : noteText ? (
                     <div className="space-y-3">
-                      {(encounter as any).note.map((n: any, i: number) => (
-                        <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{n.text}</p>
-                          {n.time && <p className="text-xs text-gray-400 mt-2">{formatDT(n.time)}</p>}
-                        </div>
-                      ))}
+                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Doctor's Notes</h3>
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{noteText}</p>
+                      </div>
                     </div>
                   ) : (
-                    <EmptyNote label="No consultation notes documented for this encounter." />
+                    <div className="text-sm text-gray-400 italic border border-dashed border-gray-200 rounded-lg p-4 text-center">
+                      No free-text notes documented. Use the sidebar to review individual clinical records.
+                    </div>
                   )}
                 </div>
               )}
@@ -1759,53 +1793,107 @@ const ConsultNoteDetailPage: React.FC = () => {
                 </Section>
               )}
 
-              {/* ── Investigations ── */}
+              {/* ── Investigations (parent overview) ── */}
               {activeSection === 'investigations' && (
                 <Section
                   sectionKey="investigations"
                   icon="Ix"
                   title="Investigations"
-                  count={serviceRequests.length + otherObs.length}
+                  count={serviceRequests.length + labReports.length + radReports.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Lab Orders', count: labOrders.length, section: 'lab-orders', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+                      { label: 'Rad Orders', count: radOrders.length, section: 'rad-orders', color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
+                      { label: 'Lab Results', count: labReports.length, section: 'lab-results', color: 'bg-green-50 border-green-200 text-green-700' },
+                      { label: 'Rad Reports', count: radReports.length, section: 'rad-reports', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+                    ].map(({ label, count, section, color }) => (
+                      <button
+                        key={label}
+                        onClick={() => setActiveSection(section)}
+                        className={`border rounded-lg p-3 text-left hover:opacity-80 transition-opacity ${color}`}
+                      >
+                        <div className="text-2xl font-bold">{count}</div>
+                        <div className="text-xs font-medium mt-0.5">{label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* ── Lab Orders ── */}
+              {activeSection === 'lab-orders' && (
+                <Section
+                  sectionKey="investigations"
+                  icon="🔬"
+                  title="Lab Orders"
+                  count={labOrders.length}
                   isEditable={isEditable}
-                  addLabel="Place Order"
+                  addLabel="Place Lab Order"
                   addForm={<AddOrderForm {...formProps} />}
                 >
-                  {serviceRequests.length === 0 && otherObs.length === 0 ? (
-                    <EmptyNote label="No investigation orders or results recorded." />
+                  {labOrders.length === 0 ? (
+                    <EmptyNote label="No lab orders placed for this encounter." />
                   ) : (
-                    <div className="space-y-5">
-                      {serviceRequests.length > 0 && (
-                        <div>
-                          <SectionDivider label="Orders" />
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                              {serviceRequests.map((sr) => (
-                                <tr key={sr.id} className="hover:bg-gray-50">
-                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                    {(sr.code as any)?.concept?.text || (sr.code as any)?.concept?.coding?.[0]?.display || '—'}
-                                  </td>
-                                  <td className="py-2.5 pr-4 text-xs text-gray-500">
-                                    {(sr.code as any)?.concept?.coding?.[0]?.display || '—'}
-                                  </td>
-                                  <td className="py-2.5 pr-4">
-                                    <StatusPill status={sr.priority || 'routine'} />
-                                  </td>
-                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {labOrders.map((sr) => (
+                          <tr key={sr.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                            <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </Section>
+              )}
+
+              {/* ── Rad Orders ── */}
+              {activeSection === 'rad-orders' && (
+                <Section
+                  sectionKey="investigations"
+                  icon="📷"
+                  title="Radiology Orders"
+                  count={radOrders.length}
+                  isEditable={isEditable}
+                  addLabel="Place Radiology Order"
+                  addForm={<AddOrderForm {...formProps} />}
+                >
+                  {radOrders.length === 0 ? (
+                    <EmptyNote label="No radiology orders placed for this encounter." />
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {radOrders.map((sr) => (
+                          <tr key={sr.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                            <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   )}
                 </Section>
               )}
@@ -1932,83 +2020,190 @@ const ConsultNoteDetailPage: React.FC = () => {
                 </Section>
               )}
 
-              {/* ── Management ── */}
-              {activeSection === 'management' && (
+              {/* ── Medications (parent overview) ── */}
+              {activeSection === 'medications' && (
+                <Section
+                  sectionKey="medications"
+                  icon="Rx"
+                  title="Medications"
+                  count={medications.length + medicationDispenses.length + medicationStatements.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Medication Requests', count: medications.length, section: 'medication-request', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+                      { label: 'Medication Dispenses', count: medicationDispenses.length, section: 'medication-dispense', color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
+                      { label: 'Medication Statements', count: medicationStatements.length, section: 'medication-statement', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+                    ].map(({ label, count, section, color }) => (
+                      <button
+                        key={label}
+                        onClick={() => setActiveSection(section)}
+                        className={`border rounded-lg p-3 text-left hover:opacity-80 transition-opacity ${color}`}
+                      >
+                        <div className="text-2xl font-bold">{count}</div>
+                        <div className="text-xs font-medium mt-0.5">{label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* ── Medication Request ── */}
+              {activeSection === 'medication-request' && (
                 <Section
                   sectionKey="management"
-                  icon="Rx"
-                  title="Management Plan"
-                  count={medications.length + carePlans.length}
+                  icon="💊"
+                  title="Medication Requests"
+                  count={medications.length}
                   isEditable={isEditable}
-                  addLabel="Add Medication / Plan"
-                  addForm={
-                    <div className="space-y-5">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Medication</p>
-                        <AddMedicationForm {...formProps} />
-                      </div>
-                      <div className="border-t border-blue-100 pt-4">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Care Plan</p>
-                        <AddCarePlanForm {...formProps} />
-                      </div>
-                    </div>
-                  }
+                  addLabel="Add Medication"
+                  addForm={<AddMedicationForm {...formProps} />}
                 >
-                  {medications.length === 0 && carePlans.length === 0 ? (
-                    <EmptyNote label="No medications or care plan recorded." />
+                  {medications.length === 0 ? (
+                    <EmptyNote label="No medication requests recorded." />
                   ) : (
-                    <div className="space-y-5">
-                      {medications.length > 0 && (
-                        <div>
-                          <SectionDivider label="Medications" />
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                              {medications.map((med) => (
-                                <tr key={med.id} className="hover:bg-gray-50">
-                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                    {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                                  </td>
-                                  <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
-                                  <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
-                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                      {carePlans.length > 0 && (
-                        <div>
-                          <SectionDivider label="Care Plan" />
-                          <div className="space-y-3">
-                            {carePlans.map((cp) => (
-                              <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
-                                  <div className="flex items-center gap-2">
-                                    <StatusPill status={cp.status} />
-                                    <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
-                                  </div>
-                                </div>
-                                {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
-                                {cp.note?.[0]?.text && (
-                                  <div className="mt-2 border-t border-emerald-100 pt-2">
-                                    <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {medications.map((med) => (
+                          <tr key={med.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                              {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                            </td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
+                            <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </Section>
+              )}
+
+              {/* ── Medication Dispense ── */}
+              {activeSection === 'medication-dispense' && (
+                <Section
+                  sectionKey="management"
+                  icon="💊"
+                  title="Medication Dispenses"
+                  count={medicationDispenses.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  {medicationDispenses.length === 0 ? (
+                    <EmptyNote label="No medication dispenses recorded." />
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Quantity</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {medicationDispenses.map((disp) => (
+                          <tr key={disp.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                              {(disp.medication as any)?.concept?.text || (disp.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                            </td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-600">
+                              {disp.quantity?.value ? `${disp.quantity.value} ${disp.quantity.unit || ''}` : '—'}
+                            </td>
+                            <td className="py-2.5 pr-4"><StatusPill status={disp.status} /></td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(disp.whenHandedOver)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </Section>
+              )}
+
+              {/* ── Medication Statement ── */}
+              {activeSection === 'medication-statement' && (
+                <Section
+                  sectionKey="management"
+                  icon="💊"
+                  title="Medication Statements"
+                  count={medicationStatements.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  {medicationStatements.length === 0 ? (
+                    <EmptyNote label="No medication statements recorded." />
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-400 border-b border-gray-100">
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                          <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {medicationStatements.map((stmt) => (
+                          <tr key={stmt.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                              {(stmt.medication as any)?.concept?.text || (stmt.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                            </td>
+                            <td className="py-2.5 pr-4 text-xs text-gray-600">{stmt.dosage?.[0]?.text || '—'}</td>
+                            <td className="py-2.5 pr-4"><StatusPill status={stmt.status} /></td>
+                            <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT((stmt as any).dateAsserted)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </Section>
+              )}
+
+              {/* ── Care Plan ── */}
+              {activeSection === 'care-plan' && (
+                <Section
+                  sectionKey="care-plan"
+                  icon="📝"
+                  title="Care Plan"
+                  count={carePlans.length}
+                  isEditable={isEditable}
+                  addLabel="Add Care Plan"
+                  addForm={<AddCarePlanForm {...formProps} />}
+                >
+                  {carePlans.length === 0 ? (
+                    <EmptyNote label="No care plan recorded for this encounter." />
+                  ) : (
+                    <div className="space-y-3">
+                      {carePlans.map((cp) => (
+                        <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
+                            <div className="flex items-center gap-2">
+                              <StatusPill status={cp.status} />
+                              <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
+                            </div>
                           </div>
+                          {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
+                          {cp.note?.[0]?.text && (
+                            <div className="mt-2 border-t border-emerald-100 pt-2">
+                              <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </Section>
