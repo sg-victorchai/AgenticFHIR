@@ -2237,8 +2237,11 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 className="hover:bg-gray-50 cursor-pointer"
                                 onClick={() => setExpandedId(expandedId === sr.id ? null : (sr.id ?? null))}
                               >
-                                <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
-                                <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {(sr.code as any)?.concept?.text || '—'}
+                                  {(() => { const c = codeBadge((sr.code as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                </td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-500">{sr.category?.[0]?.coding?.[0]?.display || '—'}</td>
                                 <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
                                 <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
                                 <td className="py-2.5 text-xs text-gray-400">{expandedId === sr.id ? '▲' : '▼'}</td>
@@ -2247,6 +2250,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 <tr>
                                   <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {(sr.code as any)?.concept?.coding?.[0]?.code && (
+                                        <div><span className="text-gray-500 font-medium">Order Code:</span> <span className="font-mono">{codeBadge((sr.code as any)?.concept?.coding) || (sr.code as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      )}
+                                      <div><span className="text-gray-500 font-medium">Category:</span> {sr.category?.[0]?.coding?.[0]?.display || '—'}</div>
                                       <div><span className="text-gray-500 font-medium">Authored On:</span> {formatDT(sr.authoredOn)}</div>
                                       <div><span className="text-gray-500 font-medium">Priority:</span> {sr.priority || 'routine'}</div>
                                       {sr.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Notes:</span> {sr.note[0].text}</div>}
@@ -2299,7 +2306,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 className="hover:bg-gray-50 cursor-pointer"
                                 onClick={() => setExpandedId(expandedId === sr.id ? null : (sr.id ?? null))}
                               >
-                                <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
+                                <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                  {(sr.code as any)?.concept?.text || '—'}
+                                  {(() => { const c = codeBadge((sr.code as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                </td>
                                 <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
                                 <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
                                 <td className="py-2.5 text-xs text-gray-400">{expandedId === sr.id ? '▲' : '▼'}</td>
@@ -2308,6 +2318,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 <tr>
                                   <td colSpan={4} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                      {(sr.code as any)?.concept?.coding?.[0]?.code && (
+                                        <div><span className="text-gray-500 font-medium">Order Code:</span> <span className="font-mono">{codeBadge((sr.code as any)?.concept?.coding) || (sr.code as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      )}
+                                      <div><span className="text-gray-500 font-medium">Category:</span> {sr.category?.[0]?.coding?.[0]?.display || '—'}</div>
                                       <div><span className="text-gray-500 font-medium">Authored On:</span> {formatDT(sr.authoredOn)}</div>
                                       {sr.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Notes:</span> {sr.note[0].text}</div>}
                                     </div>
