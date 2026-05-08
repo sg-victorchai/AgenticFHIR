@@ -262,3 +262,142 @@ SMART on FHIR OAuth flow. `isSMARTContext()` checks for the presence of SMART la
 | Tag-based cache invalidation | Mutations declare which tags they invalidate; RTK Query automatically triggers refetches on dependent queries |
 | Dual data-fetching tools (RTK Query + React Query) | RTK Query is the primary layer for FHIR; TanStack React Query is available globally but not heavily used in current pages |
 | SSE via native `EventSource` | Simplest approach; browser reconnects automatically; API key sent as query param to work around EventSource header limitation |
+
+---
+
+## Clinical Section UI Pattern (ConsultNoteDetailPage)
+
+All sidebar sections in `ConsultNoteDetailPage` follow a **consistent table + expandable row** pattern:
+
+### Summary row
+```
+| <Name> [SNOMED/LOINC xxx] | <Category/Status> | <Date> | ▲/▼ |
+```
+- Terminology code rendered as `<span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>`
+- Code prefix auto-detected: `SNOMED`, `LOINC`, `RxNorm` from system URL via `codeBadge()` helper
+
+### Expanded row
+```tsx
+<td colSpan={N} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+    {/* labeled detail fields */}
+  </div>
+</td>
+```
+- Expand state managed by `expandedId: string | null` — clicking same row toggles it closed
+- `codeBadge(coding[])` helper: returns `"SNOMED 12345"` / `"LOINC 58410-2"` / `"RxNorm xyz"` based on system URL
+
+### Sections and their key columns
+
+| Section | Summary columns | Terminology shown |
+|---|---|---|
+| Lab Orders | Test `[code]` \| Category \| Priority \| Ordered | SNOMED from `sr.code.concept.coding` |
+| Rad Orders | Study `[code]` \| Priority \| Ordered | SNOMED from `sr.code.concept.coding` |
+| Lab Results | Test `[code]` \| Category \| Status \| Issued | LOINC + SNOMED from `dr.code.coding` |
+| Rad Reports | Study `[code]` \| Category \| Status \| Issued | SNOMED from `dr.code.coding` |
+| MedicationRequest/Dispense/Statement | Drug `[code]` \| Status \| Route \| Date | RxNorm/SNOMED from `med.medication.concept.coding` |
+| Care Plan | Title `[code]` \| Status \| Intent \| Created | SNOMED from `cp.category[0].coding` |
+
+---
+
+## FHIR Resource Structure Conventions
+
+### ServiceRequest (Lab / Rad Orders)
+
+```json
+{
+  "category": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "...", "display": "..." }] }],
+  "code": { "concept": { "text": "Test name only" } }
+}
+```
+
+- **Category** (`sr.category[0].coding[0]`) carries the order type code — NOT `sr.code`
+- **Code** (`sr.code.concept.text`) carries only the human-readable test/study name
+- Lab vs Rad split uses `isRadSR()`: checks `sr.category` first; falls back to `sr.code` for legacy records
+
+**SNOMED codes:**
+| Code | Meaning | Used for |
+|---|---|---|
+| `108252007` | Laboratory procedure | Lab ServiceRequest category |
+| `310061009` | Radiology order | Rad ServiceRequest category |
+| `394914008` | Radiology specialty | Rad ServiceRequest category (alt) |
+
+### DiagnosticReport (Lab Results / Rad Reports)
+
+```json
+{
+  "category": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "...", "display": "..." }] }]
+}
+```
+
+**Lab SNOMED codes (`LAB_SNOMED_CODES`):** `252275004`, `59524001`, `252276003`, `19851009`, `394579002`, `394607009`, `74728003`, `108252007`, `4321000179101`, `15220000`
+
+**Rad SNOMED codes (`RAD_SNOMED_CODES`):** `394914008`, `310061009`
+
+Both ServiceRequest and DiagnosticReport share the same `RAD_SNOMED_CODES` set for consistency.
+
+### Observation (Vitals)
+
+- Category: `vital-signs` (HL7 system `http://terminology.hl7.org/CodeSystem/observation-category`)
+- Codes: LOINC (e.g. `8867-4` HR, `8480-6` SBP, `8462-4` DBP, `8310-5` Temp, `59408-5` SpO2, `9279-1` RR)
+- **Update mode**: existing observations are PUT (not duplicated); `VITAL_CODE_TO_FIELD` maps LOINC → form field
+
+---
+
+## Patient Queue (`PatientQueuePage`)
+
+### Date filtering — two-layer approach
+1. **Server-side**: `date=[ge{from}, le{to}T23:59:59]` sent as array (serialised to `date=ge...&date=le...` by `query-string`)
+2. **Client-side guard**: filter by `enc.actualPeriod?.start.split('T')[0]` against `[fromISO, toISO]` — guarantees correctness regardless of server behaviour
+
+### Patient name / identifier resolution
+- `getTodayEncounters` includes `_include: 'Encounter:subject'` so Patient resources arrive in the same bundle
+- `patientMap: Map<string, Patient>` built from bundle entries (resourceType === 'Patient')
+- `resolvePatientName()`: reads `patient.name[0]` (text → prefix+given+family), falls back to `encounter.subject.display`
+- `resolvePatientIdentifier()`: uses `identifier.type.text` → `type.coding.display` → last URL path segment of `identifier.system`
+
+### Selection persistence
+- `mode`, `fromMonth`, `toMonth` stored in `sessionStorage` (`queue-mode`, `queue-from`, `queue-to`)
+- Restored via lazy state initialisers: `useState(() => sessionStorage.getItem(key) || default)`
+
+---
+
+## Role-Based UI Differences
+
+### PSA role
+| Context | Behaviour |
+|---|---|
+| Patient Queue | Shows: Mark Arrived, Cancel, View Patient. No consult actions |
+| Patient Search | Shows: Register + **View Visit Summary** → `/patient/:id/encounter` |
+| Visit Summary (`EncounterPage`) | **View Notes** only (no Start Consult, no Continue) |
+| Top nav | Queue link removed; Patient Search accessible |
+
+### Clinician role
+| Context | Behaviour |
+|---|---|
+| Patient Queue | Shows: Start Consult (pending), Resume Consult (in-progress), View Notes (completed) |
+| Patient Search | Shows: **Consult** → `/patient/:id/encounter` |
+| Consult wizard | Pre-loads existing FHIR data; tabs with data show view-only mode with edit option |
+
+---
+
+## Consult Wizard Pre-load Pattern (`ClinicalConsultPage`)
+
+On mount, all existing FHIR resources for the encounter are fetched and seeded into wizard state:
+
+```
+preloadedRef = useRef(false)   ← prevents re-init on re-renders
+useEffect([...loading flags]) → sets all item arrays from FHIR bundle data
+isAddingMore: Record<TabId, boolean>  ← per-tab add-new toggle
+isEditingVitals: boolean              ← vitals-specific (no "add more", only update)
+```
+
+**Vitals update flow:**
+1. `prepareVitalsEdit()` fills form fields from `rawVitals: Observation[]`
+2. `handleSaveVitals()` builds `existingMap` (loincCode → Observation), PUTs existing, POSTs new
+3. After save: `setVitalsItems(created)` replaces list; edit mode closed
+
+**Navigation flow:**
+- "Resume Consult" (Queue) → `/notes` (view page) → amber banner link → `/consult` (wizard)
+- Tabs already submitted show in view-only mode; "Edit" button re-enables the form
+
