@@ -1466,9 +1466,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     ),
   );
 
-  const encounterClass =
-    encounter?.class?.[0]?.coding?.[0]?.display ||
-    encounter?.class?.[0]?.coding?.[0]?.code || '—';
 
   const latestVitals = vitals.reduce<Record<string, Observation>>((acc, obs) => {
     const code = obs.code?.coding?.[0]?.code || '';
@@ -1680,34 +1677,6 @@ const ConsultNoteDetailPage: React.FC = () => {
                         </Link>
                       </div>
                     )}
-                    <div className="p-5">
-                      <div className="flex flex-col sm:flex-row gap-5">
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <div className="bg-slate-700 rounded-full h-14 w-14 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
-                            {patientName.charAt(0).toUpperCase() || '?'}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-gray-900 text-xl leading-tight">{patientName}</div>
-                            <div className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                              <span>DOB: <strong className="text-gray-700">{patient?.birthDate || '—'}</strong></span>
-                              <span>Sex: <strong className="text-gray-700">{patient?.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : '—'}</strong></span>
-                              {patient?.identifier?.[0]?.value && (
-                                <span>ID: <strong className="text-gray-700 font-mono">{patient.identifier[0].value}</strong></span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="border-t sm:border-t-0 sm:border-l border-gray-200 sm:pl-5 pt-4 sm:pt-0 flex-shrink-0 min-w-48">
-                          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Visit Details</div>
-                          <div className="font-semibold text-gray-800 text-base">{encounterReason}</div>
-                          <div className="text-sm text-gray-500 mt-1">{formatDT(encounter?.actualPeriod?.start)}</div>
-                          <div className="flex gap-2 mt-2 flex-wrap">
-                            {encounter && <StatusPill status={encounter.status} />}
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{encounterClass}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                     {/* Latest vitals strip */}
                     {Object.keys(latestVitals).length > 0 && (
                       <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">

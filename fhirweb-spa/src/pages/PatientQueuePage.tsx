@@ -127,7 +127,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
               )}
               {queueStatus === 'in-progress' && (
                 <Link
-                  to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+                  to={`/patient/${patientId}/encounter/${encounterId}/notes`}
                   className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                 >
                   Resume Consult
@@ -252,22 +252,20 @@ const QueueSection: React.FC<QueueSectionProps> = ({
 const PatientQueuePage: React.FC = () => {
   const role = useSelector((state: RootState) => state.ui.role);
   const todayISO = new Date().toISOString().split('T')[0];
-  const currentYearMonth = todayISO.slice(0, 7); // YYYY-MM
+  const currentYearMonth = todayISO.slice(0, 7);
 
+  const [mode, setMode] = useState<'today' | 'range'>('today');
   const [fromMonth, setFromMonth] = useState<string>(currentYearMonth);
   const [toMonth, setToMonth] = useState<string>(currentYearMonth);
 
-  // Derive first/last day of selected month range
-  const fromISO = `${fromMonth}-01`;
-  const toISO = (() => {
+  // In 'today' mode always query just today; in 'range' mode use month boundaries
+  const fromISO = mode === 'today' ? todayISO : `${fromMonth}-01`;
+  const toISO = mode === 'today' ? todayISO : (() => {
     const [y, m] = toMonth.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate(); // day 0 of next month = last day of this month
+    const lastDay = new Date(y, m, 0).getDate();
     const candidate = `${toMonth}-${String(lastDay).padStart(2, '0')}`;
-    return candidate > todayISO ? todayISO : candidate; // don't exceed today
+    return candidate > todayISO ? todayISO : candidate;
   })();
-
-  const isCurrentMonth = fromMonth === currentYearMonth && toMonth === currentYearMonth;
-  const isSingleMonth = fromMonth === toMonth;
 
   const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery({ from: fromISO, to: toISO });
   const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
@@ -296,9 +294,13 @@ const PatientQueuePage: React.FC = () => {
     const [y, m] = ym.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
   };
-  const rangeLabel = isSingleMonth
+  const todayLabel = new Date(todayISO + 'T00:00:00').toLocaleDateString('en-SG', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const rangeLabel = fromMonth === toMonth
     ? formatMonthLabel(fromMonth)
     : `${formatMonthLabel(fromMonth)} – ${formatMonthLabel(toMonth)}`;
+  const subtitleLabel = mode === 'today' ? todayLabel : rangeLabel;
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
@@ -307,10 +309,7 @@ const PatientQueuePage: React.FC = () => {
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Patient Queue</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {rangeLabel}
-              {!isCurrentMonth && <span className="ml-2 text-amber-600 font-medium">(past period)</span>}
-            </p>
+            <p className="text-sm text-gray-500 mt-0.5">{subtitleLabel}</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {role === 'psa' && (
@@ -330,40 +329,50 @@ const PatientQueuePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Date range controls */}
+        {/* Today / Date Range toggle */}
         <div className="flex items-center gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-          <span className="text-sm font-medium text-gray-600 shrink-0">Date range:</span>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">From</label>
-            <input
-              type="month"
-              value={fromMonth}
-              max={currentYearMonth}
-              onChange={(e) => {
-                setFromMonth(e.target.value);
-                if (e.target.value > toMonth) setToMonth(e.target.value);
-              }}
-              className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">To</label>
-            <input
-              type="month"
-              value={toMonth}
-              min={fromMonth}
-              max={currentYearMonth}
-              onChange={(e) => setToMonth(e.target.value)}
-              className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-          </div>
-          {!isCurrentMonth && (
+          <div className="flex rounded-md overflow-hidden border border-gray-200 text-sm font-medium shrink-0">
             <button
-              onClick={() => { setFromMonth(currentYearMonth); setToMonth(currentYearMonth); }}
-              className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+              onClick={() => setMode('today')}
+              className={`px-4 py-1.5 transition-colors ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
-              This month
+              Today
             </button>
+            <button
+              onClick={() => setMode('range')}
+              className={`px-4 py-1.5 transition-colors ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+            >
+              Date Range
+            </button>
+          </div>
+
+          {mode === 'range' && (
+            <>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">From</label>
+                <input
+                  type="month"
+                  value={fromMonth}
+                  max={currentYearMonth}
+                  onChange={(e) => {
+                    setFromMonth(e.target.value);
+                    if (e.target.value > toMonth) setToMonth(e.target.value);
+                  }}
+                  className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">To</label>
+                <input
+                  type="month"
+                  value={toMonth}
+                  min={fromMonth}
+                  max={currentYearMonth}
+                  onChange={(e) => setToMonth(e.target.value)}
+                  className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
+            </>
           )}
         </div>
       </div>
