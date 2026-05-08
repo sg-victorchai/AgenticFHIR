@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   useGetPatientQuery,
@@ -6,6 +6,7 @@ import {
   useSearchByEncounterQuery,
   useSearchChildEncountersQuery,
   useCreateResourceMutation,
+  useUpdateResourceMutation,
 } from '../../services/fhir/client';
 import {
   Encounter,
@@ -1361,6 +1362,10 @@ const ConsultNoteDetailPage: React.FC = () => {
     encounterId: string;
   }>();
   const [createResource, { isLoading: isSaving }] = useCreateResourceMutation();
+  const [updateResource] = useUpdateResourceMutation();
+  const [noteText, setNoteText] = useState('');
+  const [noteError, setNoteError] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   const { data: patient } = useGetPatientQuery(patientId!);
   const { data: encounterResource, isLoading: encounterLoading } =
@@ -1464,6 +1469,30 @@ const ConsultNoteDetailPage: React.FC = () => {
     childEncLoading ||
     drLoading;
 
+  useEffect(() => {
+    if ((encounterResource as any)?.note?.[0]?.text) {
+      setNoteText((encounterResource as any).note[0].text);
+    }
+  }, [(encounterResource as any)?.id]);
+
+  const handleSaveNote = async () => {
+    setNoteError('');
+    setIsSavingNote(true);
+    const updated = {
+      ...(encounterResource as Encounter),
+      note: [{ text: noteText }],
+    };
+    const result = await updateResource({
+      resourceType: 'Encounter',
+      id: encounterId!,
+      resource: updated as unknown as Encounter,
+    });
+    setIsSavingNote(false);
+    if (!('data' in result)) {
+      setNoteError('Failed to save notes. Please try again.');
+    }
+  };
+
   const formProps: Omit<AddFormProps, 'onDone'> = {
     patientId: patientId!,
     patientName,
@@ -1474,56 +1503,26 @@ const ConsultNoteDetailPage: React.FC = () => {
 
   // ── Sidebar sections ──────────────────────────────────────────────────────
   const SIDEBAR_SECTIONS = [
-    { id: 'section-top', label: 'Patient Notes', icon: '📋' },
-    { id: 'section-vitals', label: 'Vitals', icon: '♥' },
-    { id: 'section-exam', label: 'Physical Exam', icon: 'E' },
-    { id: 'section-investigations', label: 'Investigations', icon: 'Ix' },
-    { id: 'section-lab-results', label: 'Lab Results', icon: '🧪', indent: true },
-    { id: 'section-rad-reports', label: 'Rad Reports', icon: '📡', indent: true },
-    { id: 'section-assessment', label: 'Assessment', icon: 'Dx' },
-    { id: 'section-management', label: 'Management', icon: 'Rx' },
-    { id: 'section-admission', label: 'Admission', icon: '🏥' },
+    { id: 'notes', label: 'Patient Notes', icon: '📋' },
+    { id: 'vitals', label: 'Vital Signs', icon: '♥' },
+    { id: 'exam', label: 'Physical Exam', icon: 'E' },
+    { id: 'investigations', label: 'Investigations', icon: 'Ix' },
+    { id: 'lab-results', label: 'Lab Results', icon: '🧪', indent: true },
+    { id: 'rad-reports', label: 'Rad Reports', icon: '📡', indent: true },
+    { id: 'assessment', label: 'Assessment', icon: 'Dx' },
+    { id: 'management', label: 'Management', icon: 'Rx' },
+    { id: 'admission', label: 'Admission', icon: '🏥' },
   ];
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeSection, setActiveSection] = useState('section-top');
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-
-  useEffect(() => {
-    const observers: IntersectionObserver[] = [];
-    SIDEBAR_SECTIONS.forEach(({ id }) => {
-      const el = sectionRefs.current[id];
-      if (!el) return;
-      const obs = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) setActiveSection(id);
-        },
-        { rootMargin: '-30% 0px -60% 0px', threshold: 0 },
-      );
-      obs.observe(el);
-      observers.push(obs);
-    });
-    return () => observers.forEach((o) => o.disconnect());
-  }, [isLoading]);
-
-  useEffect(() => {
-    if (!isLoading && isEditable) setSidebarCollapsed(true);
-  }, [isLoading]); // collapse sidebar when encounter is in-progress
-
-  const scrollToSection = (id: string) => {
-    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const [activeSection, setActiveSection] = useState('notes');
 
   return (
     // Escape the container's px-4 py-8 padding to go full-width
     <div className="-mx-4 -mt-8 flex flex-col min-h-screen">
 
       {/* ── Sticky demographic bar ─────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1"
-        ref={(el) => { sectionRefs.current['section-top'] = el; }}
-        id="section-top"
-      >
+      <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
         {/* Avatar + name */}
         <div className="flex items-center gap-3 min-w-0">
           <div className="bg-slate-700 rounded-full h-9 w-9 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
@@ -1607,7 +1606,7 @@ const ConsultNoteDetailPage: React.FC = () => {
               {SIDEBAR_SECTIONS.map(({ id, label, icon, indent }) => (
                 <button
                   key={id}
-                  onClick={() => scrollToSection(id)}
+                  onClick={() => setActiveSection(id)}
                   className={`w-full flex items-center gap-2.5 ${indent ? 'pl-8 pr-4' : 'px-4'} py-2 text-sm text-left transition-colors ${
                     activeSection === id
                       ? 'bg-blue-50 text-blue-700 font-semibold border-r-2 border-blue-600'
@@ -1624,28 +1623,59 @@ const ConsultNoteDetailPage: React.FC = () => {
           )}
         </aside>
 
-        {/* Main scrollable content */}
+        {/* Main content */}
         <main className="flex-1 min-w-0 px-5 py-5">
-
-          {/* Active consult banner */}
-          {isEditable && (
-            <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-2.5 mb-4 flex items-center justify-between">
-              <span className="text-amber-800 text-sm font-semibold">⚡ Active Consult — In Progress</span>
-            </div>
-          )}
-
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>
           ) : (
             <>
-              {/* ── 1. Vital Signs ── */}
-              <section
-                id="section-vitals"
-                ref={(el) => { sectionRefs.current['section-vitals'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {/* ── Patient Notes ── */}
+              {activeSection === 'notes' && (
+                <div>
+                  <div className="mb-5">
+                    <h2 className="text-lg font-bold text-gray-800">Consultation Notes</h2>
+                    <p className="text-sm text-gray-500 mt-1">{encounterReason}</p>
+                  </div>
+                  {isEditable ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Clinical Notes</label>
+                        <textarea
+                          rows={12}
+                          value={noteText}
+                          onChange={(e) => setNoteText(e.target.value)}
+                          placeholder="Document your consultation notes here (SOAP format, clinical findings, plan...)..."
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                        />
+                      </div>
+                      {noteError && <p className="text-sm text-red-600">{noteError}</p>}
+                      <button
+                        onClick={handleSaveNote}
+                        disabled={isSavingNote}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-md disabled:opacity-50 transition-colors"
+                      >
+                        {isSavingNote ? 'Saving...' : 'Save Notes'}
+                      </button>
+                    </div>
+                  ) : (encounter as any)?.note?.length > 0 ? (
+                    <div className="space-y-3">
+                      {(encounter as any).note.map((n: any, i: number) => (
+                        <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{n.text}</p>
+                          {n.time && <p className="text-xs text-gray-400 mt-2">{formatDT(n.time)}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyNote label="No consultation notes documented for this encounter." />
+                  )}
+                </div>
+              )}
+
+              {/* ── Vital Signs ── */}
+              {activeSection === 'vitals' && (
                 <Section
                   sectionKey="vitals"
                   icon="V"
@@ -1661,11 +1691,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {vitals.map((obs) => {
                         const code = obs.code?.coding?.[0]?.code || '';
-                        const name =
-                          VITAL_LOINC_NAMES[code] ||
-                          obs.code?.text ||
-                          obs.code?.coding?.[0]?.display ||
-                          'Observation';
+                        const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
                         const val = obs.valueQuantity?.value ?? null;
                         const unit = obs.valueQuantity?.unit || obs.valueString || '';
                         const trend = val !== null ? interpretVital(code, val) : 'normal';
@@ -1684,14 +1710,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
 
-              {/* ── 2. Physical Examination ── */}
-              <section
-                id="section-exam"
-                ref={(el) => { sectionRefs.current['section-exam'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {/* ── Physical Examination ── */}
+              {activeSection === 'exam' && (
                 <Section
                   sectionKey="exam"
                   icon="E"
@@ -1735,14 +1757,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </table>
                   )}
                 </Section>
-              </section>
+              )}
 
-              {/* ── 3. Investigations ── */}
-              <section
-                id="section-investigations"
-                ref={(el) => { sectionRefs.current['section-investigations'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {/* ── Investigations ── */}
+              {activeSection === 'investigations' && (
                 <Section
                   sectionKey="investigations"
                   icon="Ix"
@@ -1790,14 +1808,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
 
               {/* ── Lab Results ── */}
-              <section
-                id="section-lab-results"
-                ref={(el) => { sectionRefs.current['section-lab-results'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {activeSection === 'lab-results' && (
                 <Section
                   sectionKey="investigations"
                   icon="🧪"
@@ -1831,14 +1845,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
 
               {/* ── Rad Reports ── */}
-              <section
-                id="section-rad-reports"
-                ref={(el) => { sectionRefs.current['section-rad-reports'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {activeSection === 'rad-reports' && (
                 <Section
                   sectionKey="investigations"
                   icon="📡"
@@ -1869,14 +1879,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
 
-              {/* ── 4. Assessment ── */}
-              <section
-                id="section-assessment"
-                ref={(el) => { sectionRefs.current['section-assessment'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {/* ── Assessment ── */}
+              {activeSection === 'assessment' && (
                 <Section
                   sectionKey="assessment"
                   icon="Dx"
@@ -1924,14 +1930,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
 
-              {/* ── 5. Management ── */}
-              <section
-                id="section-management"
-                ref={(el) => { sectionRefs.current['section-management'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {/* ── Management ── */}
+              {activeSection === 'management' && (
                 <Section
                   sectionKey="management"
                   icon="Rx"
@@ -2010,14 +2012,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
 
-              {/* ── 6. Inpatient Admission ── */}
-              <section
-                id="section-admission"
-                ref={(el) => { sectionRefs.current['section-admission'] = el; }}
-                className="mb-2 scroll-mt-14"
-              >
+              {/* ── Inpatient Admission ── */}
+              {activeSection === 'admission' && (
                 <Section
                   sectionKey="admission"
                   icon="Adm"
@@ -2061,7 +2059,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                     </div>
                   )}
                 </Section>
-              </section>
+              )}
             </>
           )}
 
@@ -2086,5 +2084,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     </div>
   );
 };
+
 
 export default ConsultNoteDetailPage;
