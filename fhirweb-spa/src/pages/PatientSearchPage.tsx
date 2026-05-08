@@ -339,10 +339,10 @@ const PatientSearchPage: React.FC = () => {
                         )}
                         {role === 'psa' && (
                           <Link
-                            to={`/patient/${patient.id}/details`}
+                            to={`/patient/${patient.id}/encounter`}
                             className="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
                           >
-                            View Notes
+                            View Visit Summary
                           </Link>
                         )}
                         {role === 'clinician' && (
