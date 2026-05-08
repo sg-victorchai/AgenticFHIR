@@ -16,6 +16,7 @@ import {
   Bundle,
   Resource,
   ServiceRequest,
+  DiagnosticReport,
 } from 'fhir/r5';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1390,6 +1391,10 @@ const ConsultNoteDetailPage: React.FC = () => {
   );
   const { data: childEncBundle, isLoading: childEncLoading } =
     useSearchChildEncountersQuery(encounterId!, { skip: !encounterId });
+  const { data: drBundle, isLoading: drLoading } = useSearchByEncounterQuery(
+    { resourceType: 'DiagnosticReport', encounterId: encounterId! },
+    { skip: !encounterId },
+  );
 
   const encounter = encounterResource as Encounter | undefined;
   const allObs = extractResources<Observation>(obsBundle);
@@ -1398,6 +1403,19 @@ const ConsultNoteDetailPage: React.FC = () => {
   const medications = extractResources<MedicationRequest>(medBundle);
   const carePlans = extractResources<CarePlan>(cpBundle);
   const childEncounters = extractResources<Encounter>(childEncBundle);
+  const diagnosticReports = extractResources<DiagnosticReport>(drBundle);
+
+  const LAB_SYSTEM = 'http://terminology.hl7.org/CodeSystem/v2-0074';
+  const labReports = diagnosticReports.filter((dr) =>
+    dr.category?.some((cat) =>
+      cat.coding?.some((cd) => cd.system === LAB_SYSTEM && cd.code === 'LAB'),
+    ),
+  );
+  const radReports = diagnosticReports.filter((dr) =>
+    dr.category?.some((cat) =>
+      cat.coding?.some((cd) => cd.system === LAB_SYSTEM && cd.code === 'RAD'),
+    ),
+  );
 
   const vitals = allObs.filter((o) =>
     o.category?.some((c) => c.coding?.some((cd) => cd.code === 'vital-signs')),
@@ -1443,7 +1461,8 @@ const ConsultNoteDetailPage: React.FC = () => {
     condLoading ||
     medLoading ||
     cpLoading ||
-    childEncLoading;
+    childEncLoading ||
+    drLoading;
 
   const formProps: Omit<AddFormProps, 'onDone'> = {
     patientId: patientId!,
@@ -1459,11 +1478,14 @@ const ConsultNoteDetailPage: React.FC = () => {
     { id: 'section-vitals', label: 'Vitals', icon: '♥' },
     { id: 'section-exam', label: 'Physical Exam', icon: 'E' },
     { id: 'section-investigations', label: 'Investigations', icon: 'Ix' },
+    { id: 'section-lab-results', label: 'Lab Results', icon: '🧪', indent: true },
+    { id: 'section-rad-reports', label: 'Rad Reports', icon: '📡', indent: true },
     { id: 'section-assessment', label: 'Assessment', icon: 'Dx' },
     { id: 'section-management', label: 'Management', icon: 'Rx' },
     { id: 'section-admission', label: 'Admission', icon: '🏥' },
   ];
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeSection, setActiveSection] = useState('section-top');
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -1483,6 +1505,10 @@ const ConsultNoteDetailPage: React.FC = () => {
     });
     return () => observers.forEach((o) => o.disconnect());
   }, [isLoading]);
+
+  useEffect(() => {
+    if (!isLoading && isEditable) setSidebarCollapsed(true);
+  }, [isLoading]); // collapse sidebar when encounter is in-progress
 
   const scrollToSection = (id: string) => {
     sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1566,23 +1592,36 @@ const ConsultNoteDetailPage: React.FC = () => {
       <div className="flex flex-1">
 
         {/* Left sidebar */}
-        <aside className="w-48 flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:block">
-          <nav className="py-3">
-            {SIDEBAR_SECTIONS.map(({ id, label, icon }) => (
-              <button
-                key={id}
-                onClick={() => scrollToSection(id)}
-                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
-                  activeSection === id
-                    ? 'bg-blue-50 text-blue-700 font-semibold border-r-2 border-blue-600'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
-                }`}
-              >
-                <span className="text-xs w-5 text-center flex-shrink-0 opacity-70">{icon}</span>
-                {label}
-              </button>
-            ))}
-          </nav>
+        <aside className={`${sidebarCollapsed ? 'w-10' : 'w-52'} flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:flex flex-col transition-all duration-200`}>
+          <div className={`flex ${sidebarCollapsed ? 'justify-center' : 'justify-end'} p-1.5`}>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded text-sm leading-none"
+              title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+            >
+              {sidebarCollapsed ? '›' : '‹'}
+            </button>
+          </div>
+          {!sidebarCollapsed && (
+            <nav className="py-1 flex-1 overflow-y-auto">
+              {SIDEBAR_SECTIONS.map(({ id, label, icon, indent }) => (
+                <button
+                  key={id}
+                  onClick={() => scrollToSection(id)}
+                  className={`w-full flex items-center gap-2.5 ${indent ? 'pl-8 pr-4' : 'px-4'} py-2 text-sm text-left transition-colors ${
+                    activeSection === id
+                      ? 'bg-blue-50 text-blue-700 font-semibold border-r-2 border-blue-600'
+                      : indent
+                      ? 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                  }`}
+                >
+                  <span className="text-xs w-5 text-center flex-shrink-0 opacity-70">{icon}</span>
+                  <span className="truncate">{label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
         </aside>
 
         {/* Main scrollable content */}
@@ -1748,6 +1787,85 @@ const ConsultNoteDetailPage: React.FC = () => {
                           </table>
                         </div>
                       )}
+                    </div>
+                  )}
+                </Section>
+              </section>
+
+              {/* ── Lab Results ── */}
+              <section
+                id="section-lab-results"
+                ref={(el) => { sectionRefs.current['section-lab-results'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="investigations"
+                  icon="🧪"
+                  title="Lab Results"
+                  count={labReports.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  {labReports.length === 0 ? (
+                    <EmptyNote label="No lab results available for this encounter." />
+                  ) : (
+                    <div className="space-y-3">
+                      {labReports.map((dr) => (
+                        <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-gray-800 text-sm">
+                              {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <StatusPill status={dr.status} />
+                              <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                            </div>
+                          </div>
+                          {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                          {dr.result && dr.result.length > 0 && (
+                            <div className="text-xs text-gray-500 mt-1">{dr.result.length} observation(s) linked</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              </section>
+
+              {/* ── Rad Reports ── */}
+              <section
+                id="section-rad-reports"
+                ref={(el) => { sectionRefs.current['section-rad-reports'] = el; }}
+                className="mb-2 scroll-mt-14"
+              >
+                <Section
+                  sectionKey="investigations"
+                  icon="📡"
+                  title="Radiology Reports"
+                  count={radReports.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
+                  {radReports.length === 0 ? (
+                    <EmptyNote label="No radiology reports available for this encounter." />
+                  ) : (
+                    <div className="space-y-3">
+                      {radReports.map((dr) => (
+                        <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-gray-800 text-sm">
+                              {dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <StatusPill status={dr.status} />
+                              <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
+                            </div>
+                          </div>
+                          {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </Section>

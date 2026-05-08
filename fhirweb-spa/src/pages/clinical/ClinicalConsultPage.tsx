@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   useGetPatientQuery,
   useGetResourceByIdQuery,
   useCreateResourceMutation,
+  useUpdateResourceMutation,
 } from '../../services/fhir/client';
 import { Encounter } from 'fhir/r5';
 
@@ -12,7 +13,8 @@ import { Encounter } from 'fhir/r5';
 type TabId =
   | 'vitals'
   | 'exam'
-  | 'investigations'
+  | 'lab'
+  | 'rad'
   | 'assessment'
   | 'management'
   | 'admission';
@@ -25,13 +27,14 @@ interface RecordedItem {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TABS: { id: TabId; label: string; step: number }[] = [
-  { id: 'vitals', label: 'Vitals', step: 1 },
-  { id: 'exam', label: 'Physical Exam', step: 2 },
-  { id: 'investigations', label: 'Investigations', step: 3 },
-  { id: 'assessment', label: 'Assessment', step: 4 },
-  { id: 'management', label: 'Management', step: 5 },
-  { id: 'admission', label: 'Admit Patient', step: 6 },
+const STEPS: { id: TabId; label: string; step: number; icon: string }[] = [
+  { id: 'vitals', label: 'Vital Signs', step: 1, icon: '♥' },
+  { id: 'exam', label: 'Physical Exam', step: 2, icon: 'E' },
+  { id: 'lab', label: 'Lab Investigations', step: 3, icon: '🧪' },
+  { id: 'rad', label: 'Radiology Orders', step: 4, icon: '📡' },
+  { id: 'assessment', label: 'Assessment', step: 5, icon: 'Dx' },
+  { id: 'management', label: 'Management', step: 6, icon: 'Rx' },
+  { id: 'admission', label: 'Admission', step: 7, icon: '🏥' },
 ];
 
 const BODY_SYSTEMS = [
@@ -46,16 +49,21 @@ const BODY_SYSTEMS = [
   { code: '74728003', display: 'General / Other' },
 ];
 
-const INVESTIGATION_CATEGORIES = [
+const LAB_CATEGORIES = [
   { display: 'Haematology', code: '252275004' },
   { display: 'Biochemistry', code: '59524001' },
   { display: 'Immunology / Serology', code: '252276003' },
   { display: 'Microbiology', code: '19851009' },
-  { display: 'Radiology / Imaging', code: '394914008' },
   { display: 'Cardiology', code: '394579002' },
   { display: 'Pulmonology', code: '394607009' },
   { display: 'Other', code: '74728003' },
 ];
+
+const RAD_CATEGORIES = [
+  { display: 'Radiology / Imaging', code: '394914008' },
+];
+
+const INVESTIGATION_CATEGORIES = [...LAB_CATEGORIES, ...RAD_CATEGORIES];
 
 const SEVERITY_SNOMED = {
   mild: { code: '255604002', display: 'Mild' },
@@ -157,9 +165,13 @@ const ClinicalConsultPage: React.FC = () => {
     id: string;
     encounterId: string;
   }>();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>('vitals');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [createResource, { isLoading: isCreating }] =
     useCreateResourceMutation();
+  const [updateResource, { isLoading: isFinishing }] =
+    useUpdateResourceMutation();
 
   const { data: patient } = useGetPatientQuery(patientId!);
   const { data: encounterResource } = useGetResourceByIdQuery(
@@ -186,10 +198,11 @@ const ClinicalConsultPage: React.FC = () => {
     ? new Date(encounter.actualPeriod.start).toLocaleString()
     : '';
 
-  // Created item state per tab
+  // Created item state per step
   const [vitalsItems, setVitalsItems] = useState<RecordedItem[]>([]);
   const [examItems, setExamItems] = useState<RecordedItem[]>([]);
-  const [orderItems, setOrderItems] = useState<RecordedItem[]>([]);
+  const [labOrderItems, setLabOrderItems] = useState<RecordedItem[]>([]);
+  const [radOrderItems, setRadOrderItems] = useState<RecordedItem[]>([]);
   const [diagnosisItems, setDiagnosisItems] = useState<RecordedItem[]>([]);
   const [medicationItems, setMedicationItems] = useState<RecordedItem[]>([]);
   const [carePlanItem, setCarePlanItem] = useState<RecordedItem | null>(null);
@@ -428,12 +441,18 @@ const ClinicalConsultPage: React.FC = () => {
   // ── INVESTIGATIONS ────────────────────────────────────────────────────────
 
   const [orderForm, setOrderForm] = useState({
-    category: INVESTIGATION_CATEGORIES[0].code,
+    category: LAB_CATEGORIES[0].code,
     testName: '',
     priority: 'routine' as 'routine' | 'urgent' | 'stat',
     notes: '',
   });
   const [ordersError, setOrdersError] = useState('');
+
+  // Reset category when switching between lab/rad steps
+  useEffect(() => {
+    if (activeTab === 'lab') setOrderForm((f) => ({ ...f, category: LAB_CATEGORIES[0].code }));
+    if (activeTab === 'rad') setOrderForm((f) => ({ ...f, category: RAD_CATEGORIES[0].code }));
+  }, [activeTab]);
 
   const handleSaveOrder = async () => {
     setOrdersError('');
@@ -471,14 +490,16 @@ const ClinicalConsultPage: React.FC = () => {
       resource: order as any,
     });
     if ('data' in result && result.data?.id) {
-      setOrderItems((prev) => [
-        ...prev,
-        {
-          id: result.data!.id!,
-          display: orderForm.testName.trim(),
-          note: `${cat.display} · ${orderForm.priority.toUpperCase()}`,
-        },
-      ]);
+      const item = {
+        id: result.data!.id!,
+        display: orderForm.testName.trim(),
+        note: `${cat.display} · ${orderForm.priority.toUpperCase()}`,
+      };
+      if (activeTab === 'rad') {
+        setRadOrderItems((prev) => [...prev, item]);
+      } else {
+        setLabOrderItems((prev) => [...prev, item]);
+      }
       setOrderForm((f) => ({ ...f, testName: '', notes: '' }));
     } else {
       setOrdersError('Failed to place order. Please try again.');
@@ -807,106 +828,195 @@ const ClinicalConsultPage: React.FC = () => {
     }
   };
 
-  // ─── Tab badge counts ──────────────────────────────────────────────────────
+  // ─── Step badge counts ─────────────────────────────────────────────────────
 
   const tabCounts: Record<TabId, number> = {
     vitals: vitalsItems.length,
     exam: examItems.length,
-    investigations: orderItems.length,
+    lab: labOrderItems.length,
+    rad: radOrderItems.length,
     assessment: diagnosisItems.length,
     management: medicationItems.length + (carePlanItem ? 1 : 0),
     admission: admissionItem ? 1 : 0,
   };
 
+  // ─── Finish Consult ────────────────────────────────────────────────────────
+
+  const [finishError, setFinishError] = useState('');
+
+  const handleFinishConsult = async () => {
+    setFinishError('');
+    if (!encounterResource || !encounterId) return;
+    const updated = {
+      ...(encounterResource as Encounter),
+      status: 'completed' as const,
+    };
+    const result = await updateResource({
+      resourceType: 'Encounter',
+      id: encounterId!,
+      resource: updated as unknown as Encounter,
+    });
+    if ('data' in result) {
+      navigate('/queue');
+    } else {
+      setFinishError('Failed to finish consult. Please try again.');
+    }
+  };
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="container mx-auto px-4 py-6">
-      {/* Breadcrumb */}
-      <nav className="text-sm text-gray-500 mb-4 flex items-center gap-1 flex-wrap">
-        <Link to="/patients" className="hover:text-blue-600 transition-colors">
-          Patients
-        </Link>
-        <span>/</span>
-        <Link
-          to={`/patient/${patientId}/details`}
-          className="hover:text-blue-600 transition-colors"
-        >
-          {patientName || patientId}
-        </Link>
-        <span>/</span>
-        <Link
-          to={`/patient/${patientId}/encounter`}
-          className="hover:text-blue-600 transition-colors"
-        >
-          Encounters
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 font-medium">Clinical Consult</span>
-      </nav>
+    <div className="-mx-4 -mt-8 flex flex-col min-h-screen">
 
-      {/* Patient + Encounter Banner */}
-      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 shadow-sm">
-        <div className="flex items-center gap-3 flex-1">
-          <div className="bg-blue-600 rounded-full h-12 w-12 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-            {patientName.charAt(0).toUpperCase()}
+      {/* ── Sticky demographic bar ─────────────────────────────────────────── */}
+      <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="bg-blue-700 rounded-full h-9 w-9 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
+            {patientName.charAt(0).toUpperCase() || '?'}
           </div>
-          <div>
-            <div className="font-semibold text-gray-800 text-lg">
-              {patientName}
-            </div>
-            <div className="text-sm text-gray-500">
-              DOB: {patient?.birthDate || '—'} &middot;{' '}
-              {patient?.gender
-                ? patient.gender.charAt(0).toUpperCase() +
-                  patient.gender.slice(1)
-                : '—'}{' '}
-              &middot; ID: {patient?.identifier?.[0]?.value || patientId}
+          <div className="min-w-0">
+            <span className="font-bold text-gray-900 text-base leading-tight block truncate">{patientName || '—'}</span>
+            <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-gray-500">
+              {patient?.birthDate && <span>DOB: <strong className="text-gray-700">{patient.birthDate}</strong></span>}
+              {patient?.gender && <span>Sex: <strong className="text-gray-700 capitalize">{patient.gender}</strong></span>}
+              {patient?.identifier?.[0]?.value && <span>ID: <strong className="text-gray-700 font-mono">{patient.identifier[0].value}</strong></span>}
             </div>
           </div>
         </div>
-        <div className="border-l border-gray-200 pl-4 flex-1">
-          <div className="text-sm font-medium text-gray-700">Current Visit</div>
-          <div className="text-sm text-gray-600 mt-0.5">{encounterReason}</div>
-          <div className="text-xs text-gray-400 mt-0.5">{encounterStart}</div>
-        </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+
+        <div className="hidden sm:block h-8 border-l border-gray-200 mx-1" />
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-600">
+          <span className="font-medium text-gray-800">{encounterReason}</span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
             In Progress
           </span>
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-            Outpatient
-          </span>
+          {encounterStart && <span className="text-xs text-gray-400">{encounterStart}</span>}
+        </div>
+
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {finishError && <span className="text-xs text-red-600">{finishError}</span>}
+          <button
+            onClick={handleFinishConsult}
+            disabled={isFinishing}
+            className="md:hidden bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md disabled:opacity-50 transition-colors"
+          >
+            {isFinishing ? 'Finishing…' : '✓ Finish'}
+          </button>
+          <Link
+            to="/queue"
+            className="text-xs bg-gray-100 text-gray-700 font-medium px-3 py-1.5 rounded-md hover:bg-gray-200 transition-colors"
+          >
+            ← Queue
+          </Link>
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex overflow-x-auto border-b border-gray-200 mb-6 gap-0">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <span className="text-xs text-gray-400 font-normal">
-              {tab.step}.
-            </span>
-            {tab.label}
-            {tabCounts[tab.id] > 0 && (
-              <span className="ml-1 bg-blue-100 text-blue-700 text-xs font-semibold px-1.5 py-0.5 rounded-full">
-                {tabCounts[tab.id]}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ── Body: sidebar + content ────────────────────────────────────────── */}
+      <div className="flex flex-1">
 
-      {/* Tab Content */}
-      <div className="bg-white shadow rounded-lg p-6">
+        {/* Left step-wizard sidebar */}
+        <aside className={`${sidebarCollapsed ? 'w-12' : 'w-56'} flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:flex flex-col transition-all duration-200`}>
+          <div className={`flex ${sidebarCollapsed ? 'justify-center' : 'justify-end'} p-1.5`}>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded text-sm leading-none"
+              title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+            >
+              {sidebarCollapsed ? '›' : '‹'}
+            </button>
+          </div>
+          {!sidebarCollapsed && (
+            <>
+              <nav className="flex-1 py-2">
+                {STEPS.map((step) => (
+                  <button
+                    key={step.id}
+                    onClick={() => setActiveTab(step.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors ${
+                      activeTab === step.id
+                        ? 'bg-blue-50 text-blue-700 font-semibold border-r-2 border-blue-600'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                    }`}
+                  >
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      activeTab === step.id
+                        ? 'bg-blue-600 text-white'
+                        : tabCounts[step.id] > 0
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {tabCounts[step.id] > 0 ? '✓' : step.step}
+                    </span>
+                    <span className="truncate">{step.label}</span>
+                    {tabCounts[step.id] > 0 && (
+                      <span className="ml-auto text-xs font-semibold text-green-600">{tabCounts[step.id]}</span>
+                    )}
+                  </button>
+                ))}
+              </nav>
+              <div className="p-3 border-t border-gray-200">
+                <button
+                  onClick={handleFinishConsult}
+                  disabled={isFinishing}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-2.5 px-3 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  {isFinishing ? 'Finishing…' : '✓ Finish Consult'}
+                </button>
+                {finishError && <p className="text-xs text-red-600 mt-1 text-center">{finishError}</p>}
+              </div>
+            </>
+          )}
+        </aside>
+
+        {/* Main step content */}
+        <main className="flex-1 min-w-0 px-6 py-5">
+
+          {/* Step header */}
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">
+                Step {STEPS.findIndex((s) => s.id === activeTab) + 1} of {STEPS.length}
+              </span>
+              <h2 className="text-lg font-bold text-gray-800 mt-0.5">
+                {STEPS.find((s) => s.id === activeTab)?.label}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {STEPS.findIndex((s) => s.id === activeTab) > 0 && (
+                <button
+                  onClick={() => {
+                    const idx = STEPS.findIndex((s) => s.id === activeTab);
+                    setActiveTab(STEPS[idx - 1].id);
+                  }}
+                  className="text-sm text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-md transition-colors"
+                >
+                  ← Prev
+                </button>
+              )}
+              {STEPS.findIndex((s) => s.id === activeTab) < STEPS.length - 1 ? (
+                <button
+                  onClick={() => {
+                    const idx = STEPS.findIndex((s) => s.id === activeTab);
+                    setActiveTab(STEPS[idx + 1].id);
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-3 py-1.5 rounded-md transition-colors"
+                >
+                  Next →
+                </button>
+              ) : (
+                <button
+                  onClick={handleFinishConsult}
+                  disabled={isFinishing}
+                  className="text-sm bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-1.5 rounded-md disabled:opacity-50 transition-colors"
+                >
+                  {isFinishing ? 'Finishing…' : '✓ Finish Consult'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white shadow rounded-lg p-6">
         {/* ── VITALS ── */}
         {activeTab === 'vitals' && (
           <div>
@@ -1124,14 +1234,14 @@ const ClinicalConsultPage: React.FC = () => {
           </div>
         )}
 
-        {/* ── INVESTIGATIONS ── */}
-        {activeTab === 'investigations' && (
+        {/* ── LAB INVESTIGATIONS ── */}
+        {activeTab === 'lab' && (
           <div>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Investigations
+              Lab Investigations
             </h2>
             <p className="text-sm text-gray-500 mb-5">
-              Place lab, imaging, or other investigation orders.
+              Place laboratory investigation orders for this encounter.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1144,7 +1254,7 @@ const ClinicalConsultPage: React.FC = () => {
                     setOrderForm((f) => ({ ...f, category: e.target.value }))
                   }
                 >
-                  {INVESTIGATION_CATEGORIES.map((c) => (
+                  {LAB_CATEGORIES.map((c) => (
                     <option key={c.code} value={c.code}>
                       {c.display}
                     </option>
@@ -1153,12 +1263,11 @@ const ClinicalConsultPage: React.FC = () => {
               </div>
               <div>
                 <label className={labelCls}>
-                  Test / Investigation Name{' '}
-                  <span className="text-red-500">*</span>
+                  Test Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Full Blood Count, Chest X-ray..."
+                  placeholder="e.g. Full Blood Count, LFT, HbA1c..."
                   className={fieldCls}
                   value={orderForm.testName}
                   onChange={(e) =>
@@ -1204,12 +1313,83 @@ const ClinicalConsultPage: React.FC = () => {
               disabled={isCreating}
               className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
             >
-              {isCreating ? 'Placing...' : 'Place Order'}
+              {isCreating ? 'Placing...' : 'Place Lab Order'}
             </button>
 
             <RecordedList
-              items={orderItems}
-              emptyLabel="No investigation orders placed yet."
+              items={labOrderItems}
+              emptyLabel="No lab orders placed yet."
+            />
+          </div>
+        )}
+
+        {/* ── RADIOLOGY ORDERS ── */}
+        {activeTab === 'rad' && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Radiology Orders
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Place radiology and imaging orders for this encounter.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Modality / Study</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Chest X-ray, CT Abdomen, MRI Brain..."
+                  className={fieldCls}
+                  value={orderForm.testName}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, testName: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Priority</label>
+                <select
+                  className={fieldCls}
+                  value={orderForm.priority}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({
+                      ...f,
+                      priority: e.target.value as any,
+                    }))
+                  }
+                >
+                  <option value="routine">Routine</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="stat">STAT</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className={labelCls}>Clinical Indication</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ?Pneumonia, rule out PE..."
+                  className={fieldCls}
+                  value={orderForm.notes}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <ErrorBox msg={ordersError} />
+
+            <button
+              onClick={handleSaveOrder}
+              disabled={isCreating}
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+            >
+              {isCreating ? 'Placing...' : 'Place Radiology Order'}
+            </button>
+
+            <RecordedList
+              items={radOrderItems}
+              emptyLabel="No radiology orders placed yet."
             />
           </div>
         )}
@@ -1227,7 +1407,7 @@ const ClinicalConsultPage: React.FC = () => {
             {/* Summary of findings */}
             {(vitalsItems.length > 0 ||
               examItems.length > 0 ||
-              orderItems.length > 0) && (
+              labOrderItems.length + radOrderItems.length > 0) && (
               <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-5 text-sm text-gray-600">
                 <span className="font-medium text-gray-700">
                   Findings summary:{' '}
@@ -1235,8 +1415,8 @@ const ClinicalConsultPage: React.FC = () => {
                 {vitalsItems.length} vital sign
                 {vitalsItems.length !== 1 ? 's' : ''} &middot;{' '}
                 {examItems.length} exam finding
-                {examItems.length !== 1 ? 's' : ''} &middot; {orderItems.length}{' '}
-                order{orderItems.length !== 1 ? 's' : ''} placed
+                {examItems.length !== 1 ? 's' : ''} &middot; {labOrderItems.length + radOrderItems.length}{' '}
+                order{labOrderItems.length + radOrderItems.length !== 1 ? 's' : ''} placed
               </div>
             )}
 
@@ -1662,36 +1842,7 @@ const ClinicalConsultPage: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Next tab navigation hint */}
-      <div className="mt-4 flex justify-between items-center text-sm text-gray-500">
-        <div>
-          {TABS.findIndex((t) => t.id === activeTab) > 0 && (
-            <button
-              onClick={() => {
-                const idx = TABS.findIndex((t) => t.id === activeTab);
-                setActiveTab(TABS[idx - 1].id);
-              }}
-              className="text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              &larr; Previous
-            </button>
-          )}
-        </div>
-        <div>
-          {TABS.findIndex((t) => t.id === activeTab) < TABS.length - 1 && (
-            <button
-              onClick={() => {
-                const idx = TABS.findIndex((t) => t.id === activeTab);
-                setActiveTab(TABS[idx + 1].id);
-              }}
-              className="text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              Next: {TABS[TABS.findIndex((t) => t.id === activeTab) + 1].label}{' '}
-              &rarr;
-            </button>
-          )}
-        </div>
+      </main>
       </div>
     </div>
   );
