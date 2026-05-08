@@ -690,8 +690,8 @@ const AddOrderForm: React.FC<AddFormProps> = ({
       status: 'active' as const,
       intent: 'order' as const,
       priority: form.priority as any,
-      code: {
-        concept: {
+      category: [
+        {
           coding: [
             {
               system: 'http://snomed.info/sct',
@@ -699,6 +699,11 @@ const AddOrderForm: React.FC<AddFormProps> = ({
               display: cat.display,
             },
           ],
+          text: cat.display,
+        },
+      ],
+      code: {
+        concept: {
           text: form.testName.trim(),
         },
       },
@@ -1440,12 +1445,18 @@ const ConsultNoteDetailPage: React.FC = () => {
   const procedures = extractResources<Procedure>(procBundle);
 
   const RAD_SNOMED = '394914008';
-  const labOrders = serviceRequests.filter(
-    (sr) => !((sr.code as any)?.concept?.coding?.[0]?.code === RAD_SNOMED),
-  );
-  const radOrders = serviceRequests.filter(
-    (sr) => (sr.code as any)?.concept?.coding?.[0]?.code === RAD_SNOMED,
-  );
+  // Rad SNOMED codes: 394914008 = Radiology specialty, 310061009 = Radiology order
+  const RAD_SNOMED_CODES = new Set(['394914008', '310061009']);
+  const SNOMED = 'http://snomed.info/sct';
+  const isRadSR = (sr: ServiceRequest): boolean =>
+    // Check sr.category (proper FHIR R5 structure)
+    (sr.category?.some((cat) =>
+      cat.coding?.some((cd) => cd.system === SNOMED && cd.code != null && RAD_SNOMED_CODES.has(cd.code)),
+    ) ?? false) ||
+    // Fallback: legacy records store category code inside sr.code
+    RAD_SNOMED_CODES.has((sr.code as any)?.concept?.coding?.[0]?.code ?? '');
+  const labOrders = serviceRequests.filter((sr) => !isRadSR(sr));
+  const radOrders = serviceRequests.filter(isRadSR);
 
   const SNOMED_SYSTEM = 'http://snomed.info/sct';
   // SNOMED CT lab specialty codes (mirrors INVESTIGATION_CATEGORIES lab entries)

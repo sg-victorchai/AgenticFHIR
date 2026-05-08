@@ -307,16 +307,23 @@ const ClinicalConsultPage: React.FC = () => {
     const serviceRequests = (srBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as ServiceRequest[]) || [];
     const labLoaded: RecordedItem[] = [];
     const radLoaded: RecordedItem[] = [];
+    const RAD_SR_CODES = new Set(['394914008', '310061009']);
+    const SNOMED_SYS = 'http://snomed.info/sct';
     serviceRequests.forEach((sr) => {
-      const catCode = (sr.code as any)?.concept?.coding?.[0]?.code;
-      const testName = (sr.code as any)?.concept?.text || 'Order';
-      const catDisplay = (sr.code as any)?.concept?.coding?.[0]?.display || '';
+      const catCode =
+        sr.category?.[0]?.coding?.find((cd: any) => cd.system === SNOMED_SYS)?.code ??
+        (sr.code as any)?.concept?.coding?.[0]?.code ?? '';
+      const catDisplay =
+        sr.category?.[0]?.coding?.[0]?.display ||
+        sr.category?.[0]?.text ||
+        (sr.code as any)?.concept?.coding?.[0]?.display || '';
+      const testName = (sr.code as any)?.concept?.text || catDisplay || 'Order';
       const item: RecordedItem = {
         id: sr.id!,
         display: testName,
         note: `${catDisplay} · ${sr.priority || 'routine'}`.toUpperCase(),
       };
-      if (catCode === '394914008') {
+      if (RAD_SR_CODES.has(catCode)) {
         radLoaded.push(item);
       } else {
         labLoaded.push(item);
@@ -671,8 +678,8 @@ const ClinicalConsultPage: React.FC = () => {
       status: 'active' as const,
       intent: 'order' as const,
       priority: orderForm.priority as any,
-      code: {
-        concept: {
+      category: [
+        {
           coding: [
             {
               system: 'http://snomed.info/sct',
@@ -680,6 +687,11 @@ const ClinicalConsultPage: React.FC = () => {
               display: cat.display,
             },
           ],
+          text: cat.display,
+        },
+      ],
+      code: {
+        concept: {
           text: orderForm.testName.trim(),
         },
       },
