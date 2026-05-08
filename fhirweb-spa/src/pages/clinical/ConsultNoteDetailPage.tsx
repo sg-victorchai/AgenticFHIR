@@ -1444,23 +1444,32 @@ const ConsultNoteDetailPage: React.FC = () => {
   const medicationStatements = extractResources<MedicationStatement>(medStatBundle);
   const procedures = extractResources<Procedure>(procBundle);
 
-  const RAD_SNOMED = '394914008';
+  const SNOMED_SYSTEM = 'http://snomed.info/sct';
   // Rad SNOMED codes: 394914008 = Radiology specialty, 310061009 = Radiology order
   const RAD_SNOMED_CODES = new Set(['394914008', '310061009']);
-  const SNOMED = 'http://snomed.info/sct';
   const isRadSR = (sr: ServiceRequest): boolean =>
     // Check sr.category (proper FHIR R5 structure)
     (sr.category?.some((cat) =>
-      cat.coding?.some((cd) => cd.system === SNOMED && cd.code != null && RAD_SNOMED_CODES.has(cd.code)),
+      cat.coding?.some((cd) => cd.system === SNOMED_SYSTEM && cd.code != null && RAD_SNOMED_CODES.has(cd.code)),
     ) ?? false) ||
     // Fallback: legacy records store category code inside sr.code
     RAD_SNOMED_CODES.has((sr.code as any)?.concept?.coding?.[0]?.code ?? '');
   const labOrders = serviceRequests.filter((sr) => !isRadSR(sr));
   const radOrders = serviceRequests.filter(isRadSR);
 
-  const SNOMED_SYSTEM = 'http://snomed.info/sct';
-  // SNOMED CT lab specialty codes (mirrors INVESTIGATION_CATEGORIES lab entries)
-  const LAB_SNOMED_CODES = new Set(['252275004', '59524001', '394579002', '19851009', '74728003']);
+  // SNOMED CT lab codes: specialty codes + generic "laboratory procedure/report" codes
+  const LAB_SNOMED_CODES = new Set([
+    '252275004',     // Haematology
+    '59524001',      // Biochemistry
+    '252276003',     // Immunology/Serology
+    '19851009',      // Microbiology
+    '394579002',     // Cardiology
+    '394607009',     // Pulmonology
+    '74728003',      // General/Other
+    '108252007',     // Laboratory procedure (generic)
+    '4321000179101', // Laboratory report
+    '15220000',      // Laboratory test
+  ]);
   const labReports = diagnosticReports.filter((dr) =>
     dr.category?.some((cat) =>
       cat.coding?.some(
@@ -1468,10 +1477,12 @@ const ConsultNoteDetailPage: React.FC = () => {
       ),
     ),
   );
-  // RAD_SNOMED is already defined above as '394914008'
+  // Reuse RAD_SNOMED_CODES for DiagnosticReport rad filter
   const radReports = diagnosticReports.filter((dr) =>
     dr.category?.some((cat) =>
-      cat.coding?.some((cd) => cd.system === SNOMED_SYSTEM && cd.code === RAD_SNOMED),
+      cat.coding?.some(
+        (cd) => cd.system === SNOMED_SYSTEM && cd.code != null && RAD_SNOMED_CODES.has(cd.code),
+      ),
     ),
   );
 
