@@ -68,6 +68,15 @@ const RAD_CATEGORIES = [
 
 const INVESTIGATION_CATEGORIES = [...LAB_CATEGORIES, ...RAD_CATEGORIES];
 
+const VITAL_CODE_TO_FIELD: Record<string, string> = {
+  '2708-6': 'spo2',
+  '8867-4': 'hr',
+  '8480-6': 'sbp',
+  '8462-4': 'dbp',
+  '9279-1': 'rr',
+  '8310-5': 'temp',
+};
+
 const SEVERITY_SNOMED = {
   mild: { code: '255604002', display: 'Mild' },
   moderate: { code: '6736007', display: 'Moderate' },
@@ -260,6 +269,8 @@ const ClinicalConsultPage: React.FC = () => {
   const [medicationItems, setMedicationItems] = useState<RecordedItem[]>([]);
   const [carePlanItem, setCarePlanItem] = useState<RecordedItem | null>(null);
   const [admissionItem, setAdmissionItem] = useState<RecordedItem | null>(null);
+  const [rawVitals, setRawVitals] = useState<Observation[]>([]);
+  const [isEditingVitals, setIsEditingVitals] = useState(false);
 
   const preloadedRef = React.useRef(false);
 
@@ -283,6 +294,7 @@ const ClinicalConsultPage: React.FC = () => {
       return { id: o.id!, display: `${code}: ${val} ${unit}`.trim() };
     });
     if (vitalsLoaded.length > 0) setVitalsItems(vitalsLoaded);
+    setRawVitals(vitalsFromFHIR);
 
     const examLoaded: RecordedItem[] = examFromFHIR.map((o) => {
       const system = o.code?.text || o.code?.coding?.[0]?.display || 'System';
@@ -432,51 +444,83 @@ const ClinicalConsultPage: React.FC = () => {
     const effectiveDateTime = toFHIRDateTime(recordedAt);
     const created: RecordedItem[] = [];
 
+    const existingMap = rawVitals.reduce<Record<string, Observation>>((acc, o) => {
+      const code = o.code?.coding?.[0]?.code || '';
+      if (code) acc[code] = o;
+      return acc;
+    }, {});
+
     for (const v of vitals) {
-      const obs = {
-        resourceType: 'Observation' as const,
-        status: 'final' as const,
-        category: [
-          {
+      const existing = existingMap[v.code];
+      let resultId: string | undefined;
+      if (existing?.id) {
+        const updated = {
+          ...existing,
+          effectiveDateTime,
+          valueQuantity: {
+            value: v.value,
+            unit: v.unit,
+            system: 'http://unitsofmeasure.org',
+            code: v.ucumCode,
+          },
+        };
+        const result = await updateResource({
+          resourceType: 'Observation',
+          id: existing.id,
+          resource: updated as any,
+        });
+        if ('data' in result && result.data?.id) {
+          resultId = result.data.id;
+          setRawVitals((prev) =>
+            prev.map((o) => (o.id === existing.id ? (result.data as Observation) : o))
+          );
+        }
+      } else {
+        const obs = {
+          resourceType: 'Observation' as const,
+          status: 'final' as const,
+          category: [
+            {
+              coding: [
+                {
+                  system:
+                    'http://terminology.hl7.org/CodeSystem/observation-category',
+                  code: 'vital-signs',
+                  display: 'Vital Signs',
+                },
+              ],
+            },
+          ],
+          code: {
             coding: [
-              {
-                system:
-                  'http://terminology.hl7.org/CodeSystem/observation-category',
-                code: 'vital-signs',
-                display: 'Vital Signs',
-              },
+              { system: 'http://loinc.org', code: v.code, display: v.display },
             ],
           },
-        ],
-        code: {
-          coding: [
-            { system: 'http://loinc.org', code: v.code, display: v.display },
-          ],
-        },
-        subject: { reference: `Patient/${patientId}`, display: patientName },
-        encounter: { reference: `Encounter/${encounterId}` },
-        effectiveDateTime,
-        valueQuantity: {
-          value: v.value,
-          unit: v.unit,
-          system: 'http://unitsofmeasure.org',
-          code: v.ucumCode,
-        },
-      };
-      const result = await createResource({
-        resourceType: 'Observation',
-        resource: obs as any,
-      });
-      if ('data' in result && result.data?.id) {
-        created.push({
-          id: result.data.id,
-          display: `${v.display}: ${v.value} ${v.unit}`,
+          subject: { reference: `Patient/${patientId}`, display: patientName },
+          encounter: { reference: `Encounter/${encounterId}` },
+          effectiveDateTime,
+          valueQuantity: {
+            value: v.value,
+            unit: v.unit,
+            system: 'http://unitsofmeasure.org',
+            code: v.ucumCode,
+          },
+        };
+        const result = await createResource({
+          resourceType: 'Observation',
+          resource: obs as any,
         });
+        if ('data' in result && result.data?.id) {
+          resultId = result.data.id;
+        }
+      }
+      if (resultId) {
+        created.push({ id: resultId, display: `${v.display}: ${v.value} ${v.unit}` });
       }
     }
 
     if (created.length > 0) {
-      setVitalsItems((prev) => [...prev, ...created]);
+      setVitalsItems(created);
       setVitalsForm((f) => ({
         ...f,
         spo2: '',
@@ -486,9 +530,25 @@ const ClinicalConsultPage: React.FC = () => {
         rr: '',
         temp: '',
       }));
+      setIsEditingVitals(false);
     } else {
       setVitalsError('Failed to save vital signs. Please try again.');
     }
+  };
+
+  // ── PHYSICAL EXAM ─────────────────────────────────────────────────────────
+
+  const prepareVitalsEdit = () => {
+    const newForm = { ...vitalsForm };
+    rawVitals.forEach((obs) => {
+      const code = obs.code?.coding?.[0]?.code || '';
+      const field = VITAL_CODE_TO_FIELD[code];
+      if (field && obs.valueQuantity?.value != null) {
+        (newForm as any)[field] = String(obs.valueQuantity.value);
+      }
+    });
+    setVitalsForm(newForm);
+    setIsEditingVitals(true);
   };
 
   // ── PHYSICAL EXAM ─────────────────────────────────────────────────────────
@@ -1170,12 +1230,28 @@ const ClinicalConsultPage: React.FC = () => {
               Record the patient's vital signs. Leave fields blank to skip.
             </p>
 
-            {vitalsItems.length > 0 && !isAddingMore.vitals ? (
-              <ExistingRecords
-                items={vitalsItems}
-                label="Recorded Vitals"
-                onAddMore={() => setIsAddingMore((m) => ({ ...m, vitals: true }))}
-              />
+            {vitalsItems.length > 0 && !isEditingVitals ? (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Recorded Vitals ({vitalsItems.length})
+                  </h4>
+                  <button
+                    onClick={prepareVitalsEdit}
+                    className="text-xs font-semibold text-amber-600 border border-amber-300 px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
+                  >
+                    ✏️ Update Vitals
+                  </button>
+                </div>
+                <ul className="space-y-2">
+                  {vitalsItems.map((item) => (
+                    <li key={item.id} className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
+                      <span className="font-medium text-gray-700">{item.display}</span>
+                      {item.note && <span className="text-gray-500 text-xs flex-shrink-0">{item.note}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
               <>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1290,8 +1366,16 @@ const ClinicalConsultPage: React.FC = () => {
               disabled={isCreating}
               className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
             >
-              {isCreating ? 'Saving...' : 'Save Vital Signs'}
+              {isCreating ? 'Saving...' : vitalsItems.length > 0 ? 'Update Vital Signs' : 'Save Vital Signs'}
             </button>
+            {isEditingVitals && (
+              <button
+                onClick={() => setIsEditingVitals(false)}
+                className="mt-2 ml-3 text-xs text-gray-500 hover:text-gray-700"
+              >
+                Cancel
+              </button>
+            )}
 
             <RecordedList
               items={vitalsItems}

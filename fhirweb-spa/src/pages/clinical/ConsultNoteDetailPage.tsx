@@ -6,6 +6,7 @@ import {
   useSearchByEncounterQuery,
   useSearchChildEncountersQuery,
   useCreateResourceMutation,
+  useUpdateResourceMutation,
 } from '../../services/fhir/client';
 import {
   Encounter,
@@ -340,122 +341,131 @@ interface AddFormProps {
   onDone?: () => void;
 }
 
-const AddVitalsForm: React.FC<AddFormProps> = ({
+// ─── UpdateVitalsForm ─────────────────────────────────────────────────────────
+
+interface UpdateVitalsFormProps {
+  existingVitals: Observation[];
+  patientId: string;
+  patientName: string;
+  encounterId: string;
+  createResource: (arg: { resourceType: string; resource: Resource }) => Promise<any>;
+  updateResource: (arg: { resourceType: string; id: string; resource: Resource }) => Promise<any>;
+  isSaving: boolean;
+  onDone?: () => void;
+}
+
+const VITAL_FIELD_META: Array<{
+  field: string;
+  loincCode: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  ph: string;
+  unit: string;
+  ucum: string;
+}> = [
+  { field: 'spo2', loincCode: '2708-6', label: 'SpO₂ (%)', min: 50, max: 100, step: 1, ph: '98', unit: '%', ucum: '%' },
+  { field: 'hr', loincCode: '8867-4', label: 'Heart Rate (bpm)', min: 20, max: 300, step: 1, ph: '72', unit: 'beats/min', ucum: '/min' },
+  { field: 'sbp', loincCode: '8480-6', label: 'Systolic BP', min: 50, max: 300, step: 1, ph: '120', unit: 'mmHg', ucum: 'mm[Hg]' },
+  { field: 'dbp', loincCode: '8462-4', label: 'Diastolic BP', min: 20, max: 200, step: 1, ph: '80', unit: 'mmHg', ucum: 'mm[Hg]' },
+  { field: 'rr', loincCode: '9279-1', label: 'Resp. Rate (/min)', min: 4, max: 60, step: 1, ph: '16', unit: 'breaths/min', ucum: '/min' },
+  { field: 'temp', loincCode: '8310-5', label: 'Temp (°C)', min: 30, max: 43, step: 0.1, ph: '36.8', unit: '°C', ucum: 'Cel' },
+];
+
+const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
+  existingVitals,
   patientId,
   patientName,
   encounterId,
   createResource,
+  updateResource,
   isSaving,
   onDone,
 }) => {
-  const [form, setForm] = useState({
-    spo2: '',
-    hr: '',
-    sbp: '',
-    dbp: '',
-    rr: '',
-    temp: '',
-    recordedAt: localNow(),
-  });
+  const initialForm = VITAL_FIELD_META.reduce((acc, f) => {
+    const obs = existingVitals.find((o) => o.code?.coding?.[0]?.code === f.loincCode);
+    acc[f.field] = obs?.valueQuantity?.value != null ? String(obs.valueQuantity.value) : '';
+    return acc;
+  }, {} as Record<string, string>);
+
+  const [form, setForm] = useState<Record<string, string>>({ ...initialForm, recordedAt: localNow() });
   const [err, setErr] = useState('');
+
+  const existingMap = existingVitals.reduce<Record<string, Observation>>((acc, o) => {
+    const code = o.code?.coding?.[0]?.code || '';
+    if (code) acc[code] = o;
+    return acc;
+  }, {});
+
   const handleSave = async () => {
     setErr('');
-    const entries: Array<{
-      code: string;
-      display: string;
-      value: number;
-      unit: string;
-      ucum: string;
-    }> = [];
-    if (form.spo2)
-      entries.push({
-        code: '2708-6',
-        display: 'Oxygen saturation',
-        value: +form.spo2,
-        unit: '%',
-        ucum: '%',
-      });
-    if (form.hr)
-      entries.push({
-        code: '8867-4',
-        display: 'Heart rate',
-        value: +form.hr,
-        unit: 'beats/min',
-        ucum: '/min',
-      });
-    if (form.sbp)
-      entries.push({
-        code: '8480-6',
-        display: 'Systolic blood pressure',
-        value: +form.sbp,
-        unit: 'mmHg',
-        ucum: 'mm[Hg]',
-      });
-    if (form.dbp)
-      entries.push({
-        code: '8462-4',
-        display: 'Diastolic blood pressure',
-        value: +form.dbp,
-        unit: 'mmHg',
-        ucum: 'mm[Hg]',
-      });
-    if (form.rr)
-      entries.push({
-        code: '9279-1',
-        display: 'Respiratory rate',
-        value: +form.rr,
-        unit: 'breaths/min',
-        ucum: '/min',
-      });
-    if (form.temp)
-      entries.push({
-        code: '8310-5',
-        display: 'Body temperature',
-        value: +form.temp,
-        unit: '°C',
-        ucum: 'Cel',
-      });
-    if (entries.length === 0) {
-      setErr('Enter at least one value.');
-      return;
-    }
+    const effectiveDateTime = toFHIRDateTime(form.recordedAt);
+    let anyEntered = false;
     let allOk = true;
-    for (const v of entries) {
-      const obs = {
-        resourceType: 'Observation' as const,
-        status: 'final' as const,
-        category: [
-          {
+
+    for (const meta of VITAL_FIELD_META) {
+      const val = form[meta.field];
+      if (!val) continue;
+      anyEntered = true;
+      const numVal = parseFloat(val);
+      const existing = existingMap[meta.loincCode];
+
+      if (existing?.id) {
+        const updated = {
+          ...existing,
+          effectiveDateTime,
+          valueQuantity: {
+            value: numVal,
+            unit: meta.unit,
+            system: 'http://unitsofmeasure.org',
+            code: meta.ucum,
+          },
+        };
+        const res = await updateResource({
+          resourceType: 'Observation',
+          id: existing.id,
+          resource: updated as any,
+        });
+        if (!('data' in res)) allOk = false;
+      } else {
+        const obs = {
+          resourceType: 'Observation' as const,
+          status: 'final' as const,
+          category: [
+            {
+              coding: [
+                {
+                  system: 'http://terminology.hl7.org/CodeSystem/observation-category',
+                  code: 'vital-signs',
+                  display: 'Vital Signs',
+                },
+              ],
+            },
+          ],
+          code: {
             coding: [
-              {
-                system:
-                  'http://terminology.hl7.org/CodeSystem/observation-category',
-                code: 'vital-signs',
-                display: 'Vital Signs',
-              },
+              { system: 'http://loinc.org', code: meta.loincCode, display: meta.label },
             ],
           },
-        ],
-        code: {
-          coding: [
-            { system: 'http://loinc.org', code: v.code, display: v.display },
-          ],
-        },
-        subject: { reference: `Patient/${patientId}`, display: patientName },
-        encounter: { reference: `Encounter/${encounterId}` },
-        effectiveDateTime: toFHIRDateTime(form.recordedAt),
-        valueQuantity: {
-          value: v.value,
-          unit: v.unit,
-          system: 'http://unitsofmeasure.org',
-          code: v.ucum,
-        },
-      };
-      const res = await createResource({
-        resourceType: 'Observation',
-        resource: obs as any,
-      });
-      if (!('data' in res)) allOk = false;
+          subject: { reference: `Patient/${patientId}`, display: patientName },
+          encounter: { reference: `Encounter/${encounterId}` },
+          effectiveDateTime,
+          valueQuantity: {
+            value: numVal,
+            unit: meta.unit,
+            system: 'http://unitsofmeasure.org',
+            code: meta.ucum,
+          },
+        };
+        const res = await createResource({ resourceType: 'Observation', resource: obs as any });
+        if (!('data' in res)) allOk = false;
+      }
+    }
+
+    if (!anyEntered) {
+      setErr('Enter at least one value.');
+      return;
     }
     if (allOk) {
       onDone?.();
@@ -463,27 +473,22 @@ const AddVitalsForm: React.FC<AddFormProps> = ({
       setErr('Some values failed to save. Please retry.');
     }
   };
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-3">
-        {[
-          { id: 'spo2', label: 'SpO₂ (%)', ph: '98' },
-          { id: 'hr', label: 'Heart Rate (bpm)', ph: '72' },
-          { id: 'sbp', label: 'Systolic BP', ph: '120' },
-          { id: 'dbp', label: 'Diastolic BP', ph: '80' },
-          { id: 'rr', label: 'Resp. Rate (/min)', ph: '16' },
-          { id: 'temp', label: 'Temp (°C)', ph: '36.8' },
-        ].map((f) => (
-          <div key={f.id}>
+        {VITAL_FIELD_META.map((f) => (
+          <div key={f.field}>
             <label className={labelCls}>{f.label}</label>
             <input
               type="number"
+              min={f.min}
+              max={f.max}
+              step={f.step}
               placeholder={f.ph}
               className={fieldCls}
-              value={(form as any)[f.id]}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, [f.id]: e.target.value }))
-              }
+              value={form[f.field]}
+              onChange={(e) => setForm((prev) => ({ ...prev, [f.field]: e.target.value }))}
             />
           </div>
         ))}
@@ -494,25 +499,24 @@ const AddVitalsForm: React.FC<AddFormProps> = ({
           type="datetime-local"
           className={`${fieldCls} max-w-xs`}
           value={form.recordedAt}
-          onChange={(e) =>
-            setForm((s) => ({ ...s, recordedAt: e.target.value }))
-          }
+          onChange={(e) => setForm((prev) => ({ ...prev, recordedAt: e.target.value }))}
         />
       </div>
-      {err && <p className="text-xs text-red-600">{err}</p>}
+      {err && (
+        <div className="bg-red-50 border border-red-300 text-red-700 rounded-md p-2 text-sm">{err}</div>
+      )}
       <button
         onClick={handleSave}
         disabled={isSaving}
-        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md disabled:opacity-50 transition-colors"
+        className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
       >
-        {isSaving ? 'Saving…' : 'Save Vitals'}
+        {isSaving ? 'Saving...' : 'Update Vital Signs'}
       </button>
     </div>
   );
 };
 
-const AddExamForm: React.FC<AddFormProps> = ({
-  patientId,
+const AddExamForm: React.FC<AddFormProps> = ({  patientId,
   patientName,
   encounterId,
   createResource,
@@ -1375,6 +1379,7 @@ const ConsultNoteDetailPage: React.FC = () => {
     encounterId: string;
   }>();
   const [createResource, { isLoading: isSaving }] = useCreateResourceMutation();
+  const [updateResource] = useUpdateResourceMutation();
 
   const { data: patient } = useGetPatientQuery(patientId!);
   const { data: encounterResource, isLoading: encounterLoading } =
@@ -1705,7 +1710,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </div>
 
                   {/* ── 1. Vital Signs ── */}
-                  <Section sectionKey="vitals" icon="V" title="Vital Signs" count={vitals.length} isEditable={isEditable} addLabel="Record Vitals" addForm={<AddVitalsForm {...formProps} />}>
+                  <Section sectionKey="vitals" icon="V" title="Vital Signs" count={vitals.length} isEditable={isEditable} addLabel="Update Vitals" addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}>
                     {vitals.length === 0 ? (
                       <EmptyNote label="No vital signs recorded for this encounter." />
                     ) : (
@@ -2016,8 +2021,8 @@ const ConsultNoteDetailPage: React.FC = () => {
                   title="Vital Signs"
                   count={vitals.length}
                   isEditable={isEditable}
-                  addLabel="Record Vitals"
-                  addForm={<AddVitalsForm {...formProps} />}
+                  addLabel="Update Vitals"
+                  addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}
                 >
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
