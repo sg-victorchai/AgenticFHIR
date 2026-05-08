@@ -6,7 +6,6 @@ import {
   useSearchByEncounterQuery,
   useSearchChildEncountersQuery,
   useCreateResourceMutation,
-  useUpdateResourceMutation,
 } from '../../services/fhir/client';
 import {
   Encounter,
@@ -223,6 +222,14 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
+
+const SectionDivider: React.FC<{ label: string }> = ({ label }) => (
+  <div className="flex items-center gap-2 my-3">
+    <div className="flex-1 border-t border-gray-100" />
+    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</span>
+    <div className="flex-1 border-t border-gray-100" />
+  </div>
+);
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -1368,10 +1375,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     encounterId: string;
   }>();
   const [createResource, { isLoading: isSaving }] = useCreateResourceMutation();
-  const [updateResource] = useUpdateResourceMutation();
-  const [noteText, setNoteText] = useState('');
-  const [noteError, setNoteError] = useState('');
-  const [isSavingNote, setIsSavingNote] = useState(false);
 
   const { data: patient } = useGetPatientQuery(patientId!);
   const { data: encounterResource, isLoading: encounterLoading } =
@@ -1457,6 +1460,23 @@ const ConsultNoteDetailPage: React.FC = () => {
   const examFindings = allObs.filter((o) =>
     o.category?.some((c) => c.coding?.some((cd) => cd.code === 'exam')),
   );
+  const otherObs = allObs.filter(
+    (o) => !o.category?.some((c) =>
+      c.coding?.some((cd) => cd.code === 'vital-signs' || cd.code === 'exam'),
+    ),
+  );
+
+  const encounterClass =
+    encounter?.class?.[0]?.coding?.[0]?.display ||
+    encounter?.class?.[0]?.coding?.[0]?.code || '—';
+
+  const latestVitals = vitals.reduce<Record<string, Observation>>((acc, obs) => {
+    const code = obs.code?.coding?.[0]?.code || '';
+    const existing = acc[code];
+    if (!existing || (obs.effectiveDateTime && (!existing.effectiveDateTime || obs.effectiveDateTime > existing.effectiveDateTime)))
+      acc[code] = obs;
+    return acc;
+  }, {});
 
   const patientName = patient
     ? patient.name?.[0]?.text ||
@@ -1494,30 +1514,6 @@ const ConsultNoteDetailPage: React.FC = () => {
     medDispLoading ||
     medStatLoading ||
     procLoading;
-
-  useEffect(() => {
-    if ((encounterResource as any)?.note?.[0]?.text) {
-      setNoteText((encounterResource as any).note[0].text);
-    }
-  }, [(encounterResource as any)?.id]);
-
-  const handleSaveNote = async () => {
-    setNoteError('');
-    setIsSavingNote(true);
-    const updated = {
-      ...(encounterResource as Encounter),
-      note: [{ text: noteText }],
-    };
-    const result = await updateResource({
-      resourceType: 'Encounter',
-      id: encounterId!,
-      resource: updated as unknown as Encounter,
-    });
-    setIsSavingNote(false);
-    if (!('data' in result)) {
-      setNoteError('Failed to save notes. Please try again.');
-    }
-  };
 
   const formProps: Omit<AddFormProps, 'onDone'> = {
     patientId: patientId!,
@@ -1668,123 +1664,209 @@ const ConsultNoteDetailPage: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* ── Patient Notes ── */}
+              {/* ── Patient Notes (full scrollable clinical note) ── */}
               {activeSection === 'notes' && (
                 <div>
-                  <div className="mb-5">
-                    <h2 className="text-lg font-bold text-gray-800">Consultation Notes</h2>
-                    <p className="text-sm text-gray-500 mt-1">{encounterReason}</p>
+                  {/* Clinical header */}
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
+                    {isEditable && (
+                      <div className="bg-amber-500 px-5 py-2 flex items-center justify-between">
+                        <span className="text-white text-xs font-bold uppercase tracking-widest">Active Consult — In Progress</span>
+                        <Link
+                          to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+                          className="text-xs bg-white text-amber-700 font-semibold px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
+                        >
+                          Open Full Consult Wizard →
+                        </Link>
+                      </div>
+                    )}
+                    <div className="p-5">
+                      <div className="flex flex-col sm:flex-row gap-5">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className="bg-slate-700 rounded-full h-14 w-14 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                            {patientName.charAt(0).toUpperCase() || '?'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-gray-900 text-xl leading-tight">{patientName}</div>
+                            <div className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                              <span>DOB: <strong className="text-gray-700">{patient?.birthDate || '—'}</strong></span>
+                              <span>Sex: <strong className="text-gray-700">{patient?.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : '—'}</strong></span>
+                              {patient?.identifier?.[0]?.value && (
+                                <span>ID: <strong className="text-gray-700 font-mono">{patient.identifier[0].value}</strong></span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="border-t sm:border-t-0 sm:border-l border-gray-200 sm:pl-5 pt-4 sm:pt-0 flex-shrink-0 min-w-48">
+                          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Visit Details</div>
+                          <div className="font-semibold text-gray-800 text-base">{encounterReason}</div>
+                          <div className="text-sm text-gray-500 mt-1">{formatDT(encounter?.actualPeriod?.start)}</div>
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            {encounter && <StatusPill status={encounter.status} />}
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{encounterClass}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Latest vitals strip */}
+                    {Object.keys(latestVitals).length > 0 && (
+                      <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
+                        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Latest Vitals</div>
+                        <div className="flex flex-wrap gap-3">
+                          {Object.entries(latestVitals).map(([code, obs]) => {
+                            const val = obs.valueQuantity?.value ?? null;
+                            const unit = obs.valueQuantity?.unit || '';
+                            const trend = val !== null ? interpretVital(code, val) : 'normal';
+                            const name = VITAL_LOINC_NAMES[code] || obs.code?.coding?.[0]?.display || code;
+                            return (
+                              <div key={code} className={`border rounded-lg px-3 py-2 ${vitalCardCls(trend)}`}>
+                                <div className="text-xs text-gray-500 font-medium">{name}</div>
+                                <div className={`text-lg font-bold tabular-nums ${vitalValCls(trend)}`}>
+                                  {val !== null ? val : '—'} <span className="text-xs font-normal">{unit}</span>
+                                  {trend === 'critical' && <span className="ml-1 text-red-600 text-sm font-bold">!</span>}
+                                  {trend === 'abnormal' && <span className="ml-1 text-amber-600 text-xs">▲</span>}
+                                </div>
+                                <div className="text-xs text-gray-400">{formatDT(obs.effectiveDateTime)}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {isEditable ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Clinical Notes</label>
-                        <textarea
-                          rows={12}
-                          value={noteText}
-                          onChange={(e) => setNoteText(e.target.value)}
-                          placeholder="Document your consultation notes here (SOAP format, clinical findings, plan...)..."
-                          className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                        />
+                  {/* ── 1. Vital Signs ── */}
+                  <Section sectionKey="vitals" icon="V" title="Vital Signs" count={vitals.length} isEditable={isEditable} addLabel="Record Vitals" addForm={<AddVitalsForm {...formProps} />}>
+                    {vitals.length === 0 ? (
+                      <EmptyNote label="No vital signs recorded for this encounter." />
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {vitals.map((obs) => {
+                          const code = obs.code?.coding?.[0]?.code || '';
+                          const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
+                          const val = obs.valueQuantity?.value ?? null;
+                          const unit = obs.valueQuantity?.unit || obs.valueString || '';
+                          const trend = val !== null ? interpretVital(code, val) : 'normal';
+                          return (
+                            <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                              <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
+                              <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
+                                {val !== null ? val : obs.valueString || '—'}
+                                <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
+                                {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      {noteError && <p className="text-sm text-red-600">{noteError}</p>}
-                      <button
-                        onClick={handleSaveNote}
-                        disabled={isSavingNote}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-md disabled:opacity-50 transition-colors"
-                      >
-                        {isSavingNote ? 'Saving...' : 'Save Notes'}
-                      </button>
-                    </div>
-                  ) : (() => {
-                    const hasAnyData = !!(noteText || vitals.length || examFindings.length || conditions.length ||
-                      labOrders.length || radOrders.length || labReports.length || radReports.length ||
-                      medications.length || procedures.length || carePlans.length);
-                    const NotesSectionHeading = ({ children }: { children: React.ReactNode }) => (
-                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 border-b border-gray-100 pb-1">{children}</h3>
-                    );
-                    if (!hasAnyData) {
-                      return <EmptyNote label="No consultation notes recorded." />;
-                    }
-                    return (
-                      <div className="space-y-8">
-                        {/* Notes header */}
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center gap-3">
-                          <div>
-                            <div className="font-semibold text-gray-800">{encounterReason}</div>
-                            <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
-                              <span>{formatDT(encounter?.actualPeriod?.start)}</span>
-                              {encounter?.status && <StatusPill status={encounter.status} />}
-                            </div>
-                          </div>
-                        </div>
+                    )}
+                  </Section>
 
-                        {/* Doctor's free-text notes */}
-                        <div>
-                          <NotesSectionHeading>Doctor's Notes</NotesSectionHeading>
-                          {noteText ? (
-                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{noteText}</p>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-400 italic">No consultation notes recorded.</p>
-                          )}
-                        </div>
+                  {/* ── 2. Physical Examination ── */}
+                  <Section sectionKey="exam" icon="E" title="Physical Examination" count={examFindings.length} isEditable={isEditable} addLabel="Add Finding" addForm={<AddExamForm {...formProps} />}>
+                    {examFindings.length === 0 ? (
+                      <EmptyNote label="No examination findings recorded." />
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 border-b border-gray-100">
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {examFindings.map((obs) => {
+                            const system = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                            const finding = obs.valueString || '—';
+                            const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                            return (
+                              <tr key={obs.id} className="hover:bg-gray-50">
+                                <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{system}</td>
+                                <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
+                                <td className="py-2.5 pr-4 whitespace-nowrap">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    {isNormal ? '✓ Normal' : '! Abnormal'}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </Section>
 
-                        {/* Vitals */}
-                        {vitals.length > 0 && (
+                  {/* ── 3. Investigations ── */}
+                  <Section sectionKey="investigations" icon="Ix" title="Investigations" count={serviceRequests.length + otherObs.length} isEditable={isEditable} addLabel="Place Order" addForm={<AddOrderForm {...formProps} />}>
+                    {serviceRequests.length === 0 && otherObs.length === 0 ? (
+                      <EmptyNote label="No investigation orders or results recorded." />
+                    ) : (
+                      <div className="space-y-5">
+                        {serviceRequests.length > 0 && (
                           <div>
-                            <NotesSectionHeading>Vital Signs</NotesSectionHeading>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              {vitals.map((obs) => {
-                                const code = obs.code?.coding?.[0]?.code || '';
-                                const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
-                                const val = obs.valueQuantity?.value ?? null;
-                                const unit = obs.valueQuantity?.unit || obs.valueString || '';
-                                const trend = val !== null ? interpretVital(code, val) : 'normal';
-                                return (
-                                  <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
-                                    <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
-                                    <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                      {val !== null ? val : obs.valueString || '—'}
-                                      <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
-                                      {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
-                                    </div>
-                                    <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Physical Examination */}
-                        {examFindings.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Physical Examination</NotesSectionHeading>
+                            <SectionDivider label="Orders" />
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {serviceRequests.map((sr) => (
+                                  <tr key={sr.id} className="hover:bg-gray-50">
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || (sr.code as any)?.text || '—'}</td>
+                                    <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                                    <td className="py-2.5 pr-4">{sr.priority && <StatusPill status={sr.priority} />}</td>
+                                    <td className="py-2.5 pr-4"><StatusPill status={sr.status} /></td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        {otherObs.length > 0 && (
+                          <div>
+                            <SectionDivider label="Results" />
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
                                   <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Interpretation</th>
                                   <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
-                                {examFindings.map((obs) => {
-                                  const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                                {otherObs.map((obs) => {
+                                  const name = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                                  const val = obs.valueQuantity
+                                    ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`
+                                    : obs.valueString || '—';
+                                  const interp = obs.interpretation?.[0]?.coding?.[0]?.code;
+                                  const interpDisplay = obs.interpretation?.[0]?.coding?.[0]?.display || interp;
+                                  const interpCls = interp === 'H' || interp === 'HH' ? 'bg-red-100 text-red-700'
+                                    : interp === 'L' || interp === 'LL' ? 'bg-blue-100 text-blue-700'
+                                    : interp === 'N' ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-600';
                                   return (
-                                    <tr key={obs.id}>
-                                      <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{obs.code?.text || obs.code?.coding?.[0]?.display || '—'}</td>
-                                      <td className="py-2.5 pr-4 text-gray-800">{obs.valueString || '—'}</td>
-                                      <td className="py-2.5 pr-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                          {isNormal ? '✓ Normal' : '! Abnormal'}
-                                        </span>
+                                    <tr key={obs.id} className={`hover:bg-gray-50 ${interp === 'HH' || interp === 'LL' ? 'bg-red-50/30' : ''}`}>
+                                      <td className="py-2.5 pr-4 font-medium text-gray-800">{name}</td>
+                                      <td className="py-2.5 pr-4 font-mono font-semibold text-gray-700 tabular-nums">{val}</td>
+                                      <td className="py-2.5 pr-4">
+                                        {interpDisplay && (
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${interpCls}`}>{interpDisplay}</span>
+                                        )}
                                       </td>
-                                      <td className="py-2.5 text-xs text-gray-400">{formatDT(obs.effectiveDateTime)}</td>
+                                      <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
                                     </tr>
                                   );
                                 })}
@@ -1792,148 +1874,80 @@ const ConsultNoteDetailPage: React.FC = () => {
                             </table>
                           </div>
                         )}
+                      </div>
+                    )}
+                  </Section>
 
-                        {/* Assessment / Diagnosis */}
-                        {conditions.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Assessment / Diagnosis</NotesSectionHeading>
-                            <div className="space-y-2">
-                              {conditions.map((cond, i) => {
-                                const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
-                                const sevCode = cond.severity?.coding?.[0]?.code;
-                                const sevText = sevCode === '24484000' ? 'Severe' : sevCode === '6736007' ? 'Moderate' : sevCode === '255604002' ? 'Mild' : undefined;
-                                const verifCode = cond.verificationStatus?.coding?.[0]?.code;
-                                const clinCode = cond.clinicalStatus?.coding?.[0]?.code;
-                                const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500' : sevText === 'Moderate' ? 'border-l-4 border-amber-400' : 'border-l-4 border-gray-200';
-                                return (
-                                  <div key={cond.id} className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}>
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
-                                        <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
-                                        {cond.code?.coding?.[0]?.code && (
-                                          <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
-                                        )}
-                                      </div>
-                                      <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                                        {sevText && (
-                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                                            {sevText}
-                                          </span>
-                                        )}
-                                        {verifCode && <StatusPill status={verifCode} />}
-                                        {clinCode && <StatusPill status={clinCode} />}
-                                      </div>
-                                    </div>
-                                    <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Lab Orders */}
-                        {labOrders.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Lab Orders</NotesSectionHeading>
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {labOrders.map((sr) => (
-                                  <tr key={sr.id}>
-                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
-                                    <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
-                                    <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
-                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Radiology Orders */}
-                        {radOrders.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Radiology Orders</NotesSectionHeading>
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {radOrders.map((sr) => (
-                                  <tr key={sr.id}>
-                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || '—'}</td>
-                                    <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
-                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Lab Results */}
-                        {labReports.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Lab Results</NotesSectionHeading>
-                            <div className="space-y-3">
-                              {labReports.map((dr) => (
-                                <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="font-semibold text-gray-800 text-sm">{dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}</span>
-                                    <div className="flex items-center gap-2">
-                                      <StatusPill status={dr.status} />
-                                      <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
-                                    </div>
-                                  </div>
-                                  {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
-                                  {dr.result && dr.result.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1">{dr.result.length} observation(s) linked</div>
+                  {/* ── 4. Assessment / Diagnosis ── */}
+                  <Section sectionKey="assessment" icon="Dx" title="Assessment / Diagnosis" count={conditions.length} isEditable={isEditable} addLabel="Add Diagnosis" addForm={<AddDiagnosisForm {...formProps} />}>
+                    {conditions.length === 0 ? (
+                      <EmptyNote label="No diagnoses recorded for this encounter." />
+                    ) : (
+                      <div className="space-y-2">
+                        {conditions.map((cond, i) => {
+                          const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                          const sevText = cond.severity?.coding?.[0]?.display;
+                          const verifCode = cond.verificationStatus?.coding?.[0]?.code || '';
+                          const clinCode = cond.clinicalStatus?.coding?.[0]?.code || '';
+                          const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500'
+                            : sevText === 'Moderate' ? 'border-l-4 border-amber-400'
+                            : 'border-l-4 border-gray-200';
+                          return (
+                            <div key={cond.id} className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
+                                  <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
+                                  {cond.code?.coding?.[0]?.code && (
+                                    <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
                                   )}
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Radiology Reports */}
-                        {radReports.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Radiology Reports</NotesSectionHeading>
-                            <div className="space-y-3">
-                              {radReports.map((dr) => (
-                                <div key={dr.id} className="border border-gray-200 rounded-lg p-4">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="font-semibold text-gray-800 text-sm">{dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}</span>
-                                    <div className="flex items-center gap-2">
-                                      <StatusPill status={dr.status} />
-                                      <span className="text-xs text-gray-400">{formatDT(dr.issued)}</span>
-                                    </div>
-                                  </div>
-                                  {dr.conclusion && <p className="text-sm text-gray-700 mt-1">{dr.conclusion}</p>}
+                                <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                                  {sevText && (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                      {sevText}
+                                    </span>
+                                  )}
+                                  {verifCode && <StatusPill status={verifCode} />}
+                                  {clinCode && <StatusPill status={clinCode} />}
                                 </div>
-                              ))}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Section>
 
-                        {/* Medications */}
+                  {/* ── 5. Management Plan ── */}
+                  <Section
+                    sectionKey="management"
+                    icon="Rx"
+                    title="Management Plan"
+                    count={medications.length + carePlans.length}
+                    isEditable={isEditable}
+                    addLabel="Add Medication / Plan"
+                    addForm={
+                      <div className="space-y-5">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Medication</p>
+                          <AddMedicationForm {...formProps} />
+                        </div>
+                        <div className="border-t border-blue-100 pt-4">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Care Plan</p>
+                          <AddCarePlanForm {...formProps} />
+                        </div>
+                      </div>
+                    }
+                  >
+                    {medications.length === 0 && carePlans.length === 0 ? (
+                      <EmptyNote label="No medications or care plan recorded." />
+                    ) : (
+                      <div className="space-y-5">
                         {medications.length > 0 && (
                           <div>
-                            <NotesSectionHeading>Medications</NotesSectionHeading>
+                            <SectionDivider label="Medications" />
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-100">
@@ -1945,8 +1959,10 @@ const ConsultNoteDetailPage: React.FC = () => {
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {medications.map((med) => (
-                                  <tr key={med.id}>
-                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}</td>
+                                  <tr key={med.id} className="hover:bg-gray-50">
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                      {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                    </td>
                                     <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
                                     <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
                                     <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
@@ -1956,38 +1972,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                             </table>
                           </div>
                         )}
-
-                        {/* Procedures */}
-                        {procedures.length > 0 && (
-                          <div>
-                            <NotesSectionHeading>Procedures</NotesSectionHeading>
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Procedure</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Performed</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Notes</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {procedures.map((proc) => (
-                                  <tr key={proc.id}>
-                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{proc.code?.text || proc.code?.coding?.[0]?.display || '—'}</td>
-                                    <td className="py-2.5 pr-4"><StatusPill status={proc.status} /></td>
-                                    <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">{formatDT((proc as any).occurrenceDateTime || proc.occurrencePeriod?.start)}</td>
-                                    <td className="py-2.5 text-xs text-gray-600">{proc.note?.[0]?.text || '—'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Care Plan */}
                         {carePlans.length > 0 && (
                           <div>
-                            <NotesSectionHeading>Care Plan</NotesSectionHeading>
+                            <SectionDivider label="Care Plan" />
                             <div className="space-y-3">
                               {carePlans.map((cp) => (
                                 <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
@@ -1999,14 +1986,56 @@ const ConsultNoteDetailPage: React.FC = () => {
                                     </div>
                                   </div>
                                   {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
+                                  {cp.note?.[0]?.text && (
+                                    <div className="mt-2 border-t border-emerald-100 pt-2">
+                                      <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
                           </div>
                         )}
                       </div>
-                    );
-                  })()}
+                    )}
+                  </Section>
+
+                  {/* ── 6. Inpatient Admission ── */}
+                  <Section sectionKey="admission" icon="Adm" title="Inpatient Admission" count={inpatientAdmission ? 1 : 0} isEditable={isEditable && !inpatientAdmission} addLabel="Admit Patient" addForm={<AddAdmissionForm {...formProps} diagnosisItems={diagnosisItemsForAdmission} />}>
+                    {!inpatientAdmission ? (
+                      <EmptyNote label="No inpatient admission linked to this encounter." />
+                    ) : (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-200 text-orange-800 uppercase tracking-wide">Inpatient</span>
+                          <StatusPill status={inpatientAdmission.status} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission</div>
+                            <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.start)}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Planned Discharge</div>
+                            <div className="font-medium text-gray-800">{formatDT(inpatientAdmission.actualPeriod?.end)}</div>
+                          </div>
+                          {(inpatientAdmission as any).reason?.[0]?.value?.[0]?.concept?.text && (
+                            <div className="col-span-2">
+                              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Reason for Admission</div>
+                              <div className="text-gray-800">{(inpatientAdmission as any).reason[0].value[0].concept.text}</div>
+                            </div>
+                          )}
+                          {inpatientAdmission.diagnosis?.[0]?.condition?.[0]?.reference?.display && (
+                            <div className="col-span-2">
+                              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Admission Diagnosis</div>
+                              <div className="text-gray-800">{inpatientAdmission.diagnosis[0].condition[0].reference.display}</div>
+                            </div>
+                          )}
+                          <div className="col-span-2 text-xs font-mono text-gray-400">Encounter ID: {inpatientAdmission.id}</div>
+                        </div>
+                      </div>
+                    )}
+                  </Section>
                 </div>
               )}
 
