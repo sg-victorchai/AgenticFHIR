@@ -8,7 +8,6 @@ import {
   useGetFirstPageMutation,
   useGetLastPageMutation,
   useGoToPageMutation,
-  useSearchByEncounterQuery,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
 
@@ -29,49 +28,14 @@ const ConsultActionButton: React.FC<{
   patientId: string;
   encounterId: string;
   status: string;
-}> = ({ patientId, encounterId, status }) => {
-  const { data, isLoading } = useSearchByEncounterQuery({
-    resourceType: 'Observation',
-    encounterId,
-  });
-
-  if (isLoading) {
-    return <span className="text-xs text-gray-300 animate-pulse">···</span>;
-  }
-
-  const hasNotes = (data?.entry?.length ?? 0) > 0;
-  const isActive = status === 'in-progress';
-
-  if (!hasNotes && isActive) {
-    return (
-      <Link
-        to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-        className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-      >
-        Start Consult
-      </Link>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-1 items-start">
-      <Link
-        to={`/patient/${patientId}/encounter/${encounterId}/notes`}
-        className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-      >
-        View Notes
-      </Link>
-      {isActive && (
-        <Link
-          to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-          className="inline-flex items-center bg-amber-500 hover:bg-amber-600 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-        >
-          Continue
-        </Link>
-      )}
-    </div>
-  );
-};
+}> = ({ patientId, encounterId }) => (
+  <Link
+    to={`/patient/${patientId}/encounter/${encounterId}/notes`}
+    className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+  >
+    View Notes
+  </Link>
+);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -423,9 +387,6 @@ const EncounterPage: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Consult Note
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  FHIR Record
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
@@ -488,14 +449,6 @@ const EncounterPage: React.FC = () => {
                       encounterId={encounter.id}
                       status={encounter.status}
                     />
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <Link
-                      to={`/patient/${id}/encounter/crud/${encounter.id}`}
-                      className="text-blue-600 hover:text-blue-800 transition-colors"
-                    >
-                      Details
-                    </Link>
                   </td>
                 </tr>
               ))}
