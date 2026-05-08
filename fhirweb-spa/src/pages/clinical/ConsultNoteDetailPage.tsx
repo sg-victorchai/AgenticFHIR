@@ -1447,15 +1447,20 @@ const ConsultNoteDetailPage: React.FC = () => {
     (sr) => (sr.code as any)?.concept?.coding?.[0]?.code === RAD_SNOMED,
   );
 
-  const LAB_SYSTEM = 'http://terminology.hl7.org/CodeSystem/v2-0074';
+  const SNOMED_SYSTEM = 'http://snomed.info/sct';
+  // SNOMED CT lab specialty codes (mirrors INVESTIGATION_CATEGORIES lab entries)
+  const LAB_SNOMED_CODES = new Set(['252275004', '59524001', '394579002', '19851009', '74728003']);
   const labReports = diagnosticReports.filter((dr) =>
     dr.category?.some((cat) =>
-      cat.coding?.some((cd) => cd.system === LAB_SYSTEM && cd.code === 'LAB'),
+      cat.coding?.some(
+        (cd) => cd.system === SNOMED_SYSTEM && cd.code != null && LAB_SNOMED_CODES.has(cd.code),
+      ),
     ),
   );
+  // RAD_SNOMED is already defined above as '394914008'
   const radReports = diagnosticReports.filter((dr) =>
     dr.category?.some((cat) =>
-      cat.coding?.some((cd) => cd.system === LAB_SYSTEM && cd.code === 'RAD'),
+      cat.coding?.some((cd) => cd.system === SNOMED_SYSTEM && cd.code === RAD_SNOMED),
     ),
   );
 
