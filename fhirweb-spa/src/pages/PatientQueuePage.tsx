@@ -10,13 +10,20 @@ import { RootState } from '../store';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const formatTime = (iso?: string) => {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('en-SG', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+const formatTime = (iso?: string) =>
+  iso ? new Date(iso).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' }) : '—';
+
+const formatDateTime = (iso?: string) =>
+  iso
+    ? new Date(iso).toLocaleString('en-SG', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    : '—';
+
+const SS_KEY_MODE = 'queue-mode';
+const SS_KEY_FROM = 'queue-from';
+const SS_KEY_TO   = 'queue-to';
 
 const getPatientId = (encounter: Encounter): string => {
   const ref = encounter.subject?.reference;
@@ -71,6 +78,7 @@ interface QueueRowProps {
   role: 'psa' | 'clinician';
   onStatusUpdate: (id: string, status: string) => void;
   isUpdating: boolean;
+  showDate: boolean;
 }
 
 const QueueRow: React.FC<QueueRowProps> = ({
@@ -78,6 +86,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
   role,
   onStatusUpdate,
   isUpdating,
+  showDate,
 }) => {
   const patientId = getPatientId(encounter);
   const encounterId = encounter.id!;
@@ -94,7 +103,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
         {getChiefComplaint(encounter)}
       </td>
       <td className="px-4 py-3 text-sm text-gray-500">
-        {formatTime(encounter.actualPeriod?.start)}
+        {showDate ? formatDateTime(encounter.actualPeriod?.start) : formatTime(encounter.actualPeriod?.start)}
       </td>
       <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
         {getEncounterClass(encounter)}
@@ -180,6 +189,7 @@ interface QueueSectionProps {
   role: 'psa' | 'clinician';
   onStatusUpdate: (id: string, status: string) => void;
   isUpdating: boolean;
+  showDate: boolean;
 }
 
 const QueueSection: React.FC<QueueSectionProps> = ({
@@ -189,6 +199,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
   role,
   onStatusUpdate,
   isUpdating,
+  showDate,
 }) => {
   const [collapsed, setCollapsed] = useState(false);
   const headerCls = STATUS_HEADER_CLS[queueStatus];
@@ -216,7 +227,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Patient', 'Chief Complaint', 'Time', 'Type', 'Status', 'Actions'].map(
+                  {['Patient', 'Chief Complaint', showDate ? 'Date & Time' : 'Time', 'Type', 'Status', 'Actions'].map(
                     (h) => (
                       <th
                         key={h}
@@ -236,6 +247,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                     role={role}
                     onStatusUpdate={onStatusUpdate}
                     isUpdating={isUpdating}
+                    showDate={showDate}
                   />
                 ))}
               </tbody>
@@ -254,9 +266,30 @@ const PatientQueuePage: React.FC = () => {
   const todayISO = new Date().toISOString().split('T')[0];
   const currentYearMonth = todayISO.slice(0, 7);
 
-  const [mode, setMode] = useState<'today' | 'range'>('today');
-  const [fromMonth, setFromMonth] = useState<string>(currentYearMonth);
-  const [toMonth, setToMonth] = useState<string>(currentYearMonth);
+  const [mode, setMode] = useState<'today' | 'range'>(
+    () => (sessionStorage.getItem(SS_KEY_MODE) as 'today' | 'range') || 'today',
+  );
+  const [fromMonth, setFromMonth] = useState<string>(
+    () => sessionStorage.getItem(SS_KEY_FROM) || currentYearMonth,
+  );
+  const [toMonth, setToMonth] = useState<string>(
+    () => sessionStorage.getItem(SS_KEY_TO) || currentYearMonth,
+  );
+
+  const setModeAndSave = (m: 'today' | 'range') => {
+    setMode(m);
+    sessionStorage.setItem(SS_KEY_MODE, m);
+  };
+  const setFromMonthAndSave = (v: string) => {
+    setFromMonth(v);
+    sessionStorage.setItem(SS_KEY_FROM, v);
+  };
+  const setToMonthAndSave = (v: string) => {
+    setToMonth(v);
+    sessionStorage.setItem(SS_KEY_TO, v);
+  };
+
+  const showDate = mode === 'range';
 
   // In 'today' mode always query just today; in 'range' mode use month boundaries
   const fromISO = mode === 'today' ? todayISO : `${fromMonth}-01`;
@@ -333,13 +366,13 @@ const PatientQueuePage: React.FC = () => {
         <div className="flex items-center gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
           <div className="flex rounded-md overflow-hidden border border-gray-200 text-sm font-medium shrink-0">
             <button
-              onClick={() => setMode('today')}
+              onClick={() => setModeAndSave('today')}
               className={`px-4 py-1.5 transition-colors ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
               Today
             </button>
             <button
-              onClick={() => setMode('range')}
+              onClick={() => setModeAndSave('range')}
               className={`px-4 py-1.5 transition-colors ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
               Date Range
@@ -355,8 +388,8 @@ const PatientQueuePage: React.FC = () => {
                   value={fromMonth}
                   max={currentYearMonth}
                   onChange={(e) => {
-                    setFromMonth(e.target.value);
-                    if (e.target.value > toMonth) setToMonth(e.target.value);
+                    setFromMonthAndSave(e.target.value);
+                    if (e.target.value > toMonth) setToMonthAndSave(e.target.value);
                   }}
                   className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
@@ -368,7 +401,7 @@ const PatientQueuePage: React.FC = () => {
                   value={toMonth}
                   min={fromMonth}
                   max={currentYearMonth}
-                  onChange={(e) => setToMonth(e.target.value)}
+                  onChange={(e) => setToMonthAndSave(e.target.value)}
                   className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
               </div>
@@ -413,6 +446,7 @@ const PatientQueuePage: React.FC = () => {
             role={role ?? 'psa'}
             onStatusUpdate={handleStatusUpdate}
             isUpdating={isUpdating}
+            showDate={showDate}
           />
           <QueueSection
             label="In Progress"
@@ -421,6 +455,7 @@ const PatientQueuePage: React.FC = () => {
             role={role ?? 'psa'}
             onStatusUpdate={handleStatusUpdate}
             isUpdating={isUpdating}
+            showDate={showDate}
           />
           <QueueSection
             label="Completed"
@@ -429,6 +464,7 @@ const PatientQueuePage: React.FC = () => {
             role={role ?? 'psa'}
             onStatusUpdate={handleStatusUpdate}
             isUpdating={isUpdating}
+            showDate={showDate}
           />
           {cancelled.length > 0 && (
             <QueueSection
@@ -438,6 +474,7 @@ const PatientQueuePage: React.FC = () => {
               role={role ?? 'psa'}
               onStatusUpdate={handleStatusUpdate}
               isUpdating={isUpdating}
+              showDate={showDate}
             />
           )}
         </>

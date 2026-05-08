@@ -997,7 +997,7 @@ export const fhirApi = createApi({
           const today = new Date().toISOString().split('T')[0];
           const from = (range as { from: string; to: string })?.from ?? today;
           const to = (range as { from: string; to: string })?.to ?? today;
-          const dateParam = from === to ? from : [`ge${from}`, `le${to}`];
+          const dateParam = [`ge${from}`, `le${to}T23:59:59`];
           const results = await client.search({
             resourceType: 'Encounter',
             searchParams: {
