@@ -716,13 +716,13 @@ export const fhirApi = createApi({
         }
       },
       invalidatesTags: (_result, _error, { resourceType, id }) => {
-        // Type assertion to ensure resourceType is one of the tag types
         const tagType = resourceType as
           | 'Patient'
+          | 'Encounter'
           | 'CarePlan'
           | 'Observation'
           | 'MedicationRequest';
-        return [{ type: tagType, id }];
+        return [{ type: tagType, id }, tagType];
       },
     }),
 

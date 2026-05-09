@@ -203,7 +203,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
                     to={`/patient/${patientId}/encounter/${encounterId}/notes`}
                     className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                   >
-                    Resume Consult
+                    Start Consult
                   </Link>
                   <button
                     onClick={() => onEncounterAction(encounter, 'complete-consult')}
