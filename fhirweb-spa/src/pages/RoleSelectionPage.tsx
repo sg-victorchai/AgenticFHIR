@@ -35,7 +35,7 @@ const RoleSelectionPage: React.FC = () => {
 
   const handleSelectRole = (selected: 'psa' | 'clinician') => {
     dispatch(setRole(selected));
-    navigate(selected === 'psa' ? '/patients' : '/queue');
+    navigate(selected === 'psa' ? '/queue' : '/queue');
   };
 
   if (clientLoading || isRedirecting) {
