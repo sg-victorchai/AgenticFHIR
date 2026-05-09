@@ -990,6 +990,32 @@ export const fhirApi = createApi({
       ],
     }),
 
+    getObservationsByIds: builder.query<Bundle<Resource>, string[]>({
+      queryFn: async (ids) => {
+        try {
+          const client = await createFHIRClient();
+          const results = await client.search({
+            resourceType: 'Observation',
+            searchParams: { _id: ids.join(','), _count: String(ids.length + 10) },
+          });
+          return { data: results as Bundle<Resource> };
+        } catch (error: any) {
+          console.error('Error fetching observations by IDs:', error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+      providesTags: (_result, _error, ids) =>
+        ids.map((id) => ({ type: 'Observation' as const, id })),
+    }),
+
     getTodayEncounters: builder.query<Bundle<Resource>, { from: string; to: string } | void>({
       queryFn: async (range) => {
         try {
@@ -1110,4 +1136,5 @@ export const {
   useSearchByEncounterQuery,
   useSearchChildEncountersQuery,
   useGetTodayEncountersQuery,
+  useGetObservationsByIdsQuery,
 } = fhirApi;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import LabReportModal from './LabReportModal';
 import {
   useGetPatientQuery,
   useGetResourceByIdQuery,
@@ -1382,6 +1383,7 @@ const ConsultNoteDetailPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState('notes');
   const [filterText, setFilterText] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedLabReport, setSelectedLabReport] = useState<DiagnosticReport | null>(null);
 
   useEffect(() => { setFilterText(''); setExpandedId(null); }, [activeSection]);
 
@@ -2127,6 +2129,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
                             <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
                             <th className="pb-2" />
+                            <th className="pb-2" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -2144,11 +2147,19 @@ const ConsultNoteDetailPage: React.FC = () => {
                                   <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
                                   <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
                                   <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
+                                  <td className="py-2.5 pr-2">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setSelectedLabReport(dr); }}
+                                      className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+                                    >
+                                      View Report
+                                    </button>
+                                  </td>
                                   <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
                                 </tr>
                                 {expandedId === dr.id && (
                                   <tr>
-                                    <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <td colSpan={6} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
                                       <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                                         {dr.code?.coding?.map((c, i) => (
                                           <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
@@ -2713,6 +2724,14 @@ const ConsultNoteDetailPage: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* ── Lab Report Modal ── */}
+      {selectedLabReport && (
+        <LabReportModal
+          report={selectedLabReport}
+          onClose={() => setSelectedLabReport(null)}
+        />
+      )}
     </div>
   );
 };
