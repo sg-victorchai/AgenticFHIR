@@ -13,7 +13,10 @@ const localNow = (): string => {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 
-const getLocId = (loc: any): string => loc?.location?.identifier?.value || '';
+const getLocId = (loc: any): string =>
+  loc?.location?.identifier?.value ||
+  (loc?.location?.reference ? (loc.location.reference as string).split('/').pop() ?? '' : '') ||
+  '';
 const nowISO = () => new Date().toISOString();
 
 const PsaTriagePage: React.FC = () => {

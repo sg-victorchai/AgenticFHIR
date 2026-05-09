@@ -56,7 +56,10 @@ const getEncounterClass = (encounter: Encounter): string =>
 
 type QueueStage = 'awaiting-triage' | 'awaiting-clinician' | 'waiting-patient' | 'in-consultation' | 'awaiting-billing' | 'completed' | 'cancelled';
 
-const getLocId = (loc: any): string => loc?.location?.identifier?.value || '';
+const getLocId = (loc: any): string =>
+  loc?.location?.identifier?.value ||
+  (loc?.location?.reference ? (loc.location.reference as string).split('/').pop() ?? '' : '') ||
+  '';
 
 const getCurrentLocation = (enc: Encounter): any => {
   const locs = (enc.location || []) as any[];
@@ -71,10 +74,15 @@ const getCurrentLocation = (enc: Encounter): any => {
 const classifyEncounter = (enc: Encounter): QueueStage => {
   if (enc.status === 'cancelled') return 'cancelled';
   if (['completed', 'finished', 'discharged'].includes(enc.status as string)) return 'completed';
+  const locs = (enc.location || []) as any[];
+  if (locs.length === 0) {
+    // Old encounter with no location data — fall back to status-based classification
+    return enc.status === 'in-progress' ? 'awaiting-clinician' : 'awaiting-triage';
+  }
   const loc = getCurrentLocation(enc);
   if (!loc) return 'awaiting-triage';
   const id = getLocId(loc);
-  if (id === 'triage') return 'awaiting-triage';
+  if (id === 'triage') return loc.status === 'completed' ? 'awaiting-clinician' : 'awaiting-triage';
   if (id === 'waiting-room') return 'awaiting-clinician';
   if (id === 'in-consultation') return loc.status === 'active' ? 'in-consultation' : 'waiting-patient';
   if (id === 'billing') return 'awaiting-billing';
@@ -415,7 +423,10 @@ const PatientQueuePage: React.FC = () => {
     return candidate > todayISO ? todayISO : candidate;
   })();
 
-  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery({ from: fromISO, to: toISO });
+  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery(
+    { from: fromISO, to: toISO },
+    { refetchOnMountOrArgChange: true },
+  );
   const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
 
   const patientMap = new Map<string, Patient>();
