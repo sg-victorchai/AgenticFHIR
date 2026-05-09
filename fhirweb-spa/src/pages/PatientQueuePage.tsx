@@ -27,11 +27,16 @@ const SS_KEY_TO   = 'queue-to';
 
 const getPatientId = (encounter: Encounter): string => {
   const ref = encounter.subject?.reference;
-  return ref ? ref.replace('Patient/', '') : '';
+  if (!ref) return '';
+  // Handle absolute URLs (https://server/Patient/123) and relative refs (Patient/123)
+  const match = ref.match(/Patient\/([^\/\?#]+)/);
+  return match ? match[1] : '';
 };
 
 const resolvePatientName = (encounter: Encounter, patientMap: Map<string, Patient>): string => {
-  const p = patientMap.get(getPatientId(encounter));
+  const ref = encounter.subject?.reference || '';
+  const pid = getPatientId(encounter);
+  const p = patientMap.get(pid) || (ref ? patientMap.get(ref) : undefined);
   if (p) {
     const n = p.name?.[0];
     if (n) return n.text || [n.prefix?.join(' '), n.given?.join(' '), n.family].filter(Boolean).join(' ') || '(Unknown)';
@@ -40,7 +45,9 @@ const resolvePatientName = (encounter: Encounter, patientMap: Map<string, Patien
 };
 
 const resolvePatientIdentifier = (encounter: Encounter, patientMap: Map<string, Patient>): string => {
-  const p = patientMap.get(getPatientId(encounter));
+  const ref = encounter.subject?.reference || '';
+  const pid = getPatientId(encounter);
+  const p = patientMap.get(pid) || (ref ? patientMap.get(ref) : undefined);
   if (!p?.identifier?.length) return '—';
   const id = p.identifier[0];
   return id.value || '—';
@@ -433,7 +440,11 @@ const PatientQueuePage: React.FC = () => {
   ((bundle as Bundle<Resource> | undefined)?.entry ?? []).forEach((e) => {
     if (e.resource?.resourceType === 'Patient') {
       const p = e.resource as Patient;
-      if (p.id) patientMap.set(p.id, p);
+      if (p.id) {
+        patientMap.set(p.id, p);
+        // Also index by fullUrl so absolute-reference lookups work
+        if (e.fullUrl) patientMap.set(e.fullUrl, p);
+      }
     }
   });
 
