@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { Encounter, Bundle, Resource, Patient } from 'fhir/r5';
 import {
   useGetTodayEncountersQuery,
+  useGetPatientQuery,
   useUpdateResourceMutation,
 } from '../services/fhir/client';
 import { RootState } from '../store';
@@ -31,26 +32,6 @@ const getPatientId = (encounter: Encounter): string => {
   // Handle absolute URLs (https://server/Patient/123) and relative refs (Patient/123)
   const match = ref.match(/Patient\/([^\/\?#]+)/);
   return match ? match[1] : '';
-};
-
-const resolvePatientName = (encounter: Encounter, patientMap: Map<string, Patient>): string => {
-  const ref = encounter.subject?.reference || '';
-  const pid = getPatientId(encounter);
-  const p = patientMap.get(pid) || (ref ? patientMap.get(ref) : undefined);
-  if (p) {
-    const n = p.name?.[0];
-    if (n) return n.text || [n.prefix?.join(' '), n.given?.join(' '), n.family].filter(Boolean).join(' ') || '(Unknown)';
-  }
-  return encounter.subject?.display || '(Unknown Patient)';
-};
-
-const resolvePatientIdentifier = (encounter: Encounter, patientMap: Map<string, Patient>): string => {
-  const ref = encounter.subject?.reference || '';
-  const pid = getPatientId(encounter);
-  const p = patientMap.get(pid) || (ref ? patientMap.get(ref) : undefined);
-  if (!p?.identifier?.length) return '—';
-  const id = p.identifier[0];
-  return id.value || '—';
 };
 
 const getChiefComplaint = (encounter: Encounter): string =>
@@ -193,13 +174,32 @@ const QueueRow: React.FC<QueueRowProps> = ({
   const stage = classifyEncounter(encounter);
   const badgeCls = STAGE_BADGE_CLS[stage];
 
+  // Try patientMap first (populated by _include), fall back to direct fetch
+  const mappedPatient = patientMap.get(patientId) ||
+    (encounter.subject?.reference ? patientMap.get(encounter.subject.reference) : undefined);
+  const { data: fetchedPatient } = useGetPatientQuery(patientId, {
+    skip: !!mappedPatient || !patientId,
+  });
+  const patient = mappedPatient || fetchedPatient;
+
+  const patientName = patient
+    ? (() => {
+        const n = patient.name?.[0];
+        return n?.text ||
+          [n?.prefix?.join(' '), n?.given?.join(' '), n?.family].filter(Boolean).join(' ') ||
+          encounter.subject?.display || '(Unknown)';
+      })()
+    : encounter.subject?.display || '(Unknown)';
+
+  const patientIdentifier = patient?.identifier?.[0]?.value || '—';
+
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3 text-xs text-gray-500 font-mono">
-        {resolvePatientIdentifier(encounter, patientMap)}
+        {patientIdentifier}
       </td>
       <td className="px-4 py-3 text-sm font-medium text-gray-800">
-        {resolvePatientName(encounter, patientMap)}
+        {patientName}
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">
         {getChiefComplaint(encounter)}
