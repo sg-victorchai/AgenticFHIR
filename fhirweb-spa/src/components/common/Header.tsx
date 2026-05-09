@@ -23,7 +23,7 @@ const Header: React.FC = () => {
         <div className="flex justify-between items-center">
           <div className="flex items-center">
             <Link to="/" className="text-white text-xl font-bold">
-              FHIR Web App
+              HealthConnect
             </Link>
           </div>
 
