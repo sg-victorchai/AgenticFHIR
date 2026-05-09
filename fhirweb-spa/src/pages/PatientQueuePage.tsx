@@ -152,6 +152,47 @@ const applyCollectPayment = (enc: Encounter): Encounter => {
 
 // ─── Row component ────────────────────────────────────────────────────────────
 
+// ─── Inline patient detail panel ─────────────────────────────────────────────
+
+const formatDOB = (dob?: string): string => {
+  if (!dob) return '—';
+  const d = new Date(dob);
+  const age = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
+  return `${d.toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' })} (${age} yrs)`;
+};
+
+const PatientDetailPanel: React.FC<{ patient?: Patient }> = ({ patient }) => {
+  if (!patient) return <p className="text-sm text-gray-400 italic">Loading patient details…</p>;
+  const n = patient.name?.[0];
+  const name = n?.text || [n?.prefix?.join(' '), n?.given?.join(' '), n?.family].filter(Boolean).join(' ') || '—';
+  const nric = patient.identifier?.[0]?.value || '—';
+  const phone = patient.telecom?.find((t) => t.system === 'phone')?.value || '—';
+  const email = patient.telecom?.find((t) => t.system === 'email')?.value;
+  const addr = patient.address?.[0];
+  const addrStr = addr ? [addr.line?.join(', '), addr.city, addr.postalCode].filter(Boolean).join(', ') : '—';
+  const fields: [string, string][] = [
+    ['Full Name', name],
+    ['NRIC / ID', nric],
+    ['Date of Birth', formatDOB(patient.birthDate)],
+    ['Gender', patient.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : '—'],
+    ['Phone', phone],
+    ...(email ? [['Email', email] as [string, string]] : []),
+    ['Address', addrStr],
+  ];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+      {fields.map(([label, value]) => (
+        <div key={label}>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">{label}</p>
+          <p className="text-gray-800 font-medium">{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Row component ─────────────────────────────────────────────────────────────
+
 interface QueueRowProps {
   encounter: Encounter;
   role: 'psa' | 'clinician';
@@ -169,6 +210,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
   showDate,
   patientMap,
 }) => {
+  const [expanded, setExpanded] = useState(false);
   const patientId = getPatientId(encounter);
   const encounterId = encounter.id!;
   const stage = classifyEncounter(encounter);
@@ -194,7 +236,8 @@ const QueueRow: React.FC<QueueRowProps> = ({
   const patientIdentifier = patient?.identifier?.[0]?.value || '—';
 
   return (
-    <tr className="hover:bg-gray-50 transition-colors">
+    <>
+      <tr className={`transition-colors ${expanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
       <td className="px-4 py-3 text-xs text-gray-500 font-mono">
         {patientIdentifier}
       </td>
@@ -295,17 +338,25 @@ const QueueRow: React.FC<QueueRowProps> = ({
                   Cancel
                 </button>
               )}
-              <Link
-                to={`/patient/${patientId}/details`}
+              <button
+                onClick={() => setExpanded((e) => !e)}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors"
               >
-                View Patient
-              </Link>
+                {expanded ? 'Hide Patient ▲' : 'View Patient ▼'}
+              </button>
             </>
           )}
         </div>
       </td>
     </tr>
+    {expanded && (
+      <tr className="bg-blue-50 border-b border-blue-100">
+        <td colSpan={7} className="px-6 py-4">
+          <PatientDetailPanel patient={patient} />
+        </td>
+      </tr>
+    )}
+    </>
   );
 };
 
