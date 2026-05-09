@@ -78,7 +78,7 @@ const VisitRegistrationPage: React.FC = () => {
 
     const encounter: Encounter = {
       resourceType: 'Encounter',
-      status: 'in-progress',
+      status: 'planned',
       class: [
         {
           coding: [
