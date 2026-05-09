@@ -11,6 +11,7 @@ import EncounterPage from './pages/EncounterPage';
 import { EventMonitorPage } from './pages/EventMonitorPage';
 import { WebhookManagementPage } from './pages/WebhookManagementPage';
 import VisitRegistrationPage from './pages/clinical/VisitRegistrationPage';
+import PsaTriagePage from './pages/clinical/PsaTriagePage';
 import ClinicalConsultPage from './pages/clinical/ClinicalConsultPage';
 import ConsultNoteDetailPage from './pages/clinical/ConsultNoteDetailPage';
 // CRUD components
@@ -50,6 +51,10 @@ const AppRoutes: React.FC = () => {
       <Route
         path="/patient/:id/visit/new"
         element={<RoleGuard allowed={['psa']}><VisitRegistrationPage /></RoleGuard>}
+      />
+      <Route
+        path="/patient/:id/encounter/:encounterId/triage"
+        element={<RoleGuard allowed={['psa']}><PsaTriagePage /></RoleGuard>}
       />
 
       {/* Clinician-only routes */}

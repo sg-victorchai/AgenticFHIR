@@ -78,7 +78,7 @@ const VisitRegistrationPage: React.FC = () => {
 
     const encounter: Encounter = {
       resourceType: 'Encounter',
-      status: 'planned',
+      status: 'in-progress',
       class: [
         {
           coding: [
@@ -105,6 +105,10 @@ const VisitRegistrationPage: React.FC = () => {
       ],
       subject: { reference: `Patient/${id}`, display: patientName },
       actualPeriod: { start: toFHIRDateTime(formData.visitDate) },
+      location: [{
+        location: { identifier: { value: 'triage' } } as any,
+        status: 'planned',
+      }],
       reason: [
         {
           value: [{ concept: { text: effectiveComplaint.trim() } }],
