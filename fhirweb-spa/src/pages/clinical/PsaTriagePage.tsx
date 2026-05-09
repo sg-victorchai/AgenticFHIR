@@ -96,7 +96,7 @@ const PsaTriagePage: React.FC = () => {
         period: { start: existing.period?.start || new Date(form.recordedAt).toISOString(), end: nowISO() },
       };
     }
-    locs.push({ location: { identifier: { value: 'consulting-room' } }, status: 'planned' });
+    locs.push({ location: { identifier: { value: 'waiting-room' } }, status: 'active' });
     const updatedEnc = { ...encounter, location: locs };
     const res = await updateResource({ resourceType: 'Encounter', id: encounterId!, resource: updatedEnc as any });
     if ('error' in res) { setError('Failed to update triage status. Please retry.'); return; }
