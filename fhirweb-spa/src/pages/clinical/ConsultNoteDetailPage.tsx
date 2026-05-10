@@ -1308,9 +1308,13 @@ const ConsultNoteDetailPage: React.FC = () => {
   const examFindings = allObs.filter((o) =>
     o.category?.some((c) => c.coding?.some((cd) => cd.code === 'exam')),
   );
+  // Standalone lab observations (not wrapped in a DiagnosticReport)
+  const labObservations = allObs.filter((o) =>
+    o.category?.some((c) => c.coding?.some((cd) => cd.code === 'laboratory')),
+  );
   const otherObs = allObs.filter(
     (o) => !o.category?.some((c) =>
-      c.coding?.some((cd) => cd.code === 'vital-signs' || cd.code === 'exam'),
+      c.coding?.some((cd) => cd.code === 'vital-signs' || cd.code === 'exam' || cd.code === 'laboratory'),
     ),
   );
 
@@ -2111,77 +2115,130 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Lab Results ── */}
               {activeSection === 'lab-results' && (
-                <Section sectionKey="investigations" icon="🧪" title="Lab Results" count={labReports.length} isEditable={false} addLabel="" addForm={null}>
+                <Section sectionKey="investigations" icon="🧪" title="Lab Results" count={labReports.length + labObservations.length} isEditable={false} addLabel="" addForm={null}>
                   <FilterBar value={filterText} onChange={setFilterText} />
-                  {(() => {
-                    const filtered = labReports.filter((dr) => {
-                      const text = dr.code?.text || dr.code?.coding?.[0]?.display || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
-                    });
-                    return filtered.length === 0 ? (
-                      <EmptyNote label="No lab results available for this encounter." />
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
-                            <th className="pb-2" />
-                            <th className="pb-2" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {filtered.map((dr) => {
-                            const code = codeBadge(dr.code?.coding);
-                            const category = dr.category?.[0]?.coding?.[0]?.display || dr.category?.[0]?.text || '—';
-                            const conclusionCodes = dr.conclusionCode?.map((cc) => cc.coding?.[0]?.display).filter(Boolean).join(', ');
-                            return (
-                              <React.Fragment key={dr.id}>
-                                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}>
-                                  <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                    {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
-                                    {code && <span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>}
-                                  </td>
-                                  <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
-                                  <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
-                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
-                                  <td className="py-2.5 pr-2">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setSelectedLabReport(dr); }}
-                                      className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
-                                    >
-                                      View Report
-                                    </button>
-                                  </td>
-                                  <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
-                                </tr>
-                                {expandedId === dr.id && (
-                                  <tr>
-                                    <td colSpan={6} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
-                                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                        {dr.code?.coding?.map((c, i) => (
-                                          <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
-                                        ))}
-                                        {(dr.effectiveDateTime || (dr as any).effectivePeriod?.start) && (
-                                          <div><span className="text-gray-500 font-medium">Effective:</span> {formatDT(dr.effectiveDateTime || (dr as any).effectivePeriod?.start)}</div>
-                                        )}
-                                        {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
-                                        {conclusionCodes && <div className="col-span-2"><span className="text-gray-500 font-medium">Finding Codes:</span> {conclusionCodes}</div>}
-                                        {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
-                                        {dr.basedOn?.[0]?.reference && <div><span className="text-gray-500 font-medium">Based On:</span> <span className="font-mono text-xs">{dr.basedOn[0].reference}</span></div>}
-                                      </div>
+                  {labReports.length === 0 && labObservations.length === 0 ? (
+                    <EmptyNote label="No lab results available for this encounter." />
+                  ) : (
+                    <>
+                      {/* DiagnosticReport rows */}
+                      {labReports.length > 0 && (() => {
+                        const filtered = labReports.filter((dr) => {
+                          const text = dr.code?.text || dr.code?.coding?.[0]?.display || '';
+                          return text.toLowerCase().includes(filterText.toLowerCase());
+                        });
+                        return filtered.length > 0 ? (
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
+                                <th className="pb-2" />
+                                <th className="pb-2" />
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {filtered.map((dr) => {
+                                const code = codeBadge(dr.code?.coding);
+                                const category = dr.category?.[0]?.coding?.[0]?.display || dr.category?.[0]?.text || '—';
+                                const conclusionCodes = dr.conclusionCode?.map((cc) => cc.coding?.[0]?.display).filter(Boolean).join(', ');
+                                return (
+                                  <React.Fragment key={dr.id}>
+                                    <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}>
+                                      <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                        {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
+                                        {code && <span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>}
+                                      </td>
+                                      <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
+                                      <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
+                                      <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
+                                      <td className="py-2.5 pr-2">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setSelectedLabReport(dr); }}
+                                          className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+                                        >
+                                          View Report
+                                        </button>
+                                      </td>
+                                      <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
+                                    </tr>
+                                    {expandedId === dr.id && (
+                                      <tr>
+                                        <td colSpan={6} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                            {dr.code?.coding?.map((c, i) => (
+                                              <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
+                                            ))}
+                                            {(dr.effectiveDateTime || (dr as any).effectivePeriod?.start) && (
+                                              <div><span className="text-gray-500 font-medium">Effective:</span> {formatDT(dr.effectiveDateTime || (dr as any).effectivePeriod?.start)}</div>
+                                            )}
+                                            {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
+                                            {conclusionCodes && <div className="col-span-2"><span className="text-gray-500 font-medium">Finding Codes:</span> {conclusionCodes}</div>}
+                                            {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
+                                            {dr.basedOn?.[0]?.reference && <div><span className="text-gray-500 font-medium">Based On:</span> <span className="font-mono text-xs">{dr.basedOn[0].reference}</span></div>}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        ) : null;
+                      })()}
+                      {/* Standalone Observation rows (category=laboratory) */}
+                      {labObservations.length > 0 && (() => {
+                        const filtered = labObservations.filter((obs) => {
+                          const text = obs.code?.text || obs.code?.coding?.[0]?.display || '';
+                          return text.toLowerCase().includes(filterText.toLowerCase());
+                        });
+                        return filtered.length > 0 ? (
+                          <table className="w-full text-sm mt-2">
+                            <thead>
+                              <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Interpretation</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
+                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {filtered.map((obs) => {
+                                const testName = obs.code?.text || obs.code?.coding?.[0]?.display || 'Lab Test';
+                                const lcode = codeBadge(obs.code?.coding);
+                                const vq = obs.valueQuantity;
+                                const resultStr = vq ? `${vq.value} ${vq.unit ?? ''}`.trim() : (obs.valueString ?? '—');
+                                const interpCode = obs.interpretation?.[0]?.coding?.[0]?.code ?? '';
+                                const isHigh = interpCode === 'H' || interpCode === 'HH';
+                                const isLow = interpCode === 'L' || interpCode === 'LL';
+                                const interpLabel = isHigh ? '↑' : isLow ? '↓' : interpCode && interpCode !== 'N' && interpCode !== 'normal' ? '!' : '—';
+                                return (
+                                  <tr key={obs.id} className="hover:bg-gray-50">
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                      {testName}
+                                      {lcode && <span className="ml-2 text-xs font-mono text-gray-400">[{lcode}]</span>}
                                     </td>
+                                    <td className={`py-2.5 pr-4 font-medium ${isHigh || isLow ? 'text-red-600' : 'text-gray-800'}`}>
+                                      {resultStr}
+                                    </td>
+                                    <td className={`py-2.5 pr-4 font-bold ${isHigh || isLow ? 'text-red-600' : 'text-gray-400'}`}>
+                                      {interpLabel}
+                                    </td>
+                                    <td className="py-2.5 pr-4"><StatusPill status={obs.status} /></td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
                                   </tr>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    );
-                  })()}
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        ) : null;
+                      })()}
+                    </>
+                  )}
                 </Section>
               )}
 
