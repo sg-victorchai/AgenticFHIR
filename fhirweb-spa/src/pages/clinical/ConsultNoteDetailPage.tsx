@@ -1448,6 +1448,9 @@ const ConsultNoteDetailPage: React.FC = () => {
           {encounter?.actualPeriod?.start && (
             <span className="text-xs text-gray-400">{formatDT(encounter.actualPeriod.start)}</span>
           )}
+          {encounter?.identifier?.[0]?.value && (
+            <span className="text-xs text-gray-500">Visit ID: <strong className="text-gray-700 font-mono">{encounter.identifier[0].value}</strong></span>
+          )}
         </div>
 
         {/* Actions on the right */}
@@ -1622,8 +1625,8 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </Section>
 
                   {/* ── 3. Investigations ── */}
-                  <Section sectionKey="investigations" icon="Ix" title="Investigations" count={serviceRequests.length + otherObs.length} isEditable={isEditable} addLabel="Place Order" addForm={<AddOrderForm {...formProps} />}>
-                    {serviceRequests.length === 0 && otherObs.length === 0 ? (
+                  <Section sectionKey="investigations" icon="Ix" title="Investigations" count={serviceRequests.length + otherObs.length + labObservations.length} isEditable={isEditable} addLabel="Place Order" addForm={<AddOrderForm {...formProps} />}>
+                    {serviceRequests.length === 0 && otherObs.length === 0 && labObservations.length === 0 ? (
                       <EmptyNote label="No investigation orders or results recorded." />
                     ) : (
                       <div className="space-y-5">
@@ -1654,7 +1657,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                             </table>
                           </div>
                         )}
-                        {otherObs.length > 0 && (
+                        {(otherObs.length > 0 || labObservations.length > 0) && (
                           <div>
                             <SectionDivider label="Results" />
                             <table className="w-full text-sm">
@@ -1667,7 +1670,7 @@ const ConsultNoteDetailPage: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
-                                {otherObs.map((obs) => {
+                                {[...labObservations, ...otherObs].map((obs) => {
                                   const name = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
                                   const val = obs.valueQuantity
                                     ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`
