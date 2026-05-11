@@ -151,6 +151,9 @@ const ObservationCrudPage: React.FC = () => {
         valueQuantity: {
           ...prev.valueQuantity,
           [fieldName]: value,
+          // auto-sync code with unit so UCUM code is always populated;
+          // user can override code independently via the code field
+          ...(fieldName === 'unit' ? { code: value } : {}),
         },
       }));
     } else if (name === 'valueString') {
@@ -598,7 +601,7 @@ const ObservationCrudPage: React.FC = () => {
                     htmlFor="valueQuantity.unit"
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    Unit
+                    Display Unit
                   </label>
                   <input
                     type="text"
@@ -607,6 +610,23 @@ const ObservationCrudPage: React.FC = () => {
                     value={formData.valueQuantity?.unit || ''}
                     onChange={handleChange}
                     placeholder="e.g. mmHg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="valueQuantity.code"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    UCUM Code
+                  </label>
+                  <input
+                    type="text"
+                    id="valueQuantity.code"
+                    name="valueQuantity.code"
+                    value={formData.valueQuantity?.code || ''}
+                    onChange={handleChange}
+                    placeholder="e.g. mm[Hg]"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

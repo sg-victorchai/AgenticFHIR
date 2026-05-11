@@ -52,7 +52,8 @@ const PsaTriagePage: React.FC = () => {
   const handleSave = async () => {
     setError('');
     const obsPayloads: any[] = [];
-    const push = (code: string, display: string, value: string, unit: string, system: string) => {
+    // ucumCode is the UCUM code for valueQuantity.code; defaults to unit when they are the same
+    const push = (code: string, display: string, value: string, unit: string, system: string, ucumCode?: string) => {
       const num = parseFloat(value);
       if (!value || isNaN(num)) return;
       obsPayloads.push({
@@ -63,15 +64,15 @@ const PsaTriagePage: React.FC = () => {
         subject: { reference: `Patient/${patientId}` },
         encounter: { reference: `Encounter/${encounterId}` },
         effectiveDateTime: new Date(form.recordedAt).toISOString(),
-        valueQuantity: { value: num, unit, system: 'http://unitsofmeasure.org', code: unit },
+        valueQuantity: { value: num, unit, system: 'http://unitsofmeasure.org', code: ucumCode ?? unit },
       });
     };
-    push('59408-5', 'SpO2', form.spo2, '%', 'http://loinc.org');
-    push('8867-4', 'Heart Rate', form.hr, '/min', 'http://loinc.org');
-    push('8480-6', 'Systolic BP', form.sbp, 'mmHg', 'http://loinc.org');
-    push('8462-4', 'Diastolic BP', form.dbp, 'mmHg', 'http://loinc.org');
-    push('9279-1', 'Respiratory Rate', form.rr, '/min', 'http://loinc.org');
-    push('8310-5', 'Body Temperature', form.temp, 'Cel', 'http://loinc.org');
+    push('59408-5', 'SpO2',             form.spo2, '%',           'http://loinc.org');
+    push('8867-4',  'Heart Rate',       form.hr,   '/min',        'http://loinc.org');
+    push('8480-6',  'Systolic BP',      form.sbp,  'mmHg',        'http://loinc.org', 'mm[Hg]');
+    push('8462-4',  'Diastolic BP',     form.dbp,  'mmHg',        'http://loinc.org', 'mm[Hg]');
+    push('9279-1',  'Respiratory Rate', form.rr,   '/min',        'http://loinc.org');
+    push('8310-5',  'Body Temperature', form.temp, 'Cel',         'http://loinc.org');
 
     if (obsPayloads.length === 0) {
       setError('Please enter at least one vital sign.');
