@@ -127,6 +127,7 @@ const ObservationPage: React.FC = () => {
     if (currentBundle && currentBundle.entry) {
       const processedObservations: Observation[] = currentBundle.entry
         .filter((entry) => entry.resource)
+        .filter((entry) => (entry.resource as FHIRObservation).status !== 'entered-in-error')
         .map((entry) => {
           const resource = entry.resource as FHIRObservation;
 

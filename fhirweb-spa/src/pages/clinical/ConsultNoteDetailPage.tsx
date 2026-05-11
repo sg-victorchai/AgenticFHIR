@@ -1221,7 +1221,7 @@ const ConsultNoteDetailPage: React.FC = () => {
   );
 
   const encounter = encounterResource as Encounter | undefined;
-  const allObs = extractResources<Observation>(obsBundle);
+  const allObs = extractResources<Observation>(obsBundle).filter((o) => o.status !== 'entered-in-error');
   const serviceRequests = extractResources<ServiceRequest>(srBundle);
   const conditions = extractResources<Condition>(condBundle);
   const medications = extractResources<MedicationRequest>(medBundle);

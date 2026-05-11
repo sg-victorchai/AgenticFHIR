@@ -169,6 +169,7 @@ export const fhirApi = createApi({
             searchParams.date = date;
           }
 
+          searchParams['status:not'] = 'entered-in-error';
           searchParams._count = '20';
           searchParams._offset = '0';
 
@@ -969,7 +970,7 @@ export const fhirApi = createApi({
           const client = await createFHIRClient();
           const results = await client.search({
             resourceType,
-            searchParams: { encounter: encounterId, _count: '100' },
+            searchParams: { encounter: encounterId, _count: '100', ...(resourceType === 'Observation' && { 'status:not': 'entered-in-error' }) },
           });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
@@ -996,7 +997,7 @@ export const fhirApi = createApi({
           const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Observation',
-            searchParams: { _id: ids.join(','), _count: String(ids.length + 10) },
+            searchParams: { _id: ids.join(','), _count: String(ids.length + 10), 'status:not': 'entered-in-error' },
           });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
