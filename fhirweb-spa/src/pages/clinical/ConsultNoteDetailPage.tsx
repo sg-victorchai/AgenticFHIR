@@ -1810,39 +1810,65 @@ const ConsultNoteDetailPage: React.FC = () => {
                   sectionKey="vitals"
                   icon="V"
                   title="Vital Signs"
-                  count={Object.keys(latestVitals).length}
+                  count={vitals.length}
                   isEditable={isEditable}
                   addLabel="Update Vitals"
                   addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}
                 >
                   <FilterBar value={filterText} onChange={setFilterText} />
-                  {(() => {
-                    const filteredEntries = Object.entries(latestVitals).filter(([code]) => {
-                      const name = VITAL_LOINC_NAMES[code] || code;
-                      return name.toLowerCase().includes(filterText.toLowerCase());
-                    });
-                    return filteredEntries.length === 0 ? (
-                      <EmptyNote label="No vital signs recorded for this encounter." />
-                    ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {filteredEntries.map(([code, entry]) => {
-                          const name = VITAL_LOINC_NAMES[code] || code;
-                          const trend = interpretVital(code, entry.value);
+                  {vitals.length === 0 ? (
+                    <EmptyNote label="No vital signs recorded for this encounter." />
+                  ) : (
+                    <div className="space-y-4">
+                      {[...vitals]
+                        .sort((a, b) =>
+                          (b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1,
+                        )
+                        .map((obs) => {
+                          const components = obs.component?.length
+                            ? obs.component
+                            : obs.code?.coding?.[0]?.code && obs.valueQuantity?.value != null
+                            ? [{ code: obs.code, valueQuantity: obs.valueQuantity }]
+                            : [];
+                          const filtered = filterText
+                            ? components.filter((comp) => {
+                                const code = comp.code?.coding?.[0]?.code ?? '';
+                                const name = VITAL_LOINC_NAMES[code] || comp.code?.coding?.[0]?.display || code;
+                                return name.toLowerCase().includes(filterText.toLowerCase());
+                              })
+                            : components;
+                          if (filtered.length === 0) return null;
                           return (
-                            <div key={code} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
-                              <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
-                              <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                {entry.value}
-                                <span className="text-sm font-normal ml-1">{entry.unit}</span>
-                                {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                            <div key={obs.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                                {formatDT(obs.effectiveDateTime)}
                               </div>
-                              <div className="text-xs text-gray-400 mt-1">{formatDT(entry.effectiveDateTime)}</div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {filtered.map((comp) => {
+                                  const code = comp.code?.coding?.[0]?.code ?? '';
+                                  const name = VITAL_LOINC_NAMES[code] || comp.code?.coding?.[0]?.display || code;
+                                  const val = comp.valueQuantity?.value;
+                                  const unit = comp.valueQuantity?.unit ?? '';
+                                  if (val == null) return null;
+                                  const trend = interpretVital(code, val);
+                                  return (
+                                    <div key={code} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                                      <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
+                                      <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
+                                        {val}
+                                        <span className="text-sm font-normal ml-1">{unit}</span>
+                                        {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                                        {trend === 'abnormal' && <span className="ml-1 text-amber-600 text-xs">▲</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           );
                         })}
-                      </div>
-                    );
-                  })()}
+                    </div>
+                  )}
                 </Section>
               )}
 
