@@ -65,8 +65,11 @@ const RAD_CATEGORIES = [
 
 const INVESTIGATION_CATEGORIES = [...LAB_CATEGORIES, ...RAD_CATEGORIES];
 
+const VITALS_PANEL_LOINC = '85353-1';
+
 const VITAL_CODE_TO_FIELD: Record<string, string> = {
-  '2708-6': 'spo2',
+  '59408-5': 'spo2',
+  '2708-6': 'spo2',  // backward compat
   '8867-4': 'hr',
   '8480-6': 'sbp',
   '8462-4': 'dbp',
@@ -274,11 +277,21 @@ const ClinicalConsultPage: React.FC = () => {
       (o) => o.category?.[0]?.coding?.[0]?.code === 'exam'
     );
 
-    const vitalsLoaded: RecordedItem[] = vitalsFromFHIR.map((o) => {
-      const code = o.code?.coding?.[0]?.display || o.code?.text || 'Vital';
-      const val = o.valueQuantity?.value ?? o.valueString ?? '—';
-      const unit = o.valueQuantity?.unit || '';
-      return { id: o.id!, display: `${code}: ${val} ${unit}`.trim() };
+    const vitalsLoaded: RecordedItem[] = [];
+    vitalsFromFHIR.forEach((o) => {
+      if (o.component?.length) {
+        o.component.forEach((comp) => {
+          const name = comp.code?.coding?.[0]?.display || '?';
+          const val = comp.valueQuantity?.value ?? '—';
+          const unit = comp.valueQuantity?.unit || '';
+          vitalsLoaded.push({ id: `${o.id!}-${name}`, display: `${name}: ${val} ${unit}`.trim() });
+        });
+      } else {
+        const name = o.code?.coding?.[0]?.display || o.code?.text || 'Vital';
+        const val = o.valueQuantity?.value ?? o.valueString ?? '—';
+        const unit = o.valueQuantity?.unit || '';
+        vitalsLoaded.push({ id: o.id!, display: `${name}: ${val} ${unit}`.trim() });
+      }
     });
     if (vitalsLoaded.length > 0) setVitalsItems(vitalsLoaded);
     setRawVitals(vitalsFromFHIR);
@@ -365,156 +378,62 @@ const ClinicalConsultPage: React.FC = () => {
     setVitalsError('');
     const { spo2, hr, sbp, dbp, rr, temp, recordedAt } = vitalsForm;
 
-    const vitals: Array<{
-      code: string;
-      display: string;
-      value: number;
-      unit: string;
-      ucumCode: string;
-    }> = [];
-    if (spo2)
-      vitals.push({
-        code: '2708-6',
-        display: 'Oxygen saturation',
-        value: parseFloat(spo2),
-        unit: '%',
-        ucumCode: '%',
-      });
-    if (hr)
-      vitals.push({
-        code: '8867-4',
-        display: 'Heart rate',
-        value: parseFloat(hr),
-        unit: 'beats/min',
-        ucumCode: '/min',
-      });
-    if (sbp)
-      vitals.push({
-        code: '8480-6',
-        display: 'Systolic blood pressure',
-        value: parseFloat(sbp),
-        unit: 'mmHg',
-        ucumCode: 'mm[Hg]',
-      });
-    if (dbp)
-      vitals.push({
-        code: '8462-4',
-        display: 'Diastolic blood pressure',
-        value: parseFloat(dbp),
-        unit: 'mmHg',
-        ucumCode: 'mm[Hg]',
-      });
-    if (rr)
-      vitals.push({
-        code: '9279-1',
-        display: 'Respiratory rate',
-        value: parseFloat(rr),
-        unit: 'breaths/min',
-        ucumCode: '/min',
-      });
-    if (temp)
-      vitals.push({
-        code: '8310-5',
-        display: 'Body temperature',
-        value: parseFloat(temp),
-        unit: '°C',
-        ucumCode: 'Cel',
-      });
+    const vitalDefs = [
+      { code: '59408-5', display: 'SpO₂',             value: spo2, unit: '%',           ucum: '%' },
+      { code: '8867-4',  display: 'Heart Rate',        value: hr,   unit: 'beats/min',   ucum: '/min' },
+      { code: '8480-6',  display: 'Systolic BP',       value: sbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
+      { code: '8462-4',  display: 'Diastolic BP',      value: dbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
+      { code: '9279-1',  display: 'Respiratory Rate',  value: rr,   unit: 'breaths/min', ucum: '/min' },
+      { code: '8310-5',  display: 'Body Temperature',  value: temp, unit: '°C',          ucum: 'Cel' },
+    ];
 
-    if (vitals.length === 0) {
+    const components = vitalDefs
+      .filter(({ value }) => value && !isNaN(parseFloat(value)))
+      .map(({ code, display, value, unit, ucum }) => ({
+        code: { coding: [{ system: 'http://loinc.org', code, display }] },
+        valueQuantity: { value: parseFloat(value), unit, system: 'http://unitsofmeasure.org', code: ucum },
+      }));
+
+    if (components.length === 0) {
       setVitalsError('Enter at least one vital sign value.');
       return;
     }
 
     const effectiveDateTime = toFHIRDateTime(recordedAt);
-    const created: RecordedItem[] = [];
+    const panelObs = rawVitals.find((o) => o.component?.length);
+    let savedObs: any;
 
-    const existingMap = rawVitals.reduce<Record<string, Observation>>((acc, o) => {
-      const code = o.code?.coding?.[0]?.code || '';
-      if (code) acc[code] = o;
-      return acc;
-    }, {});
-
-    for (const v of vitals) {
-      const existing = existingMap[v.code];
-      let resultId: string | undefined;
-      if (existing?.id) {
-        const updated = {
-          ...existing,
-          effectiveDateTime,
-          valueQuantity: {
-            value: v.value,
-            unit: v.unit,
-            system: 'http://unitsofmeasure.org',
-            code: v.ucumCode,
-          },
-        };
-        const result = await updateResource({
-          resourceType: 'Observation',
-          id: existing.id,
-          resource: updated as any,
-        });
-        if ('data' in result && result.data?.id) {
-          resultId = result.data.id;
-          setRawVitals((prev) =>
-            prev.map((o) => (o.id === existing.id ? (result.data as Observation) : o))
-          );
-        }
-      } else {
-        const obs = {
-          resourceType: 'Observation' as const,
-          status: 'final' as const,
-          category: [
-            {
-              coding: [
-                {
-                  system:
-                    'http://terminology.hl7.org/CodeSystem/observation-category',
-                  code: 'vital-signs',
-                  display: 'Vital Signs',
-                },
-              ],
-            },
-          ],
-          code: {
-            coding: [
-              { system: 'http://loinc.org', code: v.code, display: v.display },
-            ],
-          },
-          subject: { reference: `Patient/${patientId}`, display: patientName },
-          encounter: { reference: `Encounter/${encounterId}` },
-          effectiveDateTime,
-          valueQuantity: {
-            value: v.value,
-            unit: v.unit,
-            system: 'http://unitsofmeasure.org',
-            code: v.ucumCode,
-          },
-        };
-        const result = await createResource({
-          resourceType: 'Observation',
-          resource: obs as any,
-        });
-        if ('data' in result && result.data?.id) {
-          resultId = result.data.id;
-        }
+    if (panelObs?.id) {
+      const updated = { ...panelObs, effectiveDateTime, component: components };
+      const result = await updateResource({ resourceType: 'Observation', id: panelObs.id, resource: updated as any });
+      if ('data' in result && result.data) {
+        savedObs = result.data;
+        setRawVitals((prev) => prev.map((o) => (o.id === panelObs.id ? (result.data as Observation) : o)));
       }
-      if (resultId) {
-        created.push({ id: resultId, display: `${v.display}: ${v.value} ${v.unit}` });
-      }
+    } else {
+      const obs = {
+        resourceType: 'Observation' as const,
+        status: 'final' as const,
+        category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
+        code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
+        subject: { reference: `Patient/${patientId}`, display: patientName },
+        encounter: { reference: `Encounter/${encounterId}` },
+        effectiveDateTime,
+        component: components,
+      };
+      const result = await createResource({ resourceType: 'Observation', resource: obs as any });
+      if ('data' in result && result.data) savedObs = result.data;
     }
 
-    if (created.length > 0) {
-      setVitalsItems(created);
-      setVitalsForm((f) => ({
-        ...f,
-        spo2: '',
-        hr: '',
-        sbp: '',
-        dbp: '',
-        rr: '',
-        temp: '',
-      }));
+    if (savedObs) {
+      const displayItems: RecordedItem[] = (savedObs.component || components).map((comp: any) => {
+        const name = comp.code?.coding?.[0]?.display || '?';
+        const val = comp.valueQuantity?.value ?? '—';
+        const unit = comp.valueQuantity?.unit || '';
+        return { id: `${savedObs.id || 'new'}-${name}`, display: `${name}: ${val} ${unit}`.trim() };
+      });
+      setVitalsItems(displayItems);
+      setVitalsForm((f) => ({ ...f, spo2: '', hr: '', sbp: '', dbp: '', rr: '', temp: '' }));
       setIsEditingVitals(false);
     } else {
       setVitalsError('Failed to save vital signs. Please try again.');
@@ -525,13 +444,25 @@ const ClinicalConsultPage: React.FC = () => {
 
   const prepareVitalsEdit = () => {
     const newForm = { ...vitalsForm };
-    rawVitals.forEach((obs) => {
-      const code = obs.code?.coding?.[0]?.code || '';
-      const field = VITAL_CODE_TO_FIELD[code];
-      if (field && obs.valueQuantity?.value != null) {
-        (newForm as any)[field] = String(obs.valueQuantity.value);
-      }
-    });
+    const panelObs = rawVitals.find((o) => o.component?.length);
+    if (panelObs) {
+      panelObs.component?.forEach((comp) => {
+        const code = comp.code?.coding?.[0]?.code || '';
+        const field = VITAL_CODE_TO_FIELD[code];
+        if (field && comp.valueQuantity?.value != null) {
+          (newForm as any)[field] = String(comp.valueQuantity.value);
+        }
+      });
+    } else {
+      // backward compat: old individual observations
+      rawVitals.forEach((obs) => {
+        const code = obs.code?.coding?.[0]?.code || '';
+        const field = VITAL_CODE_TO_FIELD[code];
+        if (field && obs.valueQuantity?.value != null) {
+          (newForm as any)[field] = String(obs.valueQuantity.value);
+        }
+      });
+    }
     setVitalsForm(newForm);
     setIsEditingVitals(true);
   };

@@ -61,12 +61,13 @@ const SEVERITY_SNOMED = {
 };
 
 const VITAL_LOINC_NAMES: Record<string, string> = {
-  '2708-6': 'SpO₂',
-  '8867-4': 'Heart Rate',
-  '8480-6': 'Systolic BP',
-  '8462-4': 'Diastolic BP',
-  '9279-1': 'Resp. Rate',
-  '8310-5': 'Temperature',
+  '59408-5': 'SpO₂',
+  '2708-6':  'SpO₂',  // backward compat
+  '8867-4':  'Heart Rate',
+  '8480-6':  'Systolic BP',
+  '8462-4':  'Diastolic BP',
+  '9279-1':  'Resp. Rate',
+  '8310-5':  'Temperature',
 };
 
 const SECTION_ACCENT: Record<string, string> = {
@@ -346,6 +347,8 @@ interface UpdateVitalsFormProps {
   onDone?: () => void;
 }
 
+const VITALS_PANEL_LOINC = '85353-1';
+
 const VITAL_FIELD_META: Array<{
   field: string;
   loincCode: string;
@@ -357,7 +360,7 @@ const VITAL_FIELD_META: Array<{
   unit: string;
   ucum: string;
 }> = [
-  { field: 'spo2', loincCode: '2708-6', label: 'SpO₂ (%)', min: 50, max: 100, step: 1, ph: '98', unit: '%', ucum: '%' },
+  { field: 'spo2', loincCode: '59408-5', label: 'SpO₂ (%)', min: 50, max: 100, step: 1, ph: '98', unit: '%', ucum: '%' },
   { field: 'hr', loincCode: '8867-4', label: 'Heart Rate (bpm)', min: 20, max: 300, step: 1, ph: '72', unit: 'beats/min', ucum: '/min' },
   { field: 'sbp', loincCode: '8480-6', label: 'Systolic BP', min: 50, max: 300, step: 1, ph: '120', unit: 'mmHg', ucum: 'mm[Hg]' },
   { field: 'dbp', loincCode: '8462-4', label: 'Diastolic BP', min: 20, max: 200, step: 1, ph: '80', unit: 'mmHg', ucum: 'mm[Hg]' },
@@ -375,94 +378,62 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
   isSaving,
   onDone,
 }) => {
+  const panelObs = existingVitals.find((o) => o.component?.length);
+
   const initialForm = VITAL_FIELD_META.reduce((acc, f) => {
-    const obs = existingVitals.find((o) => o.code?.coding?.[0]?.code === f.loincCode);
-    acc[f.field] = obs?.valueQuantity?.value != null ? String(obs.valueQuantity.value) : '';
+    if (panelObs) {
+      const comp = panelObs.component?.find((c) => c.code?.coding?.[0]?.code === f.loincCode);
+      acc[f.field] = comp?.valueQuantity?.value != null ? String(comp.valueQuantity.value) : '';
+    } else {
+      // backward compat: old individual observations
+      const obs = existingVitals.find((o) => o.code?.coding?.[0]?.code === f.loincCode);
+      acc[f.field] = obs?.valueQuantity?.value != null ? String(obs.valueQuantity.value) : '';
+    }
     return acc;
   }, {} as Record<string, string>);
 
   const [form, setForm] = useState<Record<string, string>>({ ...initialForm, recordedAt: localNow() });
   const [err, setErr] = useState('');
 
-  const existingMap = existingVitals.reduce<Record<string, Observation>>((acc, o) => {
-    const code = o.code?.coding?.[0]?.code || '';
-    if (code) acc[code] = o;
-    return acc;
-  }, {});
-
   const handleSave = async () => {
     setErr('');
     const effectiveDateTime = toFHIRDateTime(form.recordedAt);
-    let anyEntered = false;
-    let allOk = true;
 
-    for (const meta of VITAL_FIELD_META) {
-      const val = form[meta.field];
-      if (!val) continue;
-      anyEntered = true;
-      const numVal = parseFloat(val);
-      const existing = existingMap[meta.loincCode];
-
-      if (existing?.id) {
-        const updated = {
-          ...existing,
-          effectiveDateTime,
-          valueQuantity: {
-            value: numVal,
-            unit: meta.unit,
-            system: 'http://unitsofmeasure.org',
-            code: meta.ucum,
-          },
+    const components = VITAL_FIELD_META
+      .map((meta) => {
+        const val = form[meta.field];
+        if (!val) return null;
+        return {
+          code: { coding: [{ system: 'http://loinc.org', code: meta.loincCode, display: meta.label }] },
+          valueQuantity: { value: parseFloat(val), unit: meta.unit, system: 'http://unitsofmeasure.org', code: meta.ucum },
         };
-        const res = await updateResource({
-          resourceType: 'Observation',
-          id: existing.id,
-          resource: updated as any,
-        });
-        if (!('data' in res)) allOk = false;
-      } else {
-        const obs = {
-          resourceType: 'Observation' as const,
-          status: 'final' as const,
-          category: [
-            {
-              coding: [
-                {
-                  system: 'http://terminology.hl7.org/CodeSystem/observation-category',
-                  code: 'vital-signs',
-                  display: 'Vital Signs',
-                },
-              ],
-            },
-          ],
-          code: {
-            coding: [
-              { system: 'http://loinc.org', code: meta.loincCode, display: meta.label },
-            ],
-          },
-          subject: { reference: `Patient/${patientId}`, display: patientName },
-          encounter: { reference: `Encounter/${encounterId}` },
-          effectiveDateTime,
-          valueQuantity: {
-            value: numVal,
-            unit: meta.unit,
-            system: 'http://unitsofmeasure.org',
-            code: meta.ucum,
-          },
-        };
-        const res = await createResource({ resourceType: 'Observation', resource: obs as any });
-        if (!('data' in res)) allOk = false;
-      }
-    }
+      })
+      .filter(Boolean);
 
-    if (!anyEntered) {
+    if (components.length === 0) {
       setErr('Enter at least one value.');
       return;
     }
-    if (allOk) {
-      onDone?.();
+
+    if (panelObs?.id) {
+      const updated = { ...panelObs, effectiveDateTime, component: components };
+      const res = await updateResource({ resourceType: 'Observation', id: panelObs.id, resource: updated as any });
+      if ('data' in res) onDone?.();
+      else setErr('Failed to save vitals.');
     } else {
-      setErr('Some values failed to save. Please retry.');
+      const obs = {
+        resourceType: 'Observation' as const,
+        status: 'final' as const,
+        category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
+        code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
+        subject: { reference: `Patient/${patientId}`, display: patientName },
+        encounter: { reference: `Encounter/${encounterId}` },
+        effectiveDateTime,
+        component: components,
+      };
+      const res = await createResource({ resourceType: 'Observation', resource: obs as any });
+      if ('data' in res) onDone?.();
+      else setErr('Failed to save vitals.');
     }
   };
 
@@ -1319,13 +1290,28 @@ const ConsultNoteDetailPage: React.FC = () => {
   );
 
 
-  const latestVitals = vitals.reduce<Record<string, Observation>>((acc, obs) => {
-    const code = obs.code?.coding?.[0]?.code || '';
-    const existing = acc[code];
-    if (!existing || (obs.effectiveDateTime && (!existing.effectiveDateTime || obs.effectiveDateTime > existing.effectiveDateTime)))
-      acc[code] = obs;
-    return acc;
-  }, {});
+  type VitalEntry = { value: number; unit: string; effectiveDateTime?: string };
+  const latestVitals: Record<string, VitalEntry> = {};
+  vitals.forEach((obs) => {
+    const dt = obs.effectiveDateTime;
+    if (obs.component?.length) {
+      obs.component.forEach((comp) => {
+        const code = comp.code?.coding?.[0]?.code || '';
+        const val = comp.valueQuantity?.value;
+        if (!code || val == null) return;
+        const prev = latestVitals[code];
+        if (!prev || (dt && (!prev.effectiveDateTime || dt > prev.effectiveDateTime)))
+          latestVitals[code] = { value: val, unit: comp.valueQuantity?.unit || '', effectiveDateTime: dt };
+      });
+    } else {
+      const code = obs.code?.coding?.[0]?.code || '';
+      const val = obs.valueQuantity?.value;
+      if (!code || val == null) return;
+      const prev = latestVitals[code];
+      if (!prev || (dt && (!prev.effectiveDateTime || dt > prev.effectiveDateTime)))
+        latestVitals[code] = { value: val, unit: obs.valueQuantity?.unit || '', effectiveDateTime: dt };
+    }
+  });
 
   const patientName = patient
     ? patient.name?.[0]?.text ||
@@ -1537,20 +1523,18 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
                         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Latest Vitals</div>
                         <div className="flex flex-wrap gap-3">
-                          {Object.entries(latestVitals).map(([code, obs]) => {
-                            const val = obs.valueQuantity?.value ?? null;
-                            const unit = obs.valueQuantity?.unit || '';
-                            const trend = val !== null ? interpretVital(code, val) : 'normal';
-                            const name = VITAL_LOINC_NAMES[code] || obs.code?.coding?.[0]?.display || code;
+                          {Object.entries(latestVitals).map(([code, entry]) => {
+                            const trend = interpretVital(code, entry.value);
+                            const name = VITAL_LOINC_NAMES[code] || code;
                             return (
                               <div key={code} className={`border rounded-lg px-3 py-2 ${vitalCardCls(trend)}`}>
                                 <div className="text-xs text-gray-500 font-medium">{name}</div>
                                 <div className={`text-lg font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                  {val !== null ? val : '—'} <span className="text-xs font-normal">{unit}</span>
+                                  {entry.value} <span className="text-xs font-normal">{entry.unit}</span>
                                   {trend === 'critical' && <span className="ml-1 text-red-600 text-sm font-bold">!</span>}
                                   {trend === 'abnormal' && <span className="ml-1 text-amber-600 text-xs">▲</span>}
                                 </div>
-                                <div className="text-xs text-gray-400">{formatDT(obs.effectiveDateTime)}</div>
+                                <div className="text-xs text-gray-400">{formatDT(entry.effectiveDateTime)}</div>
                               </div>
                             );
                           })}
@@ -1560,26 +1544,23 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </div>
 
                   {/* ── 1. Vital Signs ── */}
-                  <Section sectionKey="vitals" icon="V" title="Vital Signs" count={vitals.length} isEditable={isEditable} addLabel="Update Vitals" addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}>
-                    {vitals.length === 0 ? (
+                  <Section sectionKey="vitals" icon="V" title="Vital Signs" count={Object.keys(latestVitals).length} isEditable={isEditable} addLabel="Update Vitals" addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}>
+                    {Object.keys(latestVitals).length === 0 ? (
                       <EmptyNote label="No vital signs recorded for this encounter." />
                     ) : (
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {vitals.map((obs) => {
-                          const code = obs.code?.coding?.[0]?.code || '';
-                          const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
-                          const val = obs.valueQuantity?.value ?? null;
-                          const unit = obs.valueQuantity?.unit || obs.valueString || '';
-                          const trend = val !== null ? interpretVital(code, val) : 'normal';
+                        {Object.entries(latestVitals).map(([code, entry]) => {
+                          const name = VITAL_LOINC_NAMES[code] || code;
+                          const trend = interpretVital(code, entry.value);
                           return (
-                            <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                            <div key={code} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
                               <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
                               <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                {val !== null ? val : obs.valueString || '—'}
-                                <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
+                                {entry.value}
+                                <span className="text-sm font-normal ml-1">{entry.unit}</span>
                                 {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
                               </div>
-                              <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
+                              <div className="text-xs text-gray-400 mt-1">{formatDT(entry.effectiveDateTime)}</div>
                             </div>
                           );
                         })}
@@ -1833,37 +1814,33 @@ const ConsultNoteDetailPage: React.FC = () => {
                   sectionKey="vitals"
                   icon="V"
                   title="Vital Signs"
-                  count={vitals.length}
+                  count={Object.keys(latestVitals).length}
                   isEditable={isEditable}
                   addLabel="Update Vitals"
                   addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}
                 >
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
-                    const filtered = vitals.filter((obs) => {
-                      const code = obs.code?.coding?.[0]?.code || '';
-                      const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || '';
+                    const filteredEntries = Object.entries(latestVitals).filter(([code]) => {
+                      const name = VITAL_LOINC_NAMES[code] || code;
                       return name.toLowerCase().includes(filterText.toLowerCase());
                     });
-                    return filtered.length === 0 ? (
+                    return filteredEntries.length === 0 ? (
                       <EmptyNote label="No vital signs recorded for this encounter." />
                     ) : (
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {filtered.map((obs) => {
-                          const code = obs.code?.coding?.[0]?.code || '';
-                          const name = VITAL_LOINC_NAMES[code] || obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
-                          const val = obs.valueQuantity?.value ?? null;
-                          const unit = obs.valueQuantity?.unit || obs.valueString || '';
-                          const trend = val !== null ? interpretVital(code, val) : 'normal';
+                        {filteredEntries.map(([code, entry]) => {
+                          const name = VITAL_LOINC_NAMES[code] || code;
+                          const trend = interpretVital(code, entry.value);
                           return (
-                            <div key={obs.id} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
+                            <div key={code} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
                               <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
                               <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                {val !== null ? val : obs.valueString || '—'}
-                                <span className="text-sm font-normal ml-1">{obs.valueQuantity ? unit : ''}</span>
+                                {entry.value}
+                                <span className="text-sm font-normal ml-1">{entry.unit}</span>
                                 {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
                               </div>
-                              <div className="text-xs text-gray-400 mt-1">{formatDT(obs.effectiveDateTime)}</div>
+                              <div className="text-xs text-gray-400 mt-1">{formatDT(entry.effectiveDateTime)}</div>
                             </div>
                           );
                         })}

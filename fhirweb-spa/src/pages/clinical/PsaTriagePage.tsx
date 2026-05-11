@@ -51,40 +51,44 @@ const PsaTriagePage: React.FC = () => {
 
   const handleSave = async () => {
     setError('');
-    const obsPayloads: any[] = [];
-    // ucumCode is the UCUM code for valueQuantity.code; defaults to unit when they are the same
-    const push = (code: string, display: string, value: string, unit: string, system: string, ucumCode?: string) => {
-      const num = parseFloat(value);
-      if (!value || isNaN(num)) return;
-      obsPayloads.push({
-        resourceType: 'Observation',
-        status: 'final',
-        category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
-        code: { coding: [{ system, code, display }], text: display },
-        subject: { reference: `Patient/${patientId}` },
-        encounter: { reference: `Encounter/${encounterId}` },
-        effectiveDateTime: new Date(form.recordedAt).toISOString(),
-        valueQuantity: { value: num, unit, system: 'http://unitsofmeasure.org', code: ucumCode ?? unit },
-      });
-    };
-    push('59408-5', 'SpO2',             form.spo2, '%',           'http://loinc.org');
-    push('8867-4',  'Heart Rate',       form.hr,   '/min',        'http://loinc.org');
-    push('8480-6',  'Systolic BP',      form.sbp,  'mmHg',        'http://loinc.org', 'mm[Hg]');
-    push('8462-4',  'Diastolic BP',     form.dbp,  'mmHg',        'http://loinc.org', 'mm[Hg]');
-    push('9279-1',  'Respiratory Rate', form.rr,   '/min',        'http://loinc.org');
-    push('8310-5',  'Body Temperature', form.temp, 'Cel',         'http://loinc.org');
+    const effectiveDateTime = new Date(form.recordedAt).toISOString();
 
-    if (obsPayloads.length === 0) {
+    const vitalDefs = [
+      { code: '59408-5', display: 'SpO₂',              value: form.spo2, unit: '%',           ucum: '%' },
+      { code: '8867-4',  display: 'Heart Rate',         value: form.hr,   unit: 'beats/min',   ucum: '/min' },
+      { code: '8480-6',  display: 'Systolic BP',        value: form.sbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
+      { code: '8462-4',  display: 'Diastolic BP',       value: form.dbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
+      { code: '9279-1',  display: 'Respiratory Rate',   value: form.rr,   unit: 'breaths/min', ucum: '/min' },
+      { code: '8310-5',  display: 'Body Temperature',   value: form.temp, unit: '°C',          ucum: 'Cel' },
+    ];
+
+    const components = vitalDefs
+      .filter(({ value }) => value && !isNaN(parseFloat(value)))
+      .map(({ code, display, value, unit, ucum }) => ({
+        code: { coding: [{ system: 'http://loinc.org', code, display }] },
+        valueQuantity: { value: parseFloat(value), unit, system: 'http://unitsofmeasure.org', code: ucum },
+      }));
+
+    if (components.length === 0) {
       setError('Please enter at least one vital sign.');
       return;
     }
 
-    for (const obs of obsPayloads) {
-      const res = await createResource({ resourceType: 'Observation', resource: obs });
-      if ('error' in res) {
-        setError('Failed to save vitals. Please retry.');
-        return;
-      }
+    const panelObs = {
+      resourceType: 'Observation',
+      status: 'final',
+      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
+      code: { coding: [{ system: 'http://loinc.org', code: '85353-1', display: 'Vital signs panel' }], text: 'Vital Signs' },
+      subject: { reference: `Patient/${patientId}` },
+      encounter: { reference: `Encounter/${encounterId}` },
+      effectiveDateTime,
+      component: components,
+    };
+
+    const obsResult = await createResource({ resourceType: 'Observation', resource: panelObs as any });
+    if ('error' in obsResult) {
+      setError('Failed to save vitals. Please retry.');
+      return;
     }
 
     const encounter = encounterResource as Encounter | undefined;
@@ -102,8 +106,8 @@ const PsaTriagePage: React.FC = () => {
     }
     locs.push({ location: { identifier: { value: 'waiting-room' } }, status: 'active' });
     const updatedEnc = { ...encounter, location: locs };
-    const res = await updateResource({ resourceType: 'Encounter', id: encounterId!, resource: updatedEnc as any });
-    if ('error' in res) { setError('Failed to update triage status. Please retry.'); return; }
+    const encResult = await updateResource({ resourceType: 'Encounter', id: encounterId!, resource: updatedEnc as any });
+    if ('error' in encResult) { setError('Failed to update triage status. Please retry.'); return; }
     navigate('/queue');
   };
 
