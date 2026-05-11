@@ -401,3 +401,94 @@ isEditingVitals: boolean              ← vitals-specific (no "add more", only u
 - "Resume Consult" (Queue) → `/notes` (view page) → amber banner link → `/consult` (wizard)
 - Tabs already submitted show in view-only mode; "Edit" button re-enables the form
 
+
+
+---
+
+## Patient Queue — State Transitions & Location Values
+
+### Queue Stages (`QueueStage`)
+
+| Stage | Display Label | `location[].identifier.value` | `location[].status` |
+|---|---|---|---|
+| `awaiting-triage` | Awaiting Triage | `triage` | `planned` |
+| `awaiting-clinician` | Awaiting Clinician | `triage` (completed) + `waiting-room` | `active` |
+| `waiting-patient` | Waiting Patient | `in-consultation` | `planned` |
+| `in-consultation` | In Consultation | `in-consultation` | `active` |
+| `awaiting-billing` | Awaiting Billing | `billing` | `planned` |
+| `completed` | Completed | `billing` | `completed` |
+| `cancelled` | Cancelled | *(any)* | `Encounter.status = cancelled` |
+
+### Transition Flow
+
+```
+[VisitRegistrationPage]
+  → Encounter.location: [{ identifier: { value: 'triage' }, status: 'planned' }]
+  → Stage: awaiting-triage
+
+PSA clicks "Triage" (PsaTriagePage)
+  → triage entry: status → 'completed'
+  → push: { identifier: { value: 'waiting-room' }, status: 'active' }
+  → Stage: awaiting-clinician
+
+Clinician clicks "Call Patient" (applyCallPatient)
+  → waiting-room entry: status → 'completed'
+  → push: { identifier: { value: 'in-consultation' }, status: 'planned' }
+  → Stage: waiting-patient
+
+Clinician clicks "Start Consult" (applyStartConsult)
+  → in-consultation entry: status → 'active'
+  → Stage: in-consultation
+
+Clinician clicks "Complete Consult" (applyCompleteConsult)
+  → in-consultation entry: status → 'completed'
+  → push: { identifier: { value: 'billing' }, status: 'planned' }
+  → Stage: awaiting-billing
+
+PSA clicks "Collect Payment" (applyCollectPayment)
+  → billing entry: status → 'completed'
+  → Encounter.status → 'completed'
+  → Stage: completed
+```
+
+### Location Identifier Values
+
+The four `location[].location.identifier.value` strings used across the workflow:
+
+| Value | Meaning |
+|---|---|
+| `triage` | Patient registered, awaiting nurse/PSA triage |
+| `waiting-room` | Triage done, patient waiting for clinician |
+| `in-consultation` | Patient called / in active consultation room |
+| `billing` | Consultation complete, awaiting payment collection |
+
+### Stage Classification Logic (`classifyEncounter`)
+
+```typescript
+// Priority rules (PatientQueuePage.tsx)
+if (Encounter.status === 'cancelled')                          → cancelled
+if (Encounter.status in ['completed','finished','discharged']) → completed
+if (no location entries)
+  in-progress → awaiting-clinician  (legacy fallback)
+  else        → awaiting-triage
+
+// Location-based (uses getCurrentLocation: last active → last planned → last entry)
+locId === 'triage'          && loc.status !== 'completed' → awaiting-triage
+locId === 'triage'          && loc.status === 'completed' → awaiting-clinician
+locId === 'waiting-room'                                  → awaiting-clinician
+locId === 'in-consultation' && loc.status === 'active'    → in-consultation
+locId === 'in-consultation' && loc.status !== 'active'    → waiting-patient
+locId === 'billing'                                       → awaiting-billing
+```
+
+### Role-Specific Actions per Stage
+
+| Stage | PSA actions | Clinician actions |
+|---|---|---|
+| `awaiting-triage` | **Triage** (→ triage page) | — |
+| `awaiting-clinician` | Cancel | **Call Patient** |
+| `waiting-patient` | Cancel | **Start Consult** |
+| `in-consultation` | Cancel | **Resume Consult** · **Complete Consult** |
+| `awaiting-billing` | **Collect Payment** · Cancel | — |
+| `completed` | — | **View Notes** |
+| `cancelled` | — | — |
