@@ -14,6 +14,7 @@ import VisitRegistrationPage from './pages/clinical/VisitRegistrationPage';
 import PsaTriagePage from './pages/clinical/PsaTriagePage';
 import ClinicalConsultPage from './pages/clinical/ClinicalConsultPage';
 import ConsultNoteDetailPage from './pages/clinical/ConsultNoteDetailPage';
+import PatientRecordsPage from './pages/PatientRecordsPage';
 // CRUD components
 import CarePlanCrudPage from './pages/crud/CarePlanCrudPage';
 import ObservationCrudPage from './pages/crud/ObservationCrudPage';
@@ -58,6 +59,10 @@ const AppRoutes: React.FC = () => {
       />
 
       {/* Clinician-only routes */}
+      <Route
+        path="/patient/:id/records"
+        element={<RoleGuard allowed={['clinician']}><PatientRecordsPage /></RoleGuard>}
+      />
       <Route
         path="/patient/:id/encounter/:encounterId/consult"
         element={<RoleGuard allowed={['clinician']}><ClinicalConsultPage /></RoleGuard>}

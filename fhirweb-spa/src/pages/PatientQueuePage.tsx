@@ -308,6 +308,14 @@ const QueueRow: React.FC<QueueRowProps> = ({
               )}
             </>
           )}
+          {role === 'clinician' && (
+            <Link
+              to={`/patient/${patientId}/records`}
+              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-200 transition-colors"
+            >
+              Patient Records
+            </Link>
+          )}
 
           {/* ── PSA actions ── */}
           {role === 'psa' && (

@@ -991,6 +991,36 @@ export const fhirApi = createApi({
       ],
     }),
 
+    searchByPatient: builder.query<
+      Bundle<Resource>,
+      { resourceType: string; patientId: string }
+    >({
+      queryFn: async ({ resourceType, patientId }) => {
+        try {
+          const client = await createFHIRClient();
+          const results = await client.search({
+            resourceType,
+            searchParams: { subject: `Patient/${patientId}`, _count: '100' },
+          });
+          return { data: results as Bundle<Resource> };
+        } catch (error: any) {
+          console.error(`Error searching ${resourceType} by patient:`, error);
+          return {
+            error: {
+              status: error.response?.status || 'FETCH_ERROR',
+              data: error.response?.data || null,
+              error: `HTTP ${error.response?.status || 'ERROR'}: ${
+                error.message || 'Unknown error'
+              }`,
+            },
+          };
+        }
+      },
+      providesTags: (_result, _error, { resourceType, patientId }) => [
+        { type: resourceType as any, id: patientId },
+      ],
+    }),
+
     getObservationsByIds: builder.query<Bundle<Resource>, string[]>({
       queryFn: async (ids) => {
         try {
@@ -1135,6 +1165,7 @@ export const {
   useGetPractitionerByIdQuery,
   useGetLocationsQuery,
   useSearchByEncounterQuery,
+  useSearchByPatientQuery,
   useSearchChildEncountersQuery,
   useGetTodayEncountersQuery,
   useGetObservationsByIdsQuery,
