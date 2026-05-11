@@ -484,7 +484,7 @@ const PatientCrudPage: React.FC = () => {
       if (isNew) {
         // Create new resource, then go straight to encounter registration
         const newPatient = await createPatient(cleanedFormData).unwrap();
-        navigate(`/patient/${newPatient.id}/encounter`);
+        navigate(`/patient/${newPatient.id}/visit/new`);
         return;
       } else {
         // Update existing resource
