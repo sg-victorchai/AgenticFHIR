@@ -269,8 +269,8 @@ const ClinicalConsultPage: React.FC = () => {
     if (obsLoading || srLoading || condLoading || medLoading || cpLoading) return;
     preloadedRef.current = true;
 
-    const observations = (obsBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as Observation[])
-      .filter((o) => o.status !== 'entered-in-error') || [];
+    const observations = ((obsBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as Observation[]) || [])
+      .filter((o) => o.status !== 'entered-in-error');
     const vitalsFromFHIR = observations.filter(
       (o) => o.category?.[0]?.coding?.[0]?.code === 'vital-signs'
     );
