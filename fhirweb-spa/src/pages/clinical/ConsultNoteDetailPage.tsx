@@ -374,11 +374,12 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
   patientName,
   encounterId,
   createResource,
-  updateResource,
   isSaving,
   onDone,
 }) => {
-  const panelObs = existingVitals.find((o) => o.component?.length);
+  const panelObs = [...existingVitals]
+    .filter((o) => o.component?.length)
+    .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1))[0];
 
   const initialForm = VITAL_FIELD_META.reduce((acc, f) => {
     if (panelObs) {
@@ -386,7 +387,9 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
       acc[f.field] = comp?.valueQuantity?.value != null ? String(comp.valueQuantity.value) : '';
     } else {
       // backward compat: old individual observations
-      const obs = existingVitals.find((o) => o.code?.coding?.[0]?.code === f.loincCode);
+      const obs = existingVitals
+        .filter((o) => o.code?.coding?.[0]?.code === f.loincCode)
+        .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1))[0];
       acc[f.field] = obs?.valueQuantity?.value != null ? String(obs.valueQuantity.value) : '';
     }
     return acc;
@@ -415,26 +418,19 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
       return;
     }
 
-    if (panelObs?.id) {
-      const updated = { ...panelObs, effectiveDateTime, component: components };
-      const res = await updateResource({ resourceType: 'Observation', id: panelObs.id, resource: updated as any });
-      if ('data' in res) onDone?.();
-      else setErr('Failed to save vitals.');
-    } else {
-      const obs = {
-        resourceType: 'Observation' as const,
-        status: 'final' as const,
-        category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
-        code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
-        subject: { reference: `Patient/${patientId}`, display: patientName },
-        encounter: { reference: `Encounter/${encounterId}` },
-        effectiveDateTime,
-        component: components,
-      };
-      const res = await createResource({ resourceType: 'Observation', resource: obs as any });
-      if ('data' in res) onDone?.();
-      else setErr('Failed to save vitals.');
-    }
+    const obs = {
+      resourceType: 'Observation' as const,
+      status: 'final' as const,
+      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
+      code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      effectiveDateTime,
+      component: components,
+    };
+    const res = await createResource({ resourceType: 'Observation', resource: obs as any });
+    if ('data' in res) onDone?.();
+    else setErr('Failed to save vitals.');
   };
 
   return (

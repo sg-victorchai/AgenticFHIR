@@ -401,33 +401,22 @@ const ClinicalConsultPage: React.FC = () => {
     }
 
     const effectiveDateTime = toFHIRDateTime(recordedAt);
-    const panelObs = rawVitals.find((o) => o.component?.length);
-    let savedObs: any;
-
-    if (panelObs?.id) {
-      const updated = { ...panelObs, effectiveDateTime, component: components };
-      const result = await updateResource({ resourceType: 'Observation', id: panelObs.id, resource: updated as any });
-      if ('data' in result && result.data) {
-        savedObs = result.data;
-        setRawVitals((prev) => prev.map((o) => (o.id === panelObs.id ? (result.data as Observation) : o)));
-      }
-    } else {
-      const obs = {
-        resourceType: 'Observation' as const,
-        status: 'final' as const,
-        category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
-        code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
-        subject: { reference: `Patient/${patientId}`, display: patientName },
-        encounter: { reference: `Encounter/${encounterId}` },
-        effectiveDateTime,
-        component: components,
-      };
-      const result = await createResource({ resourceType: 'Observation', resource: obs as any });
-      if ('data' in result && result.data) savedObs = result.data;
-    }
+    const obs = {
+      resourceType: 'Observation' as const,
+      status: 'final' as const,
+      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
+      code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
+      subject: { reference: `Patient/${patientId}`, display: patientName },
+      encounter: { reference: `Encounter/${encounterId}` },
+      effectiveDateTime,
+      component: components,
+    };
+    const result = await createResource({ resourceType: 'Observation', resource: obs as any });
+    const savedObs = 'data' in result && result.data ? result.data : null;
 
     if (savedObs) {
-      const displayItems: RecordedItem[] = (savedObs.component || components).map((comp: any) => {
+      setRawVitals((prev) => [...prev, savedObs as Observation]);
+      const displayItems: RecordedItem[] = ((savedObs as any).component || components).map((comp: any) => {
         const name = comp.code?.coding?.[0]?.display || '?';
         const val = comp.valueQuantity?.value ?? '—';
         const unit = comp.valueQuantity?.unit || '';
@@ -445,9 +434,11 @@ const ClinicalConsultPage: React.FC = () => {
 
   const prepareVitalsEdit = () => {
     const newForm = { ...vitalsForm };
-    const panelObs = rawVitals.find((o) => o.component?.length);
-    if (panelObs) {
-      panelObs.component?.forEach((comp) => {
+    const latestPanelObs = [...rawVitals]
+      .filter((o) => o.component?.length)
+      .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1))[0];
+    if (latestPanelObs) {
+      latestPanelObs.component?.forEach((comp) => {
         const code = comp.code?.coding?.[0]?.code || '';
         const field = VITAL_CODE_TO_FIELD[code];
         if (field && comp.valueQuantity?.value != null) {
@@ -455,13 +446,18 @@ const ClinicalConsultPage: React.FC = () => {
         }
       });
     } else {
-      // backward compat: old individual observations
+      // backward compat: old individual observations — use latest per code
+      const latestByCode: Record<string, Observation> = {};
       rawVitals.forEach((obs) => {
         const code = obs.code?.coding?.[0]?.code || '';
+        const prev = latestByCode[code];
+        if (!prev || (obs.effectiveDateTime ?? '') > (prev.effectiveDateTime ?? ''))
+          latestByCode[code] = obs;
+      });
+      Object.entries(latestByCode).forEach(([code, obs]) => {
         const field = VITAL_CODE_TO_FIELD[code];
-        if (field && obs.valueQuantity?.value != null) {
+        if (field && obs.valueQuantity?.value != null)
           (newForm as any)[field] = String(obs.valueQuantity.value);
-        }
       });
     }
     setVitalsForm(newForm);
