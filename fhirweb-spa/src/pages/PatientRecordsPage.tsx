@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   useGetPatientQuery,
@@ -125,7 +125,10 @@ const Empty = () => (
 
 // ─── Search Result Card ───────────────────────────────────────────────────────
 
-const SearchResultCard: React.FC<{ result: HybridSearchResult }> = ({ result }) => {
+const SearchResultCard: React.FC<{
+  result: HybridSearchResult;
+  onNavigate?: (tab: TabId, resourceId: string, medSubTab?: MedSubTab) => void;
+}> = ({ result, onNavigate }) => {
   const { data: resource, isLoading } = useGetResourceByIdQuery(
     { resourceType: result.resourceType, id: result.resourceId },
   );
@@ -172,8 +175,47 @@ const SearchResultCard: React.FC<{ result: HybridSearchResult }> = ({ result }) 
       ? 'bg-blue-100 text-blue-700'
       : 'bg-amber-100 text-amber-700';
 
+  const getNavTarget = (): { tab: TabId; medSubTab?: MedSubTab } | null => {
+    const r2 = resource as any;
+    switch (result.resourceType) {
+      case 'Encounter': return { tab: 'encounter' };
+      case 'Observation': return { tab: 'observation' };
+      case 'ServiceRequest': return { tab: 'orders' };
+      case 'DiagnosticReport': {
+        const isRad = r2?.category?.some((c: any) =>
+          c.coding?.some((cd: any) =>
+            cd.code === 'RAD' || cd.code === '4261000179101' ||
+            cd.display?.toLowerCase().includes('rad') ||
+            cd.display?.toLowerCase().includes('imaging'),
+          ),
+        );
+        return { tab: isRad ? 'rad-report' : 'lab-results' };
+      }
+      case 'MedicationRequest': return { tab: 'medication', medSubTab: 'request' };
+      case 'MedicationDispense': return { tab: 'medication', medSubTab: 'dispense' };
+      case 'MedicationStatement': return { tab: 'medication', medSubTab: 'statement' };
+      case 'Procedure': return { tab: 'procedure' };
+      case 'CarePlan': return { tab: 'careplan' };
+      default: return null;
+    }
+  };
+
+  const navTarget = resource ? getNavTarget() : null;
+
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded hover:border-blue-300 transition-colors text-xs">
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded transition-colors text-xs ${
+        navTarget && onNavigate
+          ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50'
+          : 'hover:border-blue-300'
+      }`}
+      title={navTarget ? 'Click to navigate to this record' : undefined}
+      onClick={
+        navTarget && onNavigate
+          ? () => onNavigate(navTarget.tab, result.resourceId, navTarget.medSubTab)
+          : undefined
+      }
+    >
       <span className="font-semibold text-indigo-600 uppercase tracking-wide w-28 shrink-0 truncate">
         {result.resourceType}
       </span>
@@ -239,6 +281,25 @@ const PatientRecordsPage: React.FC = () => {
     setSearchResults(null);
     setSearchError(null);
   };
+
+  // ── Navigation from search results ──
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  const handleNavigate = (tab: TabId, resourceId: string, medSubTab?: MedSubTab) => {
+    setActiveTab(tab);
+    if (medSubTab) setMedSubTab(medSubTab);
+    setExpandedId(resourceId);
+    setHighlightId(resourceId);
+  };
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const scrollTimer = setTimeout(() => {
+      document.getElementById(`record-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+    const clearTimer = setTimeout(() => setHighlightId(null), 2500);
+    return () => { clearTimeout(scrollTimer); clearTimeout(clearTimer); };
+  }, [highlightId]);
 
   // ── Patient ──
   const { data: patient } = useGetPatientQuery(patientId!, { skip: !patientId });
@@ -348,7 +409,8 @@ const PatientRecordsPage: React.FC = () => {
             {encounters.map((enc: any) => (
               <React.Fragment key={enc.id}>
                 <tr
-                  className="hover:bg-gray-50 cursor-pointer"
+                  id={`record-${enc.id}`}
+                  className={`cursor-pointer transition-colors ${highlightId === enc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
                   onClick={() => toggle(enc.id)}
                 >
                   <TD>{fmt(enc.actualPeriod?.start || enc.period?.start)}</TD>
@@ -428,10 +490,11 @@ const PatientRecordsPage: React.FC = () => {
                   (obs.component?.length ? `${obs.component.length} components` : '—');
               return (
                 <React.Fragment key={obs.id}>
-                  <tr
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => toggle(obs.id)}
-                  >
+                <tr
+                  id={`record-${obs.id}`}
+                  className={`cursor-pointer transition-colors ${highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => toggle(obs.id)}
+                >
                     <TD>{fmt(obs.effectiveDateTime)}</TD>
                     <TD>
                       {obs.code?.coding?.[0]?.display ||
@@ -523,7 +586,11 @@ const PatientRecordsPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-100">
             {serviceRequests.map((sr: any) => (
               <React.Fragment key={sr.id}>
-                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggle(sr.id)}>
+                <tr
+                  id={`record-${sr.id}`}
+                  className={`cursor-pointer transition-colors ${highlightId === sr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => toggle(sr.id)}
+                >
                   <TD>{fmt(sr.authoredOn)}</TD>
                   <TD>
                     {sr.code?.coding?.[0]?.display || sr.code?.text || '—'}
@@ -592,7 +659,11 @@ const PatientRecordsPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-100">
             {reports.map((dr: any) => (
               <React.Fragment key={dr.id}>
-                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggle(dr.id)}>
+                <tr
+                  id={`record-${dr.id}`}
+                  className={`cursor-pointer transition-colors ${highlightId === dr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => toggle(dr.id)}
+                >
                   <TD>{fmt(dr.effectiveDateTime || dr.issued)}</TD>
                   <TD>
                     {dr.code?.text || dr.code?.coding?.[0]?.display || '—'}
@@ -696,7 +767,11 @@ const PatientRecordsPage: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-100">
               {medRequests.map((mr: any) => (
                 <React.Fragment key={mr.id}>
-                  <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggle(mr.id)}>
+                  <tr
+                    id={`record-${mr.id}`}
+                    className={`cursor-pointer transition-colors ${highlightId === mr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => toggle(mr.id)}
+                  >
                     <TD>{fmt(mr.authoredOn)}</TD>
                     <TD>
                       {mr.medication?.concept?.text ||
@@ -790,7 +865,11 @@ const PatientRecordsPage: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-100">
               {medDispenses.map((md: any) => (
                 <React.Fragment key={md.id}>
-                  <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggle(md.id)}>
+                  <tr
+                    id={`record-${md.id}`}
+                    className={`cursor-pointer transition-colors ${highlightId === md.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => toggle(md.id)}
+                  >
                     <TD>{fmt(md.whenHandedOver || md.whenPrepared)}</TD>
                     <TD>
                       {md.medication?.concept?.text ||
@@ -849,7 +928,11 @@ const PatientRecordsPage: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-100">
               {medStatements.map((ms: any) => (
                 <React.Fragment key={ms.id}>
-                  <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggle(ms.id)}>
+                  <tr
+                    id={`record-${ms.id}`}
+                    className={`cursor-pointer transition-colors ${highlightId === ms.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => toggle(ms.id)}
+                  >
                     <TD>{fmt(ms.dateAsserted)}</TD>
                     <TD>
                       {ms.medication?.concept?.text ||
@@ -928,7 +1011,11 @@ const PatientRecordsPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-100">
             {procedures.map((proc: any) => (
               <React.Fragment key={proc.id}>
-                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggle(proc.id)}>
+                <tr
+                  id={`record-${proc.id}`}
+                  className={`cursor-pointer transition-colors ${highlightId === proc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => toggle(proc.id)}
+                >
                   <TD>
                     {fmt(
                       proc.performedDateTime ||
@@ -1002,7 +1089,10 @@ const PatientRecordsPage: React.FC = () => {
         {carePlans.map((cp: any) => (
           <div
             key={cp.id}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer"
+            id={`record-${cp.id}`}
+            className={`bg-white rounded-lg shadow-sm border overflow-hidden cursor-pointer transition-colors ${
+              highlightId === cp.id ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
+            }`}
             onClick={() => toggle(cp.id)}
           >
             <div className="px-6 py-4 flex items-start justify-between">
@@ -1132,7 +1222,11 @@ const PatientRecordsPage: React.FC = () => {
             ) : (
               <div className="space-y-1">
                 {searchResults?.results.map((r) => (
-                  <SearchResultCard key={`${r.resourceType}/${r.resourceId}`} result={r} />
+                  <SearchResultCard
+                    key={`${r.resourceType}/${r.resourceId}`}
+                    result={r}
+                    onNavigate={handleNavigate}
+                  />
                 ))}
               </div>
             )}
