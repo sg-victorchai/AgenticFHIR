@@ -71,7 +71,7 @@ const getResourceTypesFromQuery = (query: string): string[] => {
   if (q.startsWith('problem') || q.startsWith('condition')) return ['Condition'];
   if (q.startsWith('lab') || q.startsWith('test')) return ['Observation', 'DiagnosticReport', 'ServiceRequest'];
   if (q.startsWith('procedure')) return ['Procedure'];
-  if (q.startsWith('medication')) return ['MedicationRequest', 'MedicationDispense', 'MedicationStatement'];
+  if (/^meds?\b/.test(q) || q.startsWith('medication')) return ['MedicationRequest', 'MedicationDispense', 'MedicationStatement'];
   if (q.startsWith('care plan') || q.startsWith('careplan') || q.startsWith('plan')) return ['CarePlan'];
   return DEFAULT_RESOURCE_TYPES;
 };
