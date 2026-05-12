@@ -253,7 +253,7 @@ const PatientRecordsPage: React.FC = () => {
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const query = searchInput.trim();
-    if (!query) return;
+    if (query.length < 6) return;
     setIsSearching(true);
     setSearchError(null);
     try {
@@ -1259,7 +1259,7 @@ const PatientRecordsPage: React.FC = () => {
             </div>
             <button
               type="submit"
-              disabled={isSearching || !searchInput.trim()}
+              disabled={isSearching || searchInput.trim().length < 6}
               className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
             >
               {isSearching ? 'Searching…' : 'Search'}
