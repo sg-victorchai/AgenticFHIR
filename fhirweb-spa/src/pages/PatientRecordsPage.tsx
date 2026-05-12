@@ -6,6 +6,7 @@ import {
   useGetObservationsQuery,
   useGetMedicationsQuery,
   useGetCarePlansQuery,
+  useGetConditionsQuery,
   useSearchByPatientQuery,
   useGetResourceByIdQuery,
 } from '../services/fhir/client';
@@ -14,6 +15,7 @@ import {
 
 type TabId =
   | 'encounter'
+  | 'condition'
   | 'observation'
   | 'orders'
   | 'lab-results'
@@ -40,6 +42,7 @@ interface HybridSearchResponse {
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'encounter', label: 'Encounter' },
+  { id: 'condition', label: 'Condition' },
   { id: 'observation', label: 'Observation' },
   { id: 'orders', label: 'Lab & Rad Orders' },
   { id: 'lab-results', label: 'Lab Results' },
@@ -196,6 +199,7 @@ const SearchResultCard: React.FC<{
       case 'MedicationStatement': return { tab: 'medication', medSubTab: 'statement' };
       case 'Procedure': return { tab: 'procedure' };
       case 'CarePlan': return { tab: 'careplan' };
+      case 'Condition': return { tab: 'condition' };
       default: return null;
     }
   };
@@ -316,6 +320,10 @@ const PatientRecordsPage: React.FC = () => {
   const { data: encBundle, isLoading: encLoading } = useGetEncountersQuery(patientId!, {
     skip: activeTab !== 'encounter',
   });
+  const { data: condBundle, isLoading: condLoading } = useGetConditionsQuery(
+    { patientId: patientId! },
+    { skip: activeTab !== 'condition' },
+  );
   const { data: obsBundle, isLoading: obsLoading } = useGetObservationsQuery(
     { patientId: patientId! },
     { skip: activeTab !== 'observation' },
@@ -349,6 +357,8 @@ const PatientRecordsPage: React.FC = () => {
 
   // ── Resource extraction ──
   const encounters = (encBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
+  const conditions = (condBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean)
+    .filter((c: any) => c.clinicalStatus?.coding?.[0]?.code !== 'entered-in-error');
   const observations = (obsBundle?.entry ?? [])
     .map((e) => e.resource as any)
     .filter(Boolean)
@@ -390,6 +400,65 @@ const PatientRecordsPage: React.FC = () => {
   const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
 
   // ─── Tab renders ──────────────────────────────────────────────────────────
+
+  const renderConditionTab = () => {
+    if (condLoading) return <Loading />;
+    if (!conditions.length) return <Empty />;
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              {['Onset', 'Condition', 'Clinical Status', 'Severity', 'Category'].map((h) => (
+                <TH key={h}>{h}</TH>
+              ))}
+              <TH />
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {conditions.map((cond: any) => (
+              <React.Fragment key={cond.id}>
+                <tr
+                  id={`record-${cond.id}`}
+                  className={`cursor-pointer transition-colors ${highlightId === cond.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => toggle(cond.id)}
+                >
+                  <TD>{fmt(cond.onsetDateTime || cond.recordedDate)}</TD>
+                  <TD>{cond.code?.coding?.[0]?.display || cond.code?.text || '—'}</TD>
+                  <TD><StatusBadge status={cond.clinicalStatus?.coding?.[0]?.code} /></TD>
+                  <TD>{cond.severity?.coding?.[0]?.display || cond.severity?.text || '—'}</TD>
+                  <TD>{cond.category?.[0]?.coding?.[0]?.display || cond.category?.[0]?.text || '—'}</TD>
+                  <td className="px-4 py-3 text-right">
+                    <ExpandToggle open={expandedId === cond.id} />
+                  </td>
+                </tr>
+                {expandedId === cond.id && (
+                  <tr>
+                    <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                        <div><span className="font-medium">ID:</span> {cond.id}</div>
+                        <div><span className="font-medium">Verification:</span> {cond.verificationStatus?.coding?.[0]?.code || '—'}</div>
+                        <div><span className="font-medium">Recorded:</span> {fmt(cond.recordedDate)}</div>
+                        <div><span className="font-medium">Recorder:</span> {cond.recorder?.display || cond.recorder?.reference || '—'}</div>
+                        <div><span className="font-medium">Asserter:</span> {cond.asserter?.display || cond.asserter?.reference || '—'}</div>
+                        <div><span className="font-medium">Encounter:</span> {cond.encounter?.reference || '—'}</div>
+                        <div className="col-span-2"><span className="font-medium">Body Site:</span> {cond.bodySite?.map((b: any) => b.coding?.[0]?.display || b.text).filter(Boolean).join(', ') || '—'}</div>
+                        <div className="col-span-2"><span className="font-medium">Note:</span> {cond.note?.map((n: any) => n.text).join('; ') || '—'}</div>
+                        {cond.abatementDateTime && <div><span className="font-medium">Abatement:</span> {fmt(cond.abatementDateTime)}</div>}
+                        {cond.stage?.length ? (
+                          <div className="col-span-2"><span className="font-medium">Stage:</span> {cond.stage.map((s: any) => s.summary?.coding?.[0]?.display || s.summary?.text).filter(Boolean).join(', ')}</div>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   const renderEncounterTab = () => {
     if (encLoading) return <Loading />;
@@ -1261,6 +1330,7 @@ const PatientRecordsPage: React.FC = () => {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
         {activeTab === 'encounter' && renderEncounterTab()}
+        {activeTab === 'condition' && renderConditionTab()}
         {activeTab === 'observation' && renderObservationTab()}
         {activeTab === 'orders' && renderOrdersTab()}
         {activeTab === 'lab-results' && renderDiagnosticReportTable(labResults, drLoading)}
