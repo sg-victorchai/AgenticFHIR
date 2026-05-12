@@ -130,7 +130,7 @@ const SearchResultCard: React.FC<{ result: HybridSearchResult }> = ({ result }) 
     { resourceType: result.resourceType, id: result.resourceId },
   );
 
-  if (isLoading) return <div className="animate-pulse h-14 bg-gray-100 rounded-lg" />;
+  if (isLoading) return <div className="animate-pulse h-7 bg-gray-100 rounded" />;
   if (!resource) return null;
 
   const r = resource as any;
@@ -173,22 +173,18 @@ const SearchResultCard: React.FC<{ result: HybridSearchResult }> = ({ result }) 
       : 'bg-amber-100 text-amber-700';
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-start gap-3 hover:border-blue-300 transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">
-            {result.resourceType}
-          </span>
-          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${sourceCls}`}>
-            {result.sources.join('+')}
-          </span>
-        </div>
-        <p className="text-sm text-gray-800">{getSummary()}</p>
-        {getDate() && <p className="text-xs text-gray-400 mt-0.5">{fmt(getDate())}</p>}
-      </div>
-      <div className="text-xs text-gray-400 whitespace-nowrap pt-0.5">
-        {(result.score * 100).toFixed(1)}%
-      </div>
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded hover:border-blue-300 transition-colors text-xs">
+      <span className="font-semibold text-indigo-600 uppercase tracking-wide w-28 shrink-0 truncate">
+        {result.resourceType}
+      </span>
+      <span className="flex-1 text-gray-800 truncate">{getSummary()}</span>
+      {getDate() && <span className="text-gray-400 whitespace-nowrap shrink-0">{fmt(getDate())}</span>}
+      <span className={`px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0 ${sourceCls}`}>
+        {result.sources.join('+')}
+      </span>
+      <span className="text-gray-400 whitespace-nowrap shrink-0 w-10 text-right">
+        {(result.score * 100).toFixed(0)}%
+      </span>
     </div>
   );
 };
@@ -1113,6 +1109,37 @@ const PatientRecordsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Search Results — shown above tab bar */}
+      {(searchResults !== null || searchError) && (
+        <div className="bg-white border-b border-gray-200 px-6 py-3">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-600">
+                {searchResults
+                  ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for "${searchResults.query}"`
+                  : 'Search error'}
+              </span>
+              <button onClick={clearSearch} className="text-xs text-gray-400 hover:text-gray-600">
+                Clear ×
+              </button>
+            </div>
+            {searchError ? (
+              <div className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded">
+                {searchError}
+              </div>
+            ) : searchResults?.results.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">No matching records found.</p>
+            ) : (
+              <div className="space-y-1">
+                {searchResults?.results.map((r) => (
+                  <SearchResultCard key={`${r.resourceType}/${r.resourceId}`} result={r} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tab bar */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
@@ -1139,45 +1166,6 @@ const PatientRecordsPage: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* ── Search Results ── */}
-        {(searchResults !== null || searchError) && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-700">
-                  Search Results{searchResults ? ` for "${searchResults.query}"` : ''}
-                </h2>
-                {searchResults && (
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {searchResults.totalResults} result{searchResults.totalResults !== 1 ? 's' : ''} found
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={clearSearch}
-                className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-              >
-                Clear ×
-              </button>
-            </div>
-            {searchError ? (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-                {searchError}
-              </div>
-            ) : searchResults?.results.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 bg-white rounded-lg border border-gray-200">
-                No matching records found.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {searchResults?.results.map((r) => (
-                  <SearchResultCard key={`${r.resourceType}/${r.resourceId}`} result={r} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {activeTab === 'encounter' && renderEncounterTab()}
         {activeTab === 'observation' && renderObservationTab()}
         {activeTab === 'orders' && renderOrdersTab()}
