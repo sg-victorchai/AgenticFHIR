@@ -7,6 +7,7 @@ import {
   useGetMedicationsQuery,
   useGetCarePlansQuery,
   useSearchByPatientQuery,
+  useGetResourceByIdQuery,
 } from '../services/fhir/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,6 +24,20 @@ type TabId =
 
 type MedSubTab = 'request' | 'dispense' | 'statement';
 
+interface HybridSearchResult {
+  resourceType: string;
+  resourceId: string;
+  score: number;
+  sources: string[];
+  contributions: Record<string, number>;
+}
+
+interface HybridSearchResponse {
+  query: string;
+  totalResults: number;
+  results: HybridSearchResult[];
+}
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'encounter', label: 'Encounter' },
   { id: 'observation', label: 'Observation' },
@@ -33,6 +48,30 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'procedure', label: 'Procedure' },
   { id: 'careplan', label: 'Care Plan' },
 ];
+
+const DEFAULT_RESOURCE_TYPES = [
+  'Encounter', 'Observation', 'DiagnosticReport', 'Condition',
+  'MedicationRequest', 'MedicationDispense', 'MedicationStatement',
+  'Procedure', 'CarePlan',
+];
+
+const AI_BASE_URL = (
+  import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir'
+).replace(/\/fhir\/?$/, '');
+
+const API_KEY =
+  import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+
+const getResourceTypesFromQuery = (query: string): string[] => {
+  const q = query.toLowerCase().trim();
+  if (q.startsWith('visit') || q.startsWith('encounter')) return ['Encounter'];
+  if (q.startsWith('problem') || q.startsWith('condition')) return ['Condition'];
+  if (q.startsWith('lab') || q.startsWith('test')) return ['Observation', 'DiagnosticReport', 'ServiceRequest'];
+  if (q.startsWith('procedure')) return ['Procedure'];
+  if (q.startsWith('medication')) return ['MedicationRequest', 'MedicationDispense', 'MedicationStatement'];
+  if (q.startsWith('care plan') || q.startsWith('careplan') || q.startsWith('plan')) return ['CarePlan'];
+  return DEFAULT_RESOURCE_TYPES;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -84,6 +123,76 @@ const Empty = () => (
   <div className="text-center py-12 text-gray-400">No records found.</div>
 );
 
+// ─── Search Result Card ───────────────────────────────────────────────────────
+
+const SearchResultCard: React.FC<{ result: HybridSearchResult }> = ({ result }) => {
+  const { data: resource, isLoading } = useGetResourceByIdQuery(
+    { resourceType: result.resourceType, id: result.resourceId },
+  );
+
+  if (isLoading) return <div className="animate-pulse h-14 bg-gray-100 rounded-lg" />;
+  if (!resource) return null;
+
+  const r = resource as any;
+
+  const getSummary = (): string => {
+    switch (result.resourceType) {
+      case 'Encounter':
+        return [r.type?.[0]?.text || r.class?.[0]?.coding?.[0]?.display || 'Visit', r.reason?.[0]?.value?.[0]?.concept?.text].filter(Boolean).join(' — ');
+      case 'Condition':
+        return `${r.code?.coding?.[0]?.display || r.code?.text || '—'} (${r.clinicalStatus?.coding?.[0]?.code || r.status || '—'})`;
+      case 'MedicationRequest':
+        return [r.medication?.concept?.text || r.medication?.concept?.coding?.[0]?.display, r.dosageInstruction?.[0]?.text].filter(Boolean).join(' · ') || '—';
+      case 'MedicationDispense':
+        return `${r.medication?.concept?.text || r.medication?.concept?.coding?.[0]?.display || '—'} — dispensed`;
+      case 'MedicationStatement':
+        return r.medication?.concept?.text || r.medication?.concept?.coding?.[0]?.display || '—';
+      case 'DiagnosticReport':
+        return r.code?.text || r.code?.coding?.[0]?.display || '—';
+      case 'Observation':
+        return `${r.code?.coding?.[0]?.display || r.code?.text || '—'}: ${r.valueQuantity ? `${r.valueQuantity.value} ${r.valueQuantity.unit}` : r.valueString || (r.component?.length ? `${r.component.length} components` : '—')}`;
+      case 'Procedure':
+        return r.code?.coding?.[0]?.display || r.code?.text || '—';
+      case 'CarePlan':
+        return r.title || r.category?.[0]?.coding?.[0]?.display || 'Care Plan';
+      default:
+        return `${result.resourceType}/${result.resourceId}`;
+    }
+  };
+
+  const getDate = (): string =>
+    r.authoredOn || r.effectiveDateTime || r.issued || r.actualPeriod?.start ||
+    r.period?.start || r.performedDateTime || r.occurrenceDateTime ||
+    r.onsetDateTime || r.dateAsserted || '';
+
+  const sourceCls =
+    result.sources.includes('vector') && result.sources.includes('keyword')
+      ? 'bg-purple-100 text-purple-700'
+      : result.sources.includes('vector')
+      ? 'bg-blue-100 text-blue-700'
+      : 'bg-amber-100 text-amber-700';
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-start gap-3 hover:border-blue-300 transition-colors">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">
+            {result.resourceType}
+          </span>
+          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${sourceCls}`}>
+            {result.sources.join('+')}
+          </span>
+        </div>
+        <p className="text-sm text-gray-800">{getSummary()}</p>
+        {getDate() && <p className="text-xs text-gray-400 mt-0.5">{fmt(getDate())}</p>}
+      </div>
+      <div className="text-xs text-gray-400 whitespace-nowrap pt-0.5">
+        {(result.score * 100).toFixed(1)}%
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const PatientRecordsPage: React.FC = () => {
@@ -92,6 +201,48 @@ const PatientRecordsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('encounter');
   const [medSubTab, setMedSubTab] = useState<MedSubTab>('request');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // ── Search state ──
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState<HybridSearchResponse | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const query = searchInput.trim();
+    if (!query) return;
+    setIsSearching(true);
+    setSearchError(null);
+    try {
+      const resourceTypes = getResourceTypesFromQuery(query);
+      const res = await fetch(`${AI_BASE_URL}/api/ai/hybrid-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+        body: JSON.stringify({
+          query,
+          scope: 'PATIENT',
+          patientId: patientId!,
+          resourceTypes,
+          structuredFilters: { subject: `Patient/${patientId}` },
+          limit: 10,
+          explain: true,
+        }),
+      });
+      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+      setSearchResults(await res.json());
+    } catch (err: any) {
+      setSearchError(err.message || 'Search failed. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchResults(null);
+    setSearchError(null);
+  };
 
   // ── Patient ──
   const { data: patient } = useGetPatientQuery(patientId!, { skip: !patientId });
@@ -923,11 +1074,42 @@ const PatientRecordsPage: React.FC = () => {
           >
             ← Back to Queue
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 mb-4">
             <h1 className="text-xl font-bold text-gray-900">Patient Records</h1>
             <span className="text-gray-600">{patientName}</span>
             <span className="text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{mrn}</span>
           </div>
+          {/* Search bar */}
+          <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl">
+            <div className="relative flex-1">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                type="text"
+                placeholder='Search records… e.g. "medications for hypertension", "lab results", "procedures"'
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={isSearching || !searchInput.trim()}
+              className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {isSearching ? 'Searching…' : 'Search'}
+            </button>
+          </form>
         </div>
       </div>
 
@@ -957,6 +1139,45 @@ const PatientRecordsPage: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* ── Search Results ── */}
+        {(searchResults !== null || searchError) && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-700">
+                  Search Results{searchResults ? ` for "${searchResults.query}"` : ''}
+                </h2>
+                {searchResults && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {searchResults.totalResults} result{searchResults.totalResults !== 1 ? 's' : ''} found
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={clearSearch}
+                className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+              >
+                Clear ×
+              </button>
+            </div>
+            {searchError ? (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
+                {searchError}
+              </div>
+            ) : searchResults?.results.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 bg-white rounded-lg border border-gray-200">
+                No matching records found.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {searchResults?.results.map((r) => (
+                  <SearchResultCard key={`${r.resourceType}/${r.resourceId}`} result={r} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'encounter' && renderEncounterTab()}
         {activeTab === 'observation' && renderObservationTab()}
         {activeTab === 'orders' && renderOrdersTab()}
