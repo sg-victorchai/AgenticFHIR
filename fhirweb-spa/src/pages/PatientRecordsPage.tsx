@@ -208,10 +208,10 @@ const SearchResultCard: React.FC<{
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded transition-colors text-xs ${
+      className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 rounded transition-colors text-xs ${
         navTarget && onNavigate
           ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50'
-          : 'hover:border-blue-300'
+          : ''
       }`}
       title={navTarget ? 'Click to navigate to this record' : undefined}
       onClick={
@@ -1270,15 +1270,18 @@ const PatientRecordsPage: React.FC = () => {
 
       {/* Search Results — shown above tab bar */}
       {(searchResults !== null || searchError) && (
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="bg-blue-50 border-y-2 border-blue-300 px-6 py-3">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-gray-600">
+              <span className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
                 {searchResults
                   ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for "${searchResults.query}"`
                   : 'Search error'}
               </span>
-              <button onClick={clearSearch} className="text-xs text-gray-400 hover:text-gray-600">
+              <button onClick={clearSearch} className="text-xs text-blue-400 hover:text-blue-700 font-medium">
                 Clear ×
               </button>
             </div>
