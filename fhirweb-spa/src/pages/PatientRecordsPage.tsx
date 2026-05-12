@@ -540,7 +540,7 @@ const PatientRecordsPage: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Medication', 'Status', 'Dosage'].map((h) => (
+                {['Date', 'Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
                   <TH key={h}>{h}</TH>
                 ))}
                 <TH />
@@ -566,22 +566,54 @@ const PatientRecordsPage: React.FC = () => {
                           ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
                           : '—')}
                     </TD>
+                    <TD>
+                      {mr.reasonCode?.[0]?.text ||
+                        mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                        mr.reason?.[0]?.concept?.text ||
+                        mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                        mr.reason?.[0]?.reference?.display ||
+                        '—'}
+                    </TD>
                     <td className="px-4 py-3 text-right">
                       <ExpandToggle open={expandedId === mr.id} />
                     </td>
                   </tr>
                   {expandedId === mr.id && (
                     <tr>
-                      <td colSpan={5} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><span className="font-medium">ID:</span> {mr.id}</div>
+                      <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                          <div><span className="font-medium">ID:</span> {mr.id || '—'}</div>
+                          <div><span className="font-medium">Identifier:</span> {mr.identifier?.[0]?.value || '—'}</div>
+                          <div><span className="font-medium">Intent:</span> {mr.intent || '—'}</div>
+                          <div><span className="font-medium">Priority:</span> {mr.priority || '—'}</div>
+                          <div><span className="font-medium">Requester:</span> {mr.requester?.display || mr.requester?.reference || '—'}</div>
+                          <div><span className="font-medium">Encounter:</span> {mr.encounter?.reference || '—'}</div>
                           <div>
-                            <span className="font-medium">Intent:</span> {mr.intent || '—'}
+                            <span className="font-medium">Reason:</span>{' '}
+                            {mr.reasonCode?.[0]?.text ||
+                              mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                              mr.reason?.[0]?.concept?.text ||
+                              mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                              mr.reason?.[0]?.reference?.display || '—'}
                           </div>
+                          <div><span className="font-medium">Subject:</span> {mr.subject?.reference || '—'}</div>
                           <div className="col-span-2">
-                            <span className="font-medium">Note:</span>{' '}
-                            {mr.note?.[0]?.text || '—'}
+                            <span className="font-medium">Dosage Instructions:</span>{' '}
+                            {mr.dosageInstruction?.map((d: any) => {
+                              const parts = [
+                                d.text,
+                                d.route?.coding?.[0]?.display ? `Route: ${d.route.coding[0].display}` : null,
+                                d.timing?.repeat?.frequency ? `${d.timing.repeat.frequency}× per ${d.timing.repeat.period} ${d.timing.repeat.periodUnit}` : null,
+                                d.doseAndRate?.[0]?.doseQuantity ? `Dose: ${d.doseAndRate[0].doseQuantity.value} ${d.doseAndRate[0].doseQuantity.unit}` : null,
+                              ].filter(Boolean).join(' | ');
+                              return parts || null;
+                            }).filter(Boolean).join('; ') || '—'}
                           </div>
+                          <div><span className="font-medium">Dispense Qty:</span> {mr.dispenseRequest?.quantity?.value != null ? `${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim() : '—'}</div>
+                          <div><span className="font-medium">Supply Duration:</span> {mr.dispenseRequest?.expectedSupplyDuration?.value != null ? `${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim() : '—'}</div>
+                          <div><span className="font-medium">Repeats Allowed:</span> {mr.dispenseRequest?.numberOfRepeatsAllowed ?? '—'}</div>
+                          <div><span className="font-medium">Substitution Allowed:</span> {mr.substitution?.allowedBoolean != null ? (mr.substitution.allowedBoolean ? 'Yes' : 'No') : mr.substitution?.allowedCodeableConcept?.text || '—'}</div>
+                          <div className="col-span-2"><span className="font-medium">Note:</span> {mr.note?.map((n: any) => n.text).join('; ') || '—'}</div>
                         </div>
                       </td>
                     </tr>
@@ -740,7 +772,7 @@ const PatientRecordsPage: React.FC = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Date', 'Procedure', 'Status', 'Performer'].map((h) => (
+              {['Date', 'Procedure', 'Status', 'Performer', 'Reason'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -763,33 +795,46 @@ const PatientRecordsPage: React.FC = () => {
                   <TD>
                     <StatusBadge status={proc.status} />
                   </TD>
-                  <TD>{proc.performer?.[0]?.actor?.display || '—'}</TD>
+                  <TD>{proc.performer?.[0]?.actor?.display || proc.performer?.[0]?.actor?.reference || '—'}</TD>
+                  <TD>
+                    {proc.reasonCode?.[0]?.text ||
+                      proc.reasonCode?.[0]?.coding?.[0]?.display ||
+                      proc.reason?.[0]?.concept?.text ||
+                      proc.reason?.[0]?.concept?.coding?.[0]?.display ||
+                      proc.reason?.[0]?.reference?.display ||
+                      '—'}
+                  </TD>
                   <td className="px-4 py-3 text-right">
                     <ExpandToggle open={expandedId === proc.id} />
                   </td>
                 </tr>
                 {expandedId === proc.id && (
                   <tr>
-                    <td colSpan={5} className="bg-gray-50 px-6 py-4 text-sm">
-                      <div className="grid grid-cols-2 gap-2 text-gray-700">
-                        <div>
-                          <span className="font-medium">Body Site:</span>{' '}
-                          {proc.bodySite?.[0]?.coding?.[0]?.display || '—'}
-                        </div>
-                        <div>
-                          <span className="font-medium">Outcome:</span>{' '}
-                          {proc.outcome?.coding?.[0]?.display || proc.outcome?.text || '—'}
+                    <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm">
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
+                        <div><span className="font-medium">ID:</span> {proc.id || '—'}</div>
+                        <div><span className="font-medium">Identifier:</span> {proc.identifier?.[0]?.value || '—'}</div>
+                        <div><span className="font-medium">Category:</span> {proc.category?.coding?.[0]?.display || proc.category?.text || proc.category?.[0]?.coding?.[0]?.display || '—'}</div>
+                        <div><span className="font-medium">Status Reason:</span> {proc.statusReason?.coding?.[0]?.display || proc.statusReason?.text || '—'}</div>
+                        <div><span className="font-medium">Encounter:</span> {proc.encounter?.reference || '—'}</div>
+                        <div><span className="font-medium">Location:</span> {proc.location?.display || proc.location?.reference || '—'}</div>
+                        <div><span className="font-medium">Recorder:</span> {proc.recorder?.display || proc.recorder?.reference || '—'}</div>
+                        <div><span className="font-medium">Asserter:</span> {proc.asserter?.display || proc.asserter?.reference || '—'}</div>
+                        <div className="col-span-2">
+                          <span className="font-medium">Performers:</span>{' '}
+                          {proc.performer?.map((p: any) => [p.function?.coding?.[0]?.display, p.actor?.display || p.actor?.reference].filter(Boolean).join(' — ')).join('; ') || '—'}
                         </div>
                         <div className="col-span-2">
                           <span className="font-medium">Reason:</span>{' '}
-                          {proc.reasonCode?.[0]?.text ||
-                            proc.reason?.[0]?.concept?.text ||
-                            '—'}
+                          {proc.reasonCode?.map((r: any) => r.text || r.coding?.[0]?.display).filter(Boolean).join('; ') ||
+                            proc.reason?.map((r: any) => r.concept?.text || r.concept?.coding?.[0]?.display || r.reference?.display).filter(Boolean).join('; ') || '—'}
                         </div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Note:</span>{' '}
-                          {proc.note?.[0]?.text || '—'}
-                        </div>
+                        <div><span className="font-medium">Body Site:</span> {proc.bodySite?.map((b: any) => b.coding?.[0]?.display || b.text).filter(Boolean).join(', ') || '—'}</div>
+                        <div><span className="font-medium">Outcome:</span> {proc.outcome?.coding?.[0]?.display || proc.outcome?.text || '—'}</div>
+                        <div><span className="font-medium">Complication:</span> {proc.complication?.map((c: any) => c.concept?.text || c.concept?.coding?.[0]?.display || c.reference?.display).filter(Boolean).join('; ') || proc.complicationDetail?.map((c: any) => c.display || c.reference).filter(Boolean).join('; ') || '—'}</div>
+                        <div><span className="font-medium">Follow-up:</span> {proc.followUp?.map((f: any) => f.coding?.[0]?.display || f.text).filter(Boolean).join(', ') || '—'}</div>
+                        <div className="col-span-2"><span className="font-medium">Used:</span> {proc.usedCode?.map((c: any) => c.coding?.[0]?.display || c.text).filter(Boolean).join(', ') || proc.used?.map((u: any) => u.concept?.text || u.reference?.display).filter(Boolean).join(', ') || '—'}</div>
+                        <div className="col-span-2"><span className="font-medium">Note:</span> {proc.note?.map((n: any) => n.text).join('; ') || '—'}</div>
                       </div>
                     </td>
                   </tr>
