@@ -214,6 +214,85 @@ Observations are partitioned by LOINC code (vitals) vs. SNOMED category (exam fi
 
 ---
 
+### `pages/PatientRecordsPage`
+
+A comprehensive, tabbed read-only view of all FHIR records for a patient. Accessible at `/patient/:id/records`.
+
+#### Tabs
+
+| Tab | FHIR Resource Type | Notes |
+|---|---|---|
+| Encounter | `Encounter` | |
+| Condition | `Condition` | Filters out `entered-in-error` clinical status |
+| Observation | `Observation` | Filters out `entered-in-error` status |
+| Lab & Rad Orders | `ServiceRequest` | |
+| Lab Results | `DiagnosticReport` | Server-side filtered with `category=LAB` |
+| Rad Report | `DiagnosticReport` | Server-side filtered with `category=RAD` |
+| Medication | `MedicationRequest` / `MedicationDispense` / `MedicationStatement` | Three sub-tabs |
+| Procedure | `Procedure` | |
+| Care Plan | `CarePlan` | Card layout (not table) |
+
+#### Data Fetching
+
+All tabs use the single **`useSearchByPatientQuery`** RTK Query endpoint, parameterised by resource type, patient ID, and `extraParams`. Each tab only fetches when active (`skip` condition). Queries are lazy — no data is loaded until the user visits that tab.
+
+```ts
+useSearchByPatientQuery(
+  { resourceType, patientId, extraParams: { _sort, _count, _offset, ...filterParams } },
+  { skip: !patientId || activeTab !== tabId }
+)
+```
+
+`DiagnosticReport` uses **two separate queries** (not one shared query) to avoid pagination count mismatches between the Lab Results and Rad Report tabs:
+- `labDrBundle` — passes `category=LAB`
+- `radDrBundle` — passes `category=RAD`
+
+#### Server-side Sort, Filter & Pagination
+
+All three features are driven by FHIR search parameters merged into `extraParams`.
+
+**Sort** — `buildExtraParams()` prepends `_sort: -<param>` (desc) or `_sort: <param>` (asc). Each tab has its own primary sort param (e.g. `date`, `onset-date`, `authoredon`, `whenhandedover`, `authored`).
+
+**Filter** — Per-tab `FilterField[]` configs define which columns are filterable and how:
+
+| Column type | FHIR param behaviour |
+|---|---|
+| `date` | Comparison prefix operators: `ge` (after), `le` (before), `eq` (on) |
+| `status` | Token search (exact match dropdown) |
+| `text` | `:text` modifier (searches display text; works with HAPI FHIR R5) |
+
+Multi-column filters are fully supported — all active filter values are merged into a single `extraParams` object per query.
+
+> **Note — Medication name search:** FHIR R5 `MedicationRequest/Dispense/Statement.medication` is a `CodeableReference`. The `medication` search param targets the *reference* portion. To search by drug name text, use the `code:text` param (which targets `medication.concept`), **not** `medication:text`.
+
+**Pagination** — Fixed page size of 10 (`PAGE_SIZE = 10`). Each query receives:
+```
+_count=10
+_offset=(currentPage - 1) * 10
+```
+The response `Bundle.total` gives the total record count; `Bundle.link` provides `first` / `previous` / `next` / `last` navigation links. The `Pagination` component reads both to render windowed page buttons and a "Go to page" jump input.
+
+**State reset** — `sortDir`, `showFilter`, `filterValues`, and `currentPage` all reset to defaults whenever the user switches tabs, sub-tabs, or changes a filter/sort value (via `resetSortFilter()` + `useEffect`).
+
+#### Filters UI
+
+- **Filter toggle button** sits in the tab bar (right side), reducing mouse travel to the filter panel.
+- **FilterPanel** renders directly inside each tab's content area, right-aligned to match the toggle button.
+- Filter panel is hidden by default; toggled independently of sort state.
+
+#### Global / Hybrid Search
+
+A collapsible **Global Search** panel (hidden by default, shown on button click) sends queries to the AI backend's `/api/ai/hybrid-search` endpoint. Results are ranked by semantic relevance and include a click-to-navigate action that jumps to the correct tab + resource row with a highlight animation.
+
+```
+POST /api/ai/hybrid-search
+{ query, scope: "PATIENT", patientId, resourceTypes, structuredFilters, limit, explain }
+```
+
+The `resourceTypes` array is inferred from the query text (e.g. queries starting with "lab" resolve to `Observation`, `DiagnosticReport`, `ServiceRequest`) to narrow the semantic search scope.
+
+---
+
 ## Real-time Events (`hooks/useSSESubscription.ts`)
 
 Custom hook using the native **`EventSource` API** against a separate backend (`VITE_SSE_BASE_URL`).
@@ -262,6 +341,11 @@ SMART on FHIR OAuth flow. `isSMARTContext()` checks for the presence of SMART la
 | Tag-based cache invalidation | Mutations declare which tags they invalidate; RTK Query automatically triggers refetches on dependent queries |
 | Dual data-fetching tools (RTK Query + React Query) | RTK Query is the primary layer for FHIR; TanStack React Query is available globally but not heavily used in current pages |
 | SSE via native `EventSource` | Simplest approach; browser reconnects automatically; API key sent as query param to work around EventSource header limitation |
+| Single `searchByPatient` endpoint for all PatientRecordsPage queries | Avoids duplicating 10 resource-specific hooks; resource type + `extraParams` fully parameterised; RTK Query cache key includes serialised params so different filter/sort/page combinations cache independently |
+| Server-side sort + filter + pagination (PatientRecordsPage) | Keeps data fresh from HAPI FHIR; avoids loading full record sets into the browser; `_sort`, filter params, `_count`, and `_offset` all passed as FHIR search parameters via `extraParams` |
+| Separate `DiagnosticReport` queries per sub-tab (`category=LAB` / `category=RAD`) | Sharing one query would cause server-side pagination totals to include both lab and rad records, making per-tab page counts incorrect |
+| `code:text` for medication name search (not `medication:text`) | FHIR R5 `medication` is a `CodeableReference`; the `medication` search param targets the reference, while `code` targets `medication.concept` (CodeableConcept); `:text` modifier on `code` searches the display text |
+| Global sort/filter/page state resets on tab switch | Prevents stale filter or page state from a previous tab polluting a newly activated tab's query params |
 
 ---
 

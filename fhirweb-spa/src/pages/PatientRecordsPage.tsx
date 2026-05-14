@@ -2,11 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   useGetPatientQuery,
-  useGetEncountersQuery,
-  useGetObservationsQuery,
-  useGetMedicationsQuery,
-  useGetCarePlansQuery,
-  useGetConditionsQuery,
   useSearchByPatientQuery,
   useGetResourceByIdQuery,
 } from '../services/fhir/client';
@@ -52,6 +47,102 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'careplan', label: 'Care Plan' },
 ];
 
+// ─── Sort & Filter ────────────────────────────────────────────────────────────
+
+interface FilterField {
+  key: string;
+  label: string;
+  param: string;
+  type: 'date' | 'status' | 'text';
+  options?: string[];
+}
+
+const ENC_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'date', type: 'date' },
+  { key: 'type', label: 'Type', param: 'type:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['planned', 'in-progress', 'on-hold', 'discharged', 'completed', 'cancelled', 'entered-in-error', 'unknown'] },
+];
+
+const COND_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Onset', param: 'onset-date', type: 'date' },
+  { key: 'code', label: 'Condition', param: 'code:text', type: 'text' },
+  { key: 'clinicalStatus', label: 'Clinical Status', param: 'clinical-status', type: 'status', options: ['active', 'recurrence', 'relapse', 'inactive', 'remission', 'resolved'] },
+];
+
+const OBS_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'date', type: 'date' },
+  { key: 'code', label: 'Code', param: 'code:text', type: 'text' },
+  { key: 'category', label: 'Category', param: 'category:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['registered', 'preliminary', 'final', 'amended', 'corrected', 'cancelled', 'entered-in-error', 'unknown'] },
+];
+
+const SR_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'authored', type: 'date' },
+  { key: 'code', label: 'Order', param: 'code:text', type: 'text' },
+  { key: 'category', label: 'Category', param: 'category:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['draft', 'active', 'on-hold', 'revoked', 'completed', 'entered-in-error', 'unknown'] },
+  { key: 'priority', label: 'Priority', param: 'priority', type: 'status', options: ['routine', 'urgent', 'asap', 'stat'] },
+];
+
+const DR_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'date', type: 'date' },
+  { key: 'code', label: 'Report', param: 'code:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['registered', 'partial', 'preliminary', 'final', 'amended', 'corrected', 'appended', 'cancelled', 'entered-in-error', 'unknown'] },
+];
+
+const MED_REQ_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'authoredon', type: 'date' },
+  { key: 'medication', label: 'Medication', param: 'code:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['active', 'on-hold', 'ended', 'stopped', 'completed', 'cancelled', 'entered-in-error', 'draft', 'unknown'] },
+];
+
+const MED_DISP_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'whenhandedover', type: 'date' },
+  { key: 'medication', label: 'Medication', param: 'code:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['preparation', 'in-progress', 'cancelled', 'on-hold', 'completed', 'entered-in-error', 'stopped', 'declined', 'unknown'] },
+];
+
+const MED_STMT_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'date', type: 'date' },
+  { key: 'medication', label: 'Medication', param: 'code:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['recorded', 'entered-in-error', 'draft'] },
+];
+
+const PROC_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Date', param: 'date', type: 'date' },
+  { key: 'code', label: 'Procedure', param: 'code:text', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['preparation', 'in-progress', 'not-done', 'on-hold', 'stopped', 'completed', 'entered-in-error', 'unknown'] },
+];
+
+const CP_FILTERS: FilterField[] = [
+  { key: 'date', label: 'Period', param: 'date', type: 'date' },
+  { key: 'title', label: 'Title', param: 'title:contains', type: 'text' },
+  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['draft', 'active', 'on-hold', 'revoked', 'completed', 'entered-in-error', 'unknown'] },
+  { key: 'category', label: 'Category', param: 'category:text', type: 'text' },
+];
+
+function buildExtraParams(
+  filters: FilterField[],
+  filterValues: Record<string, string>,
+  sortParam: string,
+  sortDir: 'asc' | 'desc',
+): Record<string, string> {
+  const params: Record<string, string> = {
+    _sort: sortDir === 'desc' ? `-${sortParam}` : sortParam,
+  };
+  for (const f of filters) {
+    if (f.type === 'date') {
+      const op = filterValues[`${f.key}_op`];
+      const val = filterValues[`${f.key}_val`];
+      if (op && val) params[f.param] = `${op}${val}`;
+    } else {
+      const v = (filterValues[f.key] ?? '').trim();
+      if (v) params[f.param] = v;
+    }
+  }
+  return params;
+}
+
 const DEFAULT_RESOURCE_TYPES = [
   'Encounter', 'Observation', 'DiagnosticReport', 'Condition',
   'MedicationRequest', 'MedicationDispense', 'MedicationStatement',
@@ -64,6 +155,8 @@ const AI_BASE_URL = (
 
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+
+const PAGE_SIZE = 10;
 
 const getResourceTypesFromQuery = (query: string): string[] => {
   const q = query.toLowerCase().trim();
@@ -125,6 +218,214 @@ const Loading = () => (
 const Empty = () => (
   <div className="text-center py-12 text-gray-400">No records found.</div>
 );
+
+// ─── Sort & Filter UI components ─────────────────────────────────────────────
+
+const SortHeader: React.FC<{
+  label: string;
+  sortDir: 'asc' | 'desc';
+  onToggle: () => void;
+}> = ({ label, sortDir, onToggle }) => (
+  <th
+    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 whitespace-nowrap"
+    onClick={onToggle}
+  >
+    {label} {sortDir === 'desc' ? '↓' : '↑'}
+  </th>
+);
+
+const Pagination: React.FC<{
+  total: number | undefined;
+  page: number;
+  pageSize: number;
+  onChange: (page: number) => void;
+  links?: Array<{ relation: string; url: string }>;
+}> = ({ total, page, pageSize, onChange, links }) => {
+  const [jumpInput, setJumpInput] = React.useState('');
+
+  if (total === undefined || total === 0) return null;
+
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+
+  const hasPrev = links ? links.some((l) => l.relation === 'previous') : page > 1;
+  const hasNext = links ? links.some((l) => l.relation === 'next') : page < totalPages;
+
+  const getPages = (): (number | '...')[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages: (number | '...')[] = [];
+    const delta = 1;
+    const left = Math.max(2, page - delta);
+    const right = Math.min(totalPages - 1, page + delta);
+    pages.push(1);
+    if (left > 2) pages.push('...');
+    for (let i = left; i <= right; i++) pages.push(i);
+    if (right < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+    return pages;
+  };
+
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  const handleJump = () => {
+    const n = parseInt(jumpInput, 10);
+    if (!isNaN(n) && n >= 1 && n <= totalPages) {
+      onChange(n);
+      setJumpInput('');
+    }
+  };
+
+  const btnBase = 'inline-flex items-center justify-center h-8 min-w-[2rem] px-2 rounded-md text-sm font-medium transition-colors focus:outline-none';
+  const btnActive = `${btnBase} bg-blue-600 text-white shadow-sm`;
+  const btnInactive = `${btnBase} text-gray-600 hover:bg-gray-100 border border-gray-200`;
+  const btnDisabled = `${btnBase} text-gray-300 cursor-not-allowed border border-gray-100`;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 py-2 px-1">
+      <span className="text-xs text-gray-500 whitespace-nowrap">
+        Showing <span className="font-medium text-gray-700">{from}–{to}</span> of{' '}
+        <span className="font-medium text-gray-700">{total}</span> records
+      </span>
+
+      <div className="flex items-center gap-1">
+        <button
+          className={hasPrev ? btnInactive : btnDisabled}
+          onClick={() => hasPrev && onChange(1)}
+          disabled={!hasPrev}
+          title="First page"
+        >
+          «
+        </button>
+        <button
+          className={hasPrev ? btnInactive : btnDisabled}
+          onClick={() => hasPrev && onChange(page - 1)}
+          disabled={!hasPrev}
+          title="Previous page"
+        >
+          ‹
+        </button>
+
+        {getPages().map((p, i) =>
+          p === '...' ? (
+            <span key={`ellipsis-${i}`} className="px-1 text-gray-400 text-sm select-none">
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              className={p === page ? btnActive : btnInactive}
+              onClick={() => p !== page && onChange(p as number)}
+            >
+              {p}
+            </button>
+          ),
+        )}
+
+        <button
+          className={hasNext ? btnInactive : btnDisabled}
+          onClick={() => hasNext && onChange(page + 1)}
+          disabled={!hasNext}
+          title="Next page"
+        >
+          ›
+        </button>
+        <button
+          className={hasNext ? btnInactive : btnDisabled}
+          onClick={() => hasNext && onChange(totalPages)}
+          disabled={!hasNext}
+          title="Last page"
+        >
+          »
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-400 whitespace-nowrap">Go to</span>
+        <input
+          type="number"
+          min={1}
+          max={totalPages}
+          value={jumpInput}
+          onChange={(e) => setJumpInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleJump()}
+          className="w-14 h-8 text-xs text-center border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
+          placeholder={String(page)}
+        />
+        <button
+          onClick={handleJump}
+          className="h-8 px-2.5 text-xs bg-blue-50 border border-blue-200 text-blue-600 rounded-md hover:bg-blue-100 font-medium transition-colors"
+        >
+          Go
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const FilterPanel: React.FC<{
+  filters: FilterField[];
+  values: Record<string, string>;
+  onChange: (v: Record<string, string>) => void;
+}> = ({ filters, values, onChange }) => {
+  const set = (key: string, val: string) => onChange({ ...values, [key]: val });
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-3">
+      <div className="flex flex-wrap gap-3 items-end justify-end">
+        {filters.map((f) => (
+          <div key={f.key} className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">{f.label}</label>
+            {f.type === 'date' && (
+              <div className="flex gap-1">
+                <select
+                  value={values[`${f.key}_op`] || ''}
+                  onChange={(e) => set(`${f.key}_op`, e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white"
+                >
+                  <option value="">Any</option>
+                  <option value="ge">After</option>
+                  <option value="le">Before</option>
+                  <option value="eq">On</option>
+                </select>
+                <input
+                  type="date"
+                  value={values[`${f.key}_val`] || ''}
+                  onChange={(e) => set(`${f.key}_val`, e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white"
+                />
+              </div>
+            )}
+            {f.type === 'status' && (
+              <select
+                value={values[f.key] || ''}
+                onChange={(e) => set(f.key, e.target.value)}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+              >
+                <option value="">All</option>
+                {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            )}
+            {f.type === 'text' && (
+              <input
+                type="text"
+                value={values[f.key] || ''}
+                onChange={(e) => set(f.key, e.target.value)}
+                placeholder="contains…"
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white w-36"
+              />
+            )}
+          </div>
+        ))}
+        <button
+          onClick={() => onChange({})}
+          className="text-xs px-2 py-1 border border-red-200 text-red-500 hover:text-red-700 hover:border-red-400 rounded self-end"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ─── Search Result Card ───────────────────────────────────────────────────────
 
@@ -244,7 +545,25 @@ const PatientRecordsPage: React.FC = () => {
   const [medSubTab, setMedSubTab] = useState<MedSubTab>('request');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+
+  const resetSortFilter = () => {
+    setSortDir('desc');
+    setShowFilter(false);
+    setFilterValues({});
+    setCurrentPage(1);
+  };
+
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterValues, sortDir]);
+
   // ── Search state ──
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<HybridSearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -284,6 +603,7 @@ const PatientRecordsPage: React.FC = () => {
     setSearchInput('');
     setSearchResults(null);
     setSearchError(null);
+    setShowGlobalSearch(false);
   };
 
   // ── Navigation from search results ──
@@ -316,44 +636,68 @@ const PatientRecordsPage: React.FC = () => {
     'Unknown Patient';
   const mrn = patient?.identifier?.[0]?.value || '—';
 
-  // ── Data fetching (lazy) ──
-  const { data: encBundle, isLoading: encLoading } = useGetEncountersQuery(patientId!, {
-    skip: activeTab !== 'encounter',
-  });
-  const { data: condBundle, isLoading: condLoading } = useGetConditionsQuery(
-    { patientId: patientId! },
-    { skip: activeTab !== 'condition' },
+  // ── Data fetching (lazy) — all via searchByPatient for unified sort + filter ──
+  const pageOffset = {
+    _count: String(PAGE_SIZE),
+    _offset: String((currentPage - 1) * PAGE_SIZE),
+  };
+
+  const encExtraParams  = { ...buildExtraParams(ENC_FILTERS,      filterValues, 'date',           sortDir), ...pageOffset };
+  const condExtraParams = { ...buildExtraParams(COND_FILTERS,     filterValues, 'onset-date',     sortDir), ...pageOffset };
+  const obsExtraParams  = { ...buildExtraParams(OBS_FILTERS,      filterValues, 'date',           sortDir), ...pageOffset };
+  const srExtraParams   = { ...buildExtraParams(SR_FILTERS,       filterValues, 'authored',       sortDir), ...pageOffset };
+  const labDrExtraParams = { ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir), ...pageOffset, category: 'LAB' };
+  const radDrExtraParams = { ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir), ...pageOffset, category: 'RAD' };
+  const medReqExtraParams  = { ...buildExtraParams(MED_REQ_FILTERS,  filterValues, 'authoredon',     sortDir), ...pageOffset };
+  const medDispExtraParams = { ...buildExtraParams(MED_DISP_FILTERS, filterValues, 'whenhandedover', sortDir), ...pageOffset };
+  const medStmtExtraParams = { ...buildExtraParams(MED_STMT_FILTERS, filterValues, 'date',           sortDir), ...pageOffset };
+  const procExtraParams = { ...buildExtraParams(PROC_FILTERS,     filterValues, 'date',           sortDir), ...pageOffset };
+  const cpExtraParams   = { ...buildExtraParams(CP_FILTERS,       filterValues, 'date',           sortDir), ...pageOffset };
+
+  const { data: encBundle, isLoading: encLoading } = useSearchByPatientQuery(
+    { resourceType: 'Encounter', patientId: patientId!, extraParams: encExtraParams },
+    { skip: !patientId || activeTab !== 'encounter' },
   );
-  const { data: obsBundle, isLoading: obsLoading } = useGetObservationsQuery(
-    { patientId: patientId! },
-    { skip: activeTab !== 'observation' },
+  const { data: condBundle, isLoading: condLoading } = useSearchByPatientQuery(
+    { resourceType: 'Condition', patientId: patientId!, extraParams: condExtraParams },
+    { skip: !patientId || activeTab !== 'condition' },
+  );
+  const { data: obsBundle, isLoading: obsLoading } = useSearchByPatientQuery(
+    { resourceType: 'Observation', patientId: patientId!, extraParams: obsExtraParams },
+    { skip: !patientId || activeTab !== 'observation' },
   );
   const { data: srBundle, isLoading: srLoading } = useSearchByPatientQuery(
-    { resourceType: 'ServiceRequest', patientId: patientId! },
-    { skip: activeTab !== 'orders' },
+    { resourceType: 'ServiceRequest', patientId: patientId!, extraParams: srExtraParams },
+    { skip: !patientId || activeTab !== 'orders' },
   );
-  const { data: drBundle, isLoading: drLoading } = useSearchByPatientQuery(
-    { resourceType: 'DiagnosticReport', patientId: patientId! },
-    { skip: activeTab !== 'lab-results' && activeTab !== 'rad-report' },
+  const { data: labDrBundle, isLoading: labDrLoading } = useSearchByPatientQuery(
+    { resourceType: 'DiagnosticReport', patientId: patientId!, extraParams: labDrExtraParams },
+    { skip: !patientId || activeTab !== 'lab-results' },
   );
-  const { data: medReqBundle, isLoading: medReqLoading } = useGetMedicationsQuery(patientId!, {
-    skip: activeTab !== 'medication',
-  });
+  const { data: radDrBundle, isLoading: radDrLoading } = useSearchByPatientQuery(
+    { resourceType: 'DiagnosticReport', patientId: patientId!, extraParams: radDrExtraParams },
+    { skip: !patientId || activeTab !== 'rad-report' },
+  );
+  const { data: medReqBundle, isLoading: medReqLoading } = useSearchByPatientQuery(
+    { resourceType: 'MedicationRequest', patientId: patientId!, extraParams: medReqExtraParams },
+    { skip: !patientId || activeTab !== 'medication' || medSubTab !== 'request' },
+  );
   const { data: medDispBundle, isLoading: medDispLoading } = useSearchByPatientQuery(
-    { resourceType: 'MedicationDispense', patientId: patientId! },
-    { skip: activeTab !== 'medication' || medSubTab !== 'dispense' },
+    { resourceType: 'MedicationDispense', patientId: patientId!, extraParams: medDispExtraParams },
+    { skip: !patientId || activeTab !== 'medication' || medSubTab !== 'dispense' },
   );
   const { data: medStmtBundle, isLoading: medStmtLoading } = useSearchByPatientQuery(
-    { resourceType: 'MedicationStatement', patientId: patientId! },
-    { skip: activeTab !== 'medication' || medSubTab !== 'statement' },
+    { resourceType: 'MedicationStatement', patientId: patientId!, extraParams: medStmtExtraParams },
+    { skip: !patientId || activeTab !== 'medication' || medSubTab !== 'statement' },
   );
   const { data: procBundle, isLoading: procLoading } = useSearchByPatientQuery(
-    { resourceType: 'Procedure', patientId: patientId! },
-    { skip: activeTab !== 'procedure' },
+    { resourceType: 'Procedure', patientId: patientId!, extraParams: procExtraParams },
+    { skip: !patientId || activeTab !== 'procedure' },
   );
-  const { data: cpBundle, isLoading: cpLoading } = useGetCarePlansQuery(patientId!, {
-    skip: activeTab !== 'careplan',
-  });
+  const { data: cpBundle, isLoading: cpLoading } = useSearchByPatientQuery(
+    { resourceType: 'CarePlan', patientId: patientId!, extraParams: cpExtraParams },
+    { skip: !patientId || activeTab !== 'careplan' },
+  );
 
   // ── Resource extraction ──
   const encounters = (encBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
@@ -364,7 +708,7 @@ const PatientRecordsPage: React.FC = () => {
     .filter(Boolean)
     .filter((o: any) => o.status !== 'entered-in-error');
   const serviceRequests = (srBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const allDiagnosticReports = (drBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
+  const allDiagnosticReports = [] as any[]; // kept for reference; use labResults/radReports below
 
   const isLabReport = (dr: any) =>
     dr.category?.some((c: any) =>
@@ -387,8 +731,10 @@ const PatientRecordsPage: React.FC = () => {
       ),
     );
 
-  const labResults = allDiagnosticReports.filter(isLabReport);
-  const radReports = allDiagnosticReports.filter(isRadReport);
+  void allDiagnosticReports; void isLabReport; void isRadReport; // kept for reference
+
+  const labResults = (labDrBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
+  const radReports = (radDrBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
 
   const medRequests = (medReqBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
   const medDispenses = (medDispBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
@@ -402,14 +748,17 @@ const PatientRecordsPage: React.FC = () => {
   // ─── Tab renders ──────────────────────────────────────────────────────────
 
   const renderConditionTab = () => {
-    if (condLoading) return <Loading />;
-    if (!conditions.length) return <Empty />;
     return (
+      <div>
+        {showFilter && <FilterPanel filters={COND_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={condBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={condBundle?.link as Array<{ relation: string; url: string }>} />
+        {condLoading ? <Loading /> : !conditions.length ? <Empty /> : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Onset', 'Condition', 'Clinical Status', 'Severity', 'Category'].map((h) => (
+              <SortHeader label="Onset" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+              {['Condition', 'Clinical Status', 'Severity', 'Category'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -457,18 +806,24 @@ const PatientRecordsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+        )}
+        <Pagination total={condBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={condBundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
 
   const renderEncounterTab = () => {
-    if (encLoading) return <Loading />;
-    if (!encounters.length) return <Empty />;
     return (
+      <div>
+        {showFilter && <FilterPanel filters={ENC_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={encBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={encBundle?.link as Array<{ relation: string; url: string }>} />
+        {encLoading ? <Loading /> : !encounters.length ? <Empty /> : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Date', 'Type', 'Status', 'Chief Complaint'].map((h) => (
+              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+              {['Type', 'Status', 'Chief Complaint'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -533,18 +888,24 @@ const PatientRecordsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+        )}
+        <Pagination total={encBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={encBundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
 
   const renderObservationTab = () => {
-    if (obsLoading) return <Loading />;
-    if (!observations.length) return <Empty />;
     return (
+      <div>
+        {showFilter && <FilterPanel filters={OBS_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={obsBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={obsBundle?.link as Array<{ relation: string; url: string }>} />
+        {obsLoading ? <Loading /> : !observations.length ? <Empty /> : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Date', 'Code', 'Category', 'Value', 'Status'].map((h) => (
+              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+              {['Code', 'Category', 'Value', 'Status'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -635,18 +996,24 @@ const PatientRecordsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+        )}
+        <Pagination total={obsBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={obsBundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
 
   const renderOrdersTab = () => {
-    if (srLoading) return <Loading />;
-    if (!serviceRequests.length) return <Empty />;
     return (
+      <div>
+        {showFilter && <FilterPanel filters={SR_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={srBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={srBundle?.link as Array<{ relation: string; url: string }>} />
+        {srLoading ? <Loading /> : !serviceRequests.length ? <Empty /> : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Date', 'Order', 'Category', 'Status', 'Priority'].map((h) => (
+              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+              {['Order', 'Category', 'Status', 'Priority'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -708,18 +1075,24 @@ const PatientRecordsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+        )}
+        <Pagination total={srBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={srBundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
 
-  const renderDiagnosticReportTable = (reports: any[], loading: boolean) => {
-    if (loading) return <Loading />;
-    if (!reports.length) return <Empty />;
+  const renderDiagnosticReportTable = (reports: any[], loading: boolean, bundle?: any) => {
     return (
+      <div>
+        {showFilter && <FilterPanel filters={DR_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={bundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={bundle?.link as Array<{ relation: string; url: string }>} />
+        {loading ? <Loading /> : !reports.length ? <Empty /> : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Date', 'Report', 'Status', 'Performer'].map((h) => (
+              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+              {['Report', 'Status', 'Performer'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -809,6 +1182,9 @@ const PatientRecordsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+        )}
+        <Pagination total={bundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={bundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
 
@@ -820,14 +1196,17 @@ const PatientRecordsPage: React.FC = () => {
     ];
 
     const renderRequests = () => {
-      if (medReqLoading) return <Loading />;
-      if (!medRequests.length) return <Empty />;
       return (
+        <div>
+          {showFilter && <FilterPanel filters={MED_REQ_FILTERS} values={filterValues} onChange={setFilterValues} />}
+          <Pagination total={medReqBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medReqBundle?.link as Array<{ relation: string; url: string }>} />
+          {medReqLoading ? <Loading /> : !medRequests.length ? <Empty /> : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
+                <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+                {['Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
                   <TH key={h}>{h}</TH>
                 ))}
                 <TH />
@@ -914,18 +1293,24 @@ const PatientRecordsPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+          )}
+          <Pagination total={medReqBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medReqBundle?.link as Array<{ relation: string; url: string }>} />
+        </div>
       );
     };
 
     const renderDispenses = () => {
-      if (medDispLoading) return <Loading />;
-      if (!medDispenses.length) return <Empty />;
       return (
+        <div>
+          {showFilter && <FilterPanel filters={MED_DISP_FILTERS} values={filterValues} onChange={setFilterValues} />}
+          <Pagination total={medDispBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medDispBundle?.link as Array<{ relation: string; url: string }>} />
+          {medDispLoading ? <Loading /> : !medDispenses.length ? <Empty /> : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Medication', 'Status', 'Quantity'].map((h) => (
+                <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+                {['Medication', 'Status', 'Quantity'].map((h) => (
                   <TH key={h}>{h}</TH>
                 ))}
                 <TH />
@@ -977,18 +1362,24 @@ const PatientRecordsPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+          )}
+          <Pagination total={medDispBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medDispBundle?.link as Array<{ relation: string; url: string }>} />
+        </div>
       );
     };
 
     const renderStatements = () => {
-      if (medStmtLoading) return <Loading />;
-      if (!medStatements.length) return <Empty />;
       return (
+        <div>
+          {showFilter && <FilterPanel filters={MED_STMT_FILTERS} values={filterValues} onChange={setFilterValues} />}
+          <Pagination total={medStmtBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medStmtBundle?.link as Array<{ relation: string; url: string }>} />
+          {medStmtLoading ? <Loading /> : !medStatements.length ? <Empty /> : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Medication', 'Status', 'Effective'].map((h) => (
+                <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+                {['Medication', 'Status', 'Effective'].map((h) => (
                   <TH key={h}>{h}</TH>
                 ))}
                 <TH />
@@ -1036,6 +1427,9 @@ const PatientRecordsPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+          )}
+          <Pagination total={medStmtBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medStmtBundle?.link as Array<{ relation: string; url: string }>} />
+        </div>
       );
     };
 
@@ -1045,7 +1439,7 @@ const PatientRecordsPage: React.FC = () => {
           {subTabs.map((st) => (
             <button
               key={st.id}
-              onClick={() => { setMedSubTab(st.id); setExpandedId(null); }}
+              onClick={() => { setMedSubTab(st.id); setExpandedId(null); resetSortFilter(); setCurrentPage(1); }}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                 medSubTab === st.id
                   ? 'bg-blue-600 text-white'
@@ -1064,14 +1458,17 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const renderProcedureTab = () => {
-    if (procLoading) return <Loading />;
-    if (!procedures.length) return <Empty />;
     return (
+      <div>
+        {showFilter && <FilterPanel filters={PROC_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={procBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={procBundle?.link as Array<{ relation: string; url: string }>} />
+        {procLoading ? <Loading /> : !procedures.length ? <Empty /> : (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Date', 'Procedure', 'Status', 'Performer', 'Reason'].map((h) => (
+              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
+              {['Procedure', 'Status', 'Performer', 'Reason'].map((h) => (
                 <TH key={h}>{h}</TH>
               ))}
               <TH />
@@ -1147,13 +1544,27 @@ const PatientRecordsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+        )}
+        <Pagination total={procBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={procBundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
 
   const renderCarePlanTab = () => {
-    if (cpLoading) return <Loading />;
-    if (!carePlans.length) return <Empty />;
     return (
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs text-gray-500">Period:</span>
+          <button
+            onClick={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')}
+            className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600"
+          >
+            {sortDir === 'desc' ? '↓ Newest first' : '↑ Oldest first'}
+          </button>
+        </div>
+        {showFilter && <FilterPanel filters={CP_FILTERS} values={filterValues} onChange={setFilterValues} />}
+        <Pagination total={cpBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={cpBundle?.link as Array<{ relation: string; url: string }>} />
+        {cpLoading ? <Loading /> : !carePlans.length ? <Empty /> : (
       <div className="space-y-4">
         {carePlans.map((cp: any) => (
           <div
@@ -1213,10 +1624,11 @@ const PatientRecordsPage: React.FC = () => {
           </div>
         ))}
       </div>
+        )}
+        <Pagination total={cpBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={cpBundle?.link as Array<{ relation: string; url: string }>} />
+      </div>
     );
   };
-
-  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1229,42 +1641,61 @@ const PatientRecordsPage: React.FC = () => {
           >
             ← Back to Queue
           </Link>
-          <div className="flex items-center gap-4 mb-4">
-            <h1 className="text-xl font-bold text-gray-900">Patient Records</h1>
-            <span className="text-gray-600">{patientName}</span>
-            <span className="text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{mrn}</span>
-          </div>
-          {/* Search bar */}
-          <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl">
-            <div className="relative flex-1">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-              </svg>
-              <input
-                type="text"
-                placeholder='Search records… e.g. "medications for hypertension", "lab results", "procedures"'
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
-                >
-                  ×
-                </button>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold text-gray-900">Patient Records</h1>
+              <span className="text-gray-600">{patientName}</span>
+              <span className="text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{mrn}</span>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={() => setShowGlobalSearch((s) => !s)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                  showGlobalSearch
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+                Global Search
+              </button>
+              {showGlobalSearch && (
+                <form onSubmit={handleSearch} className="flex gap-2 w-[480px]">
+                  <div className="relative flex-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder='e.g. "medications for hypertension"'
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      autoFocus
+                    />
+                    {searchInput && (
+                      <button
+                        type="button"
+                        onClick={clearSearch}
+                        className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSearching || searchInput.trim().length < 6}
+                    className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                  >
+                    {isSearching ? 'Searching…' : 'Search'}
+                  </button>
+                </form>
               )}
             </div>
-            <button
-              type="submit"
-              disabled={isSearching || searchInput.trim().length < 6}
-              className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-            >
-              {isSearching ? 'Searching…' : 'Search'}
-            </button>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -1309,23 +1740,36 @@ const PatientRecordsPage: React.FC = () => {
       {/* Tab bar */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex overflow-x-auto">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setExpandedId(null);
-                }}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between">
+            <div className="flex overflow-x-auto flex-1">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setExpandedId(null);
+                    resetSortFilter();
+                  }}
+                  className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowFilter((s) => !s)}
+              className={`ml-4 shrink-0 text-xs px-3 py-1.5 rounded border font-medium transition-colors ${
+                showFilter
+                  ? 'bg-blue-100 border-blue-300 text-blue-700'
+                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {showFilter ? '▲ Hide Filters' : '▼ Filters'}
+            </button>
           </div>
         </div>
       </div>
@@ -1336,8 +1780,8 @@ const PatientRecordsPage: React.FC = () => {
         {activeTab === 'condition' && renderConditionTab()}
         {activeTab === 'observation' && renderObservationTab()}
         {activeTab === 'orders' && renderOrdersTab()}
-        {activeTab === 'lab-results' && renderDiagnosticReportTable(labResults, drLoading)}
-        {activeTab === 'rad-report' && renderDiagnosticReportTable(radReports, drLoading)}
+        {activeTab === 'lab-results' && renderDiagnosticReportTable(labResults, labDrLoading, labDrBundle)}
+        {activeTab === 'rad-report'  && renderDiagnosticReportTable(radReports, radDrLoading, radDrBundle)}
         {activeTab === 'medication' && renderMedicationTab()}
         {activeTab === 'procedure' && renderProcedureTab()}
         {activeTab === 'careplan' && renderCarePlanTab()}

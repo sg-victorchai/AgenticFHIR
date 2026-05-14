@@ -993,14 +993,14 @@ export const fhirApi = createApi({
 
     searchByPatient: builder.query<
       Bundle<Resource>,
-      { resourceType: string; patientId: string }
+      { resourceType: string; patientId: string; extraParams?: Record<string, string> }
     >({
-      queryFn: async ({ resourceType, patientId }) => {
+      queryFn: async ({ resourceType, patientId, extraParams }) => {
         try {
           const client = await createFHIRClient();
           const results = await client.search({
             resourceType,
-            searchParams: { subject: `Patient/${patientId}`, _count: '100' },
+            searchParams: { _count: '100', ...extraParams, subject: `Patient/${patientId}` },
           });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
@@ -1016,8 +1016,8 @@ export const fhirApi = createApi({
           };
         }
       },
-      providesTags: (_result, _error, { resourceType, patientId }) => [
-        { type: resourceType as any, id: patientId },
+      providesTags: (_result, _error, { resourceType, patientId, extraParams }) => [
+        { type: resourceType as any, id: `${patientId}:${JSON.stringify(extraParams ?? {})}` },
       ],
     }),
 
