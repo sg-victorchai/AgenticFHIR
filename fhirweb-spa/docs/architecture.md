@@ -2,19 +2,19 @@
 
 ## Stack
 
-| Concern | Library |
-|---|---|
-| Framework | React 18 + TypeScript |
-| Build | Vite |
-| Styling | Tailwind CSS |
-| Routing | React Router DOM v6 |
-| Server state / FHIR API | RTK Query (`@reduxjs/toolkit`) |
-| Additional async queries | TanStack React Query v5 |
-| Global UI state | Redux (`@reduxjs/toolkit`) |
-| FHIR client | `fhir-kit-client` |
-| SMART on FHIR | `fhirclient` |
-| Real-time events | Native `EventSource` (SSE) |
-| Testing | Vitest + Testing Library |
+| Concern                  | Library                        |
+| ------------------------ | ------------------------------ |
+| Framework                | React 18 + TypeScript          |
+| Build                    | Vite                           |
+| Styling                  | Tailwind CSS                   |
+| Routing                  | React Router DOM v6            |
+| Server state / FHIR API  | RTK Query (`@reduxjs/toolkit`) |
+| Additional async queries | TanStack React Query v5        |
+| Global UI state          | Redux (`@reduxjs/toolkit`)     |
+| FHIR client              | `fhir-kit-client`              |
+| SMART on FHIR            | `fhirclient`                   |
+| Real-time events         | Native `EventSource` (SSE)     |
+| Testing                  | Vitest + Testing Library       |
 
 ---
 
@@ -74,11 +74,11 @@ TanStack React Query defaults: `staleTime = 5 min`, `refetchOnWindowFocus = fals
 
 Three slices registered:
 
-| Slice | Purpose |
-|---|---|
-| `auth` (`authSlice`) | `isAuthenticated`, `token`, `user`, `loading`, `error` |
-| `ui` (`uiSlice`) | `sidebarOpen`, `theme`, `notifications[]` |
-| `fhirApi` (RTK Query) | Normalised FHIR resource cache |
+| Slice                 | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| `auth` (`authSlice`)  | `isAuthenticated`, `token`, `user`, `loading`, `error` |
+| `ui` (`uiSlice`)      | `sidebarOpen`, `theme`, `notifications[]`              |
+| `fhirApi` (RTK Query) | Normalised FHIR resource cache                         |
 
 ### FHIR Context (`contexts/FHIRContext.tsx`)
 
@@ -104,42 +104,42 @@ createFHIRClient(): Promise<Client>
 
 #### Queries (read / search)
 
-| Hook | FHIR Operation | Notes |
-|---|---|---|
-| `useGetPatientQuery(id)` | `GET /Patient/:id` | Tagged `Patient` |
-| `useSearchPatientsQuery(params)` | `GET /Patient?...` | Supports `_offset` pagination |
-| `useGetCarePlansQuery(patientId)` | `GET /CarePlan?patient=...` | 20 per page |
-| `useGetObservationsQuery({ patientId, code?, date? })` | `GET /Observation?...` | Optional code/date filters |
-| `useGetEncountersQuery(patientId)` | `GET /Encounter?patient=...` | 20 per page |
-| `useGetMedicationsQuery(patientId)` | `GET /MedicationRequest?patient=...` | 20 per page |
-| `useGetResourceByIdQuery({ resourceType, id })` | `GET /:resourceType/:id` | Generic; used by CRUD pages |
-| `useSearchByEncounterQuery({ resourceType, encounterId })` | `GET /:resourceType?encounter=...` | Up to 100 results |
-| `useSearchChildEncountersQuery(encounterId)` | `GET /Encounter?part-of=...` | Sub-encounters |
-| `useGetPractitionersQuery()` | `GET /Practitioner?_count=100` | Reference lists |
-| `useGetOrganizationsQuery()` | `GET /Organization?_count=100` | Reference lists |
-| `useGetConditionsQuery({ patientId })` | `GET /Condition?patient=...` | Up to 100 |
-| `useGetPractitionerByIdQuery(id)` | `GET /Practitioner/:id` | |
-| `useGetLocationsQuery()` | `GET /Location?_count=100` | Reference lists |
+| Hook                                                       | FHIR Operation                       | Notes                         |
+| ---------------------------------------------------------- | ------------------------------------ | ----------------------------- |
+| `useGetPatientQuery(id)`                                   | `GET /Patient/:id`                   | Tagged `Patient`              |
+| `useSearchPatientsQuery(params)`                           | `GET /Patient?...`                   | Supports `_offset` pagination |
+| `useGetCarePlansQuery(patientId)`                          | `GET /CarePlan?patient=...`          | 20 per page                   |
+| `useGetObservationsQuery({ patientId, code?, date? })`     | `GET /Observation?...`               | Optional code/date filters    |
+| `useGetEncountersQuery(patientId)`                         | `GET /Encounter?patient=...`         | 20 per page                   |
+| `useGetMedicationsQuery(patientId)`                        | `GET /MedicationRequest?patient=...` | 20 per page                   |
+| `useGetResourceByIdQuery({ resourceType, id })`            | `GET /:resourceType/:id`             | Generic; used by CRUD pages   |
+| `useSearchByEncounterQuery({ resourceType, encounterId })` | `GET /:resourceType?encounter=...`   | Up to 100 results             |
+| `useSearchChildEncountersQuery(encounterId)`               | `GET /Encounter?part-of=...`         | Sub-encounters                |
+| `useGetPractitionersQuery()`                               | `GET /Practitioner?_count=100`       | Reference lists               |
+| `useGetOrganizationsQuery()`                               | `GET /Organization?_count=100`       | Reference lists               |
+| `useGetConditionsQuery({ patientId })`                     | `GET /Condition?patient=...`         | Up to 100                     |
+| `useGetPractitionerByIdQuery(id)`                          | `GET /Practitioner/:id`              |                               |
+| `useGetLocationsQuery()`                                   | `GET /Location?_count=100`           | Reference lists               |
 
 #### Mutations (write)
 
-| Hook | FHIR Operation | Cache Invalidation |
-|---|---|---|
-| `useCreateResourceMutation()` | `POST /:resourceType` | Invalidates `resourceType` tag |
-| `useUpdateResourceMutation()` | `PUT /:resourceType/:id` | Invalidates `{ type, id }` |
+| Hook                          | FHIR Operation              | Cache Invalidation                     |
+| ----------------------------- | --------------------------- | -------------------------------------- |
+| `useCreateResourceMutation()` | `POST /:resourceType`       | Invalidates `resourceType` tag         |
+| `useUpdateResourceMutation()` | `PUT /:resourceType/:id`    | Invalidates `{ type, id }`             |
 | `useDeleteResourceMutation()` | `DELETE /:resourceType/:id` | Invalidates `{ type, id }` + type list |
-| `useCreatePatientMutation()` | `POST /Patient` | Invalidates `Patient` |
-| `useUpdatePatientMutation()` | `PUT /Patient/:id` | Invalidates `{ Patient, id }` |
+| `useCreatePatientMutation()`  | `POST /Patient`             | Invalidates `Patient`                  |
+| `useUpdatePatientMutation()`  | `PUT /Patient/:id`          | Invalidates `{ Patient, id }`          |
 
 #### Pagination mutations (use `_offset` / bundle links)
 
-| Hook | Behaviour |
-|---|---|
-| `useGetNextPageMutation()` | Follows `next` link or increments `_offset` |
-| `useGetPreviousPageMutation()` | Follows `previous` link or decrements `_offset` |
-| `useGetFirstPageMutation()` | Follows `first` link or sets `_offset=0` |
-| `useGetLastPageMutation()` | Follows `last` link or calculates last offset from `total` |
-| `useGoToPageMutation()` | Computes `_offset = (page - 1) * _count` |
+| Hook                           | Behaviour                                                  |
+| ------------------------------ | ---------------------------------------------------------- |
+| `useGetNextPageMutation()`     | Follows `next` link or increments `_offset`                |
+| `useGetPreviousPageMutation()` | Follows `previous` link or decrements `_offset`            |
+| `useGetFirstPageMutation()`    | Follows `first` link or sets `_offset=0`                   |
+| `useGetLastPageMutation()`     | Follows `last` link or calculates last offset from `total` |
+| `useGoToPageMutation()`        | Computes `_offset = (page - 1) * _count`                   |
 
 ---
 
@@ -155,19 +155,20 @@ All CRUD pages follow the same pattern:
 4. **Delete**: `useDeleteResourceMutation` with `window.confirm` guard
 5. **Navigate** back to the list route on success
 
-| Page | Resource Type | Special hooks |
-|---|---|---|
-| `PatientCrudPage` | `Patient` | `useCreatePatientMutation`, `useUpdatePatientMutation` (Patient-specific) |
-| `CarePlanCrudPage` | `CarePlan` | Generic CRUD mutations |
-| `ObservationCrudPage` | `Observation` | Generic CRUD mutations |
-| `MedicationRequestCrudPage` | `MedicationRequest` | Generic CRUD mutations |
-| `EncounterCrudPage` | `Encounter` | Generic CRUD mutations + `useGetPractitionersQuery`, `useGetOrganizationsQuery`, `useGetLocationsQuery`, `useGetConditionsQuery` for reference pickers |
+| Page                        | Resource Type       | Special hooks                                                                                                                                          |
+| --------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PatientCrudPage`           | `Patient`           | `useCreatePatientMutation`, `useUpdatePatientMutation` (Patient-specific)                                                                              |
+| `CarePlanCrudPage`          | `CarePlan`          | Generic CRUD mutations                                                                                                                                 |
+| `ObservationCrudPage`       | `Observation`       | Generic CRUD mutations                                                                                                                                 |
+| `MedicationRequestCrudPage` | `MedicationRequest` | Generic CRUD mutations                                                                                                                                 |
+| `EncounterCrudPage`         | `Encounter`         | Generic CRUD mutations + `useGetPractitionersQuery`, `useGetOrganizationsQuery`, `useGetLocationsQuery`, `useGetConditionsQuery` for reference pickers |
 
 ---
 
 ### `pages/clinical/VisitRegistrationPage`
 
 Creates a single **`Encounter`** resource for a patient visit:
+
 - Chief complaint → `Encounter.reason[0].value[0].concept.text`
 - Visit type (ambulatory / emergency) → `Encounter.class[0].coding`
 - On success → navigates to `/patient/:id/encounter/:encounterId/consult`
@@ -180,14 +181,14 @@ Uses: `useGetPatientQuery`, `useCreateResourceMutation`
 
 Multi-tab clinical documentation UI. Each tab submit fires one or more `useCreateResourceMutation` calls:
 
-| Tab | FHIR Resources Created | Key Codings |
-|---|---|---|
-| **Vitals** | `Observation` × N (one per non-empty field) | LOINC codes (`8867-4` HR, `8480-6` SBP, etc.); category `vital-signs`; `valueQuantity` with UCUM units |
-| **Physical Exam** | `Observation` | SNOMED body system code; category `exam`; interpretation Normal/Abnormal; `valueString` for finding text |
-| **Investigations** | `ServiceRequest` | SNOMED investigation category; `status: active`, `intent: order`; priority routine/urgent/stat |
-| **Assessment** | `Condition` | SNOMED diagnosis code + severity; `verificationStatus` confirmed/provisional; `clinicalStatus: active` |
-| **Management** | `MedicationRequest` + `CarePlan` | SNOMED route code; `intent: order`; dose/frequency as text |
-| **Admission** | Child `Encounter` | `partOf: Encounter/:encounterId`; `status: planned`; location + ward |
+| Tab                | FHIR Resources Created                      | Key Codings                                                                                              |
+| ------------------ | ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Vitals**         | `Observation` × N (one per non-empty field) | LOINC codes (`8867-4` HR, `8480-6` SBP, etc.); category `vital-signs`; `valueQuantity` with UCUM units   |
+| **Physical Exam**  | `Observation`                               | SNOMED body system code; category `exam`; interpretation Normal/Abnormal; `valueString` for finding text |
+| **Investigations** | `ServiceRequest`                            | SNOMED investigation category; `status: active`, `intent: order`; priority routine/urgent/stat           |
+| **Assessment**     | `Condition`                                 | SNOMED diagnosis code + severity; `verificationStatus` confirmed/provisional; `clinicalStatus: active`   |
+| **Management**     | `MedicationRequest` + `CarePlan`            | SNOMED route code; `intent: order`; dose/frequency as text                                               |
+| **Admission**      | Child `Encounter`                           | `partOf: Encounter/:encounterId`; `status: planned`; location + ward                                     |
 
 All resources include `subject: Patient/:id` and `encounter: Encounter/:encounterId` references.
 
@@ -200,14 +201,14 @@ Uses: `useGetPatientQuery`, `useGetResourceByIdQuery`, `useCreateResourceMutatio
 Read-only retrospective view of a completed encounter. Loads all related resources in parallel:
 
 ```ts
-useGetPatientQuery(patientId)
-useGetResourceByIdQuery({ resourceType: 'Encounter', id: encounterId })
-useSearchByEncounterQuery({ resourceType: 'Observation', encounterId })
-useSearchByEncounterQuery({ resourceType: 'Condition', encounterId })
-useSearchByEncounterQuery({ resourceType: 'MedicationRequest', encounterId })
-useSearchByEncounterQuery({ resourceType: 'CarePlan', encounterId })
-useSearchByEncounterQuery({ resourceType: 'ServiceRequest', encounterId })
-useSearchChildEncountersQuery(encounterId)   // admission sub-encounter
+useGetPatientQuery(patientId);
+useGetResourceByIdQuery({ resourceType: 'Encounter', id: encounterId });
+useSearchByEncounterQuery({ resourceType: 'Observation', encounterId });
+useSearchByEncounterQuery({ resourceType: 'Condition', encounterId });
+useSearchByEncounterQuery({ resourceType: 'MedicationRequest', encounterId });
+useSearchByEncounterQuery({ resourceType: 'CarePlan', encounterId });
+useSearchByEncounterQuery({ resourceType: 'ServiceRequest', encounterId });
+useSearchChildEncountersQuery(encounterId); // admission sub-encounter
 ```
 
 Observations are partitioned by LOINC code (vitals) vs. SNOMED category (exam findings).
@@ -220,17 +221,17 @@ A comprehensive, tabbed read-only view of all FHIR records for a patient. Access
 
 #### Tabs
 
-| Tab | FHIR Resource Type | Notes |
-|---|---|---|
-| Encounter | `Encounter` | |
-| Condition | `Condition` | Filters out `entered-in-error` clinical status |
-| Observation | `Observation` | Filters out `entered-in-error` status |
-| Lab & Rad Orders | `ServiceRequest` | |
-| Lab Results | `DiagnosticReport` | Server-side filtered with `category=LAB` |
-| Rad Report | `DiagnosticReport` | Server-side filtered with `category=RAD` |
-| Medication | `MedicationRequest` / `MedicationDispense` / `MedicationStatement` | Three sub-tabs |
-| Procedure | `Procedure` | |
-| Care Plan | `CarePlan` | Card layout (not table) |
+| Tab              | FHIR Resource Type                                                 | Notes                                          |
+| ---------------- | ------------------------------------------------------------------ | ---------------------------------------------- |
+| Encounter        | `Encounter`                                                        |                                                |
+| Condition        | `Condition`                                                        | Filters out `entered-in-error` clinical status |
+| Observation      | `Observation`                                                      | Filters out `entered-in-error` status          |
+| Lab & Rad Orders | `ServiceRequest`                                                   |                                                |
+| Lab Results      | `DiagnosticReport`                                                 | Server-side filtered with `category=LAB`       |
+| Rad Report       | `DiagnosticReport`                                                 | Server-side filtered with `category=RAD`       |
+| Medication       | `MedicationRequest` / `MedicationDispense` / `MedicationStatement` | Three sub-tabs                                 |
+| Procedure        | `Procedure`                                                        |                                                |
+| Care Plan        | `CarePlan`                                                         | Card layout (not table)                        |
 
 #### Data Fetching
 
@@ -238,12 +239,17 @@ All tabs use the single **`useSearchByPatientQuery`** RTK Query endpoint, parame
 
 ```ts
 useSearchByPatientQuery(
-  { resourceType, patientId, extraParams: { _sort, _count, _offset, ...filterParams } },
-  { skip: !patientId || activeTab !== tabId }
-)
+  {
+    resourceType,
+    patientId,
+    extraParams: { _sort, _count, _offset, ...filterParams },
+  },
+  { skip: !patientId || activeTab !== tabId },
+);
 ```
 
 `DiagnosticReport` uses **two separate queries** (not one shared query) to avoid pagination count mismatches between the Lab Results and Rad Report tabs:
+
 - `labDrBundle` — passes `category=LAB`
 - `radDrBundle` — passes `category=RAD`
 
@@ -255,21 +261,23 @@ All three features are driven by FHIR search parameters merged into `extraParams
 
 **Filter** — Per-tab `FilterField[]` configs define which columns are filterable and how:
 
-| Column type | FHIR param behaviour |
-|---|---|
-| `date` | Comparison prefix operators: `ge` (after), `le` (before), `eq` (on) |
-| `status` | Token search (exact match dropdown) |
-| `text` | `:text` modifier (searches display text; works with HAPI FHIR R5) |
+| Column type | FHIR param behaviour                                                |
+| ----------- | ------------------------------------------------------------------- |
+| `date`      | Comparison prefix operators: `ge` (after), `le` (before), `eq` (on) |
+| `status`    | Token search (exact match dropdown)                                 |
+| `text`      | `:text` modifier (searches display text; works with HAPI FHIR R5)   |
 
 Multi-column filters are fully supported — all active filter values are merged into a single `extraParams` object per query.
 
-> **Note — Medication name search:** FHIR R5 `MedicationRequest/Dispense/Statement.medication` is a `CodeableReference`. The `medication` search param targets the *reference* portion. To search by drug name text, use the `code:text` param (which targets `medication.concept`), **not** `medication:text`.
+> **Note — Medication name search:** FHIR R5 `MedicationRequest/Dispense/Statement.medication` is a `CodeableReference`. The `medication` search param targets the _reference_ portion. To search by drug name text, use the `code:text` param (which targets `medication.concept`), **not** `medication:text`.
 
 **Pagination** — Fixed page size of 10 (`PAGE_SIZE = 10`). Each query receives:
+
 ```
 _count=10
 _offset=(currentPage - 1) * 10
 ```
+
 The response `Bundle.total` gives the total record count; `Bundle.link` provides `first` / `previous` / `next` / `last` navigation links. The `Pagination` component reads both to render windowed page buttons and a "Go to page" jump input.
 
 **State reset** — `sortDir`, `showFilter`, `filterValues`, and `currentPage` all reset to defaults whenever the user switches tabs, sub-tabs, or changes a filter/sort value (via `resetSortFilter()` + `useEffect`).
@@ -334,18 +342,18 @@ SMART on FHIR OAuth flow. `isSMARTContext()` checks for the presence of SMART la
 
 ## Key Design Decisions
 
-| Decision | Rationale |
-|---|---|
-| Generic `createResource` / `updateResource` / `deleteResource` hooks | One mutation reused across all clinical resource types; resource type passed as argument |
-| `createFHIRClient()` called per `queryFn` | Enables runtime switch between SMART and API-key auth without a global singleton |
-| Tag-based cache invalidation | Mutations declare which tags they invalidate; RTK Query automatically triggers refetches on dependent queries |
-| Dual data-fetching tools (RTK Query + React Query) | RTK Query is the primary layer for FHIR; TanStack React Query is available globally but not heavily used in current pages |
-| SSE via native `EventSource` | Simplest approach; browser reconnects automatically; API key sent as query param to work around EventSource header limitation |
-| Single `searchByPatient` endpoint for all PatientRecordsPage queries | Avoids duplicating 10 resource-specific hooks; resource type + `extraParams` fully parameterised; RTK Query cache key includes serialised params so different filter/sort/page combinations cache independently |
-| Server-side sort + filter + pagination (PatientRecordsPage) | Keeps data fresh from HAPI FHIR; avoids loading full record sets into the browser; `_sort`, filter params, `_count`, and `_offset` all passed as FHIR search parameters via `extraParams` |
-| Separate `DiagnosticReport` queries per sub-tab (`category=LAB` / `category=RAD`) | Sharing one query would cause server-side pagination totals to include both lab and rad records, making per-tab page counts incorrect |
-| `code:text` for medication name search (not `medication:text`) | FHIR R5 `medication` is a `CodeableReference`; the `medication` search param targets the reference, while `code` targets `medication.concept` (CodeableConcept); `:text` modifier on `code` searches the display text |
-| Global sort/filter/page state resets on tab switch | Prevents stale filter or page state from a previous tab polluting a newly activated tab's query params |
+| Decision                                                                          | Rationale                                                                                                                                                                                                             |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Generic `createResource` / `updateResource` / `deleteResource` hooks              | One mutation reused across all clinical resource types; resource type passed as argument                                                                                                                              |
+| `createFHIRClient()` called per `queryFn`                                         | Enables runtime switch between SMART and API-key auth without a global singleton                                                                                                                                      |
+| Tag-based cache invalidation                                                      | Mutations declare which tags they invalidate; RTK Query automatically triggers refetches on dependent queries                                                                                                         |
+| Dual data-fetching tools (RTK Query + React Query)                                | RTK Query is the primary layer for FHIR; TanStack React Query is available globally but not heavily used in current pages                                                                                             |
+| SSE via native `EventSource`                                                      | Simplest approach; browser reconnects automatically; API key sent as query param to work around EventSource header limitation                                                                                         |
+| Single `searchByPatient` endpoint for all PatientRecordsPage queries              | Avoids duplicating 10 resource-specific hooks; resource type + `extraParams` fully parameterised; RTK Query cache key includes serialised params so different filter/sort/page combinations cache independently       |
+| Server-side sort + filter + pagination (PatientRecordsPage)                       | Keeps data fresh from HAPI FHIR; avoids loading full record sets into the browser; `_sort`, filter params, `_count`, and `_offset` all passed as FHIR search parameters via `extraParams`                             |
+| Separate `DiagnosticReport` queries per sub-tab (`category=LAB` / `category=RAD`) | Sharing one query would cause server-side pagination totals to include both lab and rad records, making per-tab page counts incorrect                                                                                 |
+| `code:text` for medication name search (not `medication:text`)                    | FHIR R5 `medication` is a `CodeableReference`; the `medication` search param targets the reference, while `code` targets `medication.concept` (CodeableConcept); `:text` modifier on `code` searches the display text |
+| Global sort/filter/page state resets on tab switch                                | Prevents stale filter or page state from a previous tab polluting a newly activated tab's query params                                                                                                                |
 
 ---
 
@@ -354,13 +362,16 @@ SMART on FHIR OAuth flow. `isSMARTContext()` checks for the presence of SMART la
 All sidebar sections in `ConsultNoteDetailPage` follow a **consistent table + expandable row** pattern:
 
 ### Summary row
+
 ```
 | <Name> [SNOMED/LOINC xxx] | <Category/Status> | <Date> | ▲/▼ |
 ```
+
 - Terminology code rendered as `<span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>`
 - Code prefix auto-detected: `SNOMED`, `LOINC`, `RxNorm` from system URL via `codeBadge()` helper
 
 ### Expanded row
+
 ```tsx
 <td colSpan={N} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
@@ -368,19 +379,20 @@ All sidebar sections in `ConsultNoteDetailPage` follow a **consistent table + ex
   </div>
 </td>
 ```
+
 - Expand state managed by `expandedId: string | null` — clicking same row toggles it closed
 - `codeBadge(coding[])` helper: returns `"SNOMED 12345"` / `"LOINC 58410-2"` / `"RxNorm xyz"` based on system URL
 
 ### Sections and their key columns
 
-| Section | Summary columns | Terminology shown |
-|---|---|---|
-| Lab Orders | Test `[code]` \| Category \| Priority \| Ordered | SNOMED from `sr.code.concept.coding` |
-| Rad Orders | Study `[code]` \| Priority \| Ordered | SNOMED from `sr.code.concept.coding` |
-| Lab Results | Test `[code]` \| Category \| Status \| Issued | LOINC + SNOMED from `dr.code.coding` |
-| Rad Reports | Study `[code]` \| Category \| Status \| Issued | SNOMED from `dr.code.coding` |
-| MedicationRequest/Dispense/Statement | Drug `[code]` \| Status \| Route \| Date | RxNorm/SNOMED from `med.medication.concept.coding` |
-| Care Plan | Title `[code]` \| Status \| Intent \| Created | SNOMED from `cp.category[0].coding` |
+| Section                              | Summary columns                                  | Terminology shown                                  |
+| ------------------------------------ | ------------------------------------------------ | -------------------------------------------------- |
+| Lab Orders                           | Test `[code]` \| Category \| Priority \| Ordered | SNOMED from `sr.code.concept.coding`               |
+| Rad Orders                           | Study `[code]` \| Priority \| Ordered            | SNOMED from `sr.code.concept.coding`               |
+| Lab Results                          | Test `[code]` \| Category \| Status \| Issued    | LOINC + SNOMED from `dr.code.coding`               |
+| Rad Reports                          | Study `[code]` \| Category \| Status \| Issued   | SNOMED from `dr.code.coding`                       |
+| MedicationRequest/Dispense/Statement | Drug `[code]` \| Status \| Route \| Date         | RxNorm/SNOMED from `med.medication.concept.coding` |
+| Care Plan                            | Title `[code]` \| Status \| Intent \| Created    | SNOMED from `cp.category[0].coding`                |
 
 ---
 
@@ -390,7 +402,13 @@ All sidebar sections in `ConsultNoteDetailPage` follow a **consistent table + ex
 
 ```json
 {
-  "category": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "...", "display": "..." }] }],
+  "category": [
+    {
+      "coding": [
+        { "system": "http://snomed.info/sct", "code": "...", "display": "..." }
+      ]
+    }
+  ],
   "code": { "concept": { "text": "Test name only" } }
 }
 ```
@@ -410,7 +428,13 @@ All sidebar sections in `ConsultNoteDetailPage` follow a **consistent table + ex
 
 ```json
 {
-  "category": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "...", "display": "..." }] }]
+  "category": [
+    {
+      "coding": [
+        { "system": "http://snomed.info/sct", "code": "...", "display": "..." }
+      ]
+    }
+  ]
 }
 ```
 
@@ -431,16 +455,19 @@ Both ServiceRequest and DiagnosticReport share the same `RAD_SNOMED_CODES` set f
 ## Patient Queue (`PatientQueuePage`)
 
 ### Date filtering — two-layer approach
+
 1. **Server-side**: `date=[ge{from}, le{to}T23:59:59]` sent as array (serialised to `date=ge...&date=le...` by `query-string`)
 2. **Client-side guard**: filter by `enc.actualPeriod?.start.split('T')[0]` against `[fromISO, toISO]` — guarantees correctness regardless of server behaviour
 
 ### Patient name / identifier resolution
+
 - `getTodayEncounters` includes `_include: 'Encounter:subject'` so Patient resources arrive in the same bundle
 - `patientMap: Map<string, Patient>` built from bundle entries (resourceType === 'Patient')
 - `resolvePatientName()`: reads `patient.name[0]` (text → prefix+given+family), falls back to `encounter.subject.display`
 - `resolvePatientIdentifier()`: uses `identifier.type.text` → `type.coding.display` → last URL path segment of `identifier.system`
 
 ### Selection persistence
+
 - `mode`, `fromMonth`, `toMonth` stored in `sessionStorage` (`queue-mode`, `queue-from`, `queue-to`)
 - Restored via lazy state initialisers: `useState(() => sessionStorage.getItem(key) || default)`
 
@@ -449,19 +476,21 @@ Both ServiceRequest and DiagnosticReport share the same `RAD_SNOMED_CODES` set f
 ## Role-Based UI Differences
 
 ### PSA role
-| Context | Behaviour |
-|---|---|
-| Patient Queue | Shows: Mark Arrived, Cancel, View Patient. No consult actions |
-| Patient Search | Shows: Register + **View Visit Summary** → `/patient/:id/encounter` |
-| Visit Summary (`EncounterPage`) | **View Notes** only (no Start Consult, no Continue) |
-| Top nav | Queue link removed; Patient Search accessible |
+
+| Context                         | Behaviour                                                           |
+| ------------------------------- | ------------------------------------------------------------------- |
+| Patient Queue                   | Shows: Mark Arrived, Cancel, View Patient. No consult actions       |
+| Patient Search                  | Shows: Register + **View Visit Summary** → `/patient/:id/encounter` |
+| Visit Summary (`EncounterPage`) | **View Notes** only (no Start Consult, no Continue)                 |
+| Top nav                         | Queue link removed; Patient Search accessible                       |
 
 ### Clinician role
-| Context | Behaviour |
-|---|---|
-| Patient Queue | Shows: Start Consult (pending), Resume Consult (in-progress), View Notes (completed) |
-| Patient Search | Shows: **Consult** → `/patient/:id/encounter` |
-| Consult wizard | Pre-loads existing FHIR data; tabs with data show view-only mode with edit option |
+
+| Context        | Behaviour                                                                            |
+| -------------- | ------------------------------------------------------------------------------------ |
+| Patient Queue  | Shows: Start Consult (pending), Resume Consult (in-progress), View Notes (completed) |
+| Patient Search | Shows: **Consult** → `/patient/:id/encounter`                                        |
+| Consult wizard | Pre-loads existing FHIR data; tabs with data show view-only mode with edit option    |
 
 ---
 
@@ -477,15 +506,15 @@ isEditingVitals: boolean              ← vitals-specific (no "add more", only u
 ```
 
 **Vitals update flow:**
+
 1. `prepareVitalsEdit()` fills form fields from `rawVitals: Observation[]`
 2. `handleSaveVitals()` builds `existingMap` (loincCode → Observation), PUTs existing, POSTs new
 3. After save: `setVitalsItems(created)` replaces list; edit mode closed
 
 **Navigation flow:**
+
 - "Resume Consult" (Queue) → `/notes` (view page) → amber banner link → `/consult` (wizard)
 - Tabs already submitted show in view-only mode; "Edit" button re-enables the form
-
-
 
 ---
 
@@ -493,15 +522,16 @@ isEditingVitals: boolean              ← vitals-specific (no "add more", only u
 
 ### Queue Stages (`QueueStage`)
 
-| Stage | Display Label | `location[].identifier.value` | `location[].status` |
-|---|---|---|---|
-| `awaiting-triage` | Awaiting Triage | `triage` | `planned` |
-| `awaiting-clinician` | Awaiting Clinician | `triage` (completed) + `waiting-room` | `active` |
-| `waiting-patient` | Waiting Patient | `in-consultation` | `planned` |
-| `in-consultation` | In Consultation | `in-consultation` | `active` |
-| `awaiting-billing` | Awaiting Billing | `billing` | `planned` |
-| `completed` | Completed | `billing` | `completed` |
-| `cancelled` | Cancelled | *(any)* | `Encounter.status = cancelled` |
+| Stage                 | Display Label        | `location[].identifier.value`         | `location[].status`            |
+| --------------------- | -------------------- | ------------------------------------- | ------------------------------ |
+| `awaiting-triage`     | Awaiting Triage      | `triage`                              | `planned`                      |
+| `awaiting-clinician`  | Awaiting Clinician   | `triage` (completed) + `waiting-room` | `active`                       |
+| `waiting-patient`     | Waiting Patient      | `in-consultation`                     | `planned`                      |
+| `in-consultation`     | In Consultation      | `in-consultation`                     | `active`                       |
+| `awaiting-medication` | Awaiting Medications | `medication`                          | `planned`                      |
+| `awaiting-billing`    | Awaiting Billing     | `billing`                             | `planned`                      |
+| `completed`           | Completed            | `billing`                             | `completed`                    |
+| `cancelled`           | Cancelled            | _(any)_                               | `Encounter.status = cancelled` |
 
 ### Transition Flow
 
@@ -526,6 +556,11 @@ Clinician clicks "Start Consult" (applyStartConsult)
 
 Clinician clicks "Complete Consult" (applyCompleteConsult)
   → in-consultation entry: status → 'completed'
+  → push: { identifier: { value: 'medication' }, status: 'planned' }
+  → Stage: awaiting-medication
+
+PSA clicks "Dispense Medications" (applyMedicationDispense)
+  → medication entry: status → 'completed'
   → push: { identifier: { value: 'billing' }, status: 'planned' }
   → Stage: awaiting-billing
 
@@ -539,12 +574,13 @@ PSA clicks "Collect Payment" (applyCollectPayment)
 
 The four `location[].location.identifier.value` strings used across the workflow:
 
-| Value | Meaning |
-|---|---|
-| `triage` | Patient registered, awaiting nurse/PSA triage |
-| `waiting-room` | Triage done, patient waiting for clinician |
-| `in-consultation` | Patient called / in active consultation room |
-| `billing` | Consultation complete, awaiting payment collection |
+| Value             | Meaning                                              |
+| ----------------- | ---------------------------------------------------- |
+| `triage`          | Patient registered, awaiting nurse/PSA triage        |
+| `waiting-room`    | Triage done, patient waiting for clinician           |
+| `in-consultation` | Patient called / in active consultation room         |
+| `medication`      | Consultation complete / awaiting medication dispense |
+| `billing`         | Consultation complete, awaiting payment collection   |
 
 ### Stage Classification Logic (`classifyEncounter`)
 
@@ -562,17 +598,19 @@ locId === 'triage'          && loc.status === 'completed' → awaiting-clinician
 locId === 'waiting-room'                                  → awaiting-clinician
 locId === 'in-consultation' && loc.status === 'active'    → in-consultation
 locId === 'in-consultation' && loc.status !== 'active'    → waiting-patient
+locId === 'medication'                                    → awaiting-medication
 locId === 'billing'                                       → awaiting-billing
 ```
 
 ### Role-Specific Actions per Stage
 
-| Stage | PSA actions | Clinician actions |
-|---|---|---|
-| `awaiting-triage` | **Triage** (→ triage page) | — |
-| `awaiting-clinician` | Cancel | **Call Patient** |
-| `waiting-patient` | Cancel | **Start Consult** |
-| `in-consultation` | Cancel | **Resume Consult** · **Complete Consult** |
-| `awaiting-billing` | **Collect Payment** · Cancel | — |
-| `completed` | — | **View Notes** |
-| `cancelled` | — | — |
+| Stage                 | PSA actions                      | Clinician actions                         |
+| --------------------- | -------------------------------- | ----------------------------------------- |
+| `awaiting-triage`     | **Triage** (→ triage page)       | —                                         |
+| `awaiting-clinician`  | Cancel                           | **Call Patient**                          |
+| `waiting-patient`     | Cancel                           | **Start Consult**                         |
+| `in-consultation`     | Cancel                           | **Resume Consult** · **Complete Consult** |
+| `awaiting-medication` | **Collect Medications** · Cancel | —                                         |
+| `awaiting-billing`    | **Collect Payment** · Cancel     | —                                         |
+| `completed`           | —                                | **View Notes**                            |
+| `cancelled`           | —                                | —                                         |

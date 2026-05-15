@@ -42,7 +42,7 @@ const getEncounterClass = (encounter: Encounter): string =>
 
 // ─── Location-based stage logic ───────────────────────────────────────────────
 
-type QueueStage = 'awaiting-triage' | 'awaiting-clinician' | 'waiting-patient' | 'in-consultation' | 'awaiting-billing' | 'completed' | 'cancelled';
+type QueueStage = 'awaiting-triage' | 'awaiting-clinician' | 'waiting-patient' | 'in-consultation' | 'awaiting-medication' | 'awaiting-billing' | 'completed' | 'cancelled';
 
 const getLocId = (loc: any): string =>
   loc?.location?.identifier?.value ||
@@ -73,6 +73,7 @@ const classifyEncounter = (enc: Encounter): QueueStage => {
   if (id === 'triage') return loc.status === 'completed' ? 'awaiting-clinician' : 'awaiting-triage';
   if (id === 'waiting-room') return 'awaiting-clinician';
   if (id === 'in-consultation') return loc.status === 'active' ? 'in-consultation' : 'waiting-patient';
+  if (id === 'medication') return 'awaiting-medication';
   if (id === 'billing') return 'awaiting-billing';
   return 'awaiting-triage';
 };
@@ -82,6 +83,7 @@ const STAGE_HEADER_CLS: Record<QueueStage, string> = {
   'awaiting-clinician': 'bg-yellow-50 border-yellow-200',
   'waiting-patient': 'bg-orange-50 border-orange-200',
   'in-consultation': 'bg-blue-50 border-blue-200',
+  'awaiting-medication': 'bg-teal-50 border-teal-200',
   'awaiting-billing': 'bg-purple-50 border-purple-200',
   completed: 'bg-green-50 border-green-200',
   cancelled: 'bg-gray-50 border-gray-200',
@@ -92,6 +94,7 @@ const STAGE_BADGE_CLS: Record<QueueStage, string> = {
   'awaiting-clinician': 'bg-yellow-100 text-yellow-800',
   'waiting-patient': 'bg-orange-100 text-orange-800',
   'in-consultation': 'bg-blue-100 text-blue-800',
+  'awaiting-medication': 'bg-teal-100 text-teal-800',
   'awaiting-billing': 'bg-purple-100 text-purple-800',
   completed: 'bg-green-100 text-green-800',
   cancelled: 'bg-gray-100 text-gray-600',
@@ -102,6 +105,7 @@ const STAGE_LABEL: Record<QueueStage, string> = {
   'awaiting-clinician': 'Awaiting Clinician',
   'waiting-patient': 'Waiting Patient',
   'in-consultation': 'In Consultation',
+  'awaiting-medication': 'Awaiting Medications',
   'awaiting-billing': 'Awaiting Billing',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -138,6 +142,15 @@ const applyCompleteConsult = (enc: Encounter): Encounter => {
     const existing = locs[idx];
     locs[idx] = { ...existing, status: 'completed', period: { ...(existing.period || {}), end: nowISO() } };
   }
+  locs.push({ location: { identifier: { value: 'medication' } }, status: 'planned' });
+  return { ...enc, location: locs as any };
+};
+
+const applyMedicationDispense = (enc: Encounter): Encounter => {
+  const locs = [...((enc.location || []) as any[])];
+  const idx = locs.reduceRight((found, l, i) =>
+    found === -1 && getLocId(l) === 'medication' && l.status === 'planned' ? i : found, -1);
+  if (idx >= 0) locs[idx] = { ...locs[idx], status: 'completed', period: { start: nowISO(), end: nowISO() } };
   locs.push({ location: { identifier: { value: 'billing' } }, status: 'planned' });
   return { ...enc, location: locs as any };
 };
@@ -196,7 +209,7 @@ const PatientDetailPanel: React.FC<{ patient?: Patient }> = ({ patient }) => {
 interface QueueRowProps {
   encounter: Encounter;
   role: 'psa' | 'clinician';
-  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-payment' | 'cancel') => void;
+  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
   isUpdating: boolean;
   showDate: boolean;
   patientMap: Map<string, Patient>;
@@ -331,6 +344,15 @@ const QueueRow: React.FC<QueueRowProps> = ({
                   Triage
                 </Link>
               )}
+              {stage === 'awaiting-medication' && (
+                <button
+                  onClick={() => onEncounterAction(encounter, 'collect-medication')}
+                  disabled={isUpdating}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
+                >
+                  Dispense Medications
+                </button>
+              )}
               {stage === 'awaiting-billing' && (
                 <button
                   onClick={() => onEncounterAction(encounter, 'collect-payment')}
@@ -377,7 +399,7 @@ interface QueueSectionProps {
   stage: QueueStage;
   encounters: Encounter[];
   role: 'psa' | 'clinician';
-  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-payment' | 'cancel') => void;
+  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
   isUpdating: boolean;
   showDate: boolean;
   patientMap: Map<string, Patient>;
@@ -524,6 +546,7 @@ const PatientQueuePage: React.FC = () => {
   const awaitingClinician = encounters.filter((e) => classifyEncounter(e) === 'awaiting-clinician');
   const waitingPatient = encounters.filter((e) => classifyEncounter(e) === 'waiting-patient');
   const inConsultation = encounters.filter((e) => classifyEncounter(e) === 'in-consultation');
+  const awaitingMedication = encounters.filter((e) => classifyEncounter(e) === 'awaiting-medication');
   const awaitingBilling = encounters.filter((e) => classifyEncounter(e) === 'awaiting-billing');
   const completed = encounters.filter((e) => classifyEncounter(e) === 'completed');
   const cancelled = encounters.filter((e) => classifyEncounter(e) === 'cancelled');
@@ -532,7 +555,7 @@ const PatientQueuePage: React.FC = () => {
 
   const handleEncounterAction = async (
     encounter: Encounter,
-    action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-payment' | 'cancel',
+    action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-medication' | 'collect-payment' | 'cancel',
   ) => {
     let updated: Encounter;
     if (action === 'call-patient') updated = applyCallPatient(encounter);
@@ -543,6 +566,7 @@ const PatientQueuePage: React.FC = () => {
       return;
     }
     else if (action === 'complete-consult') updated = applyCompleteConsult(encounter);
+    else if (action === 'collect-medication') updated = applyMedicationDispense(encounter);
     else if (action === 'collect-payment') updated = applyCollectPayment(encounter);
     else updated = { ...encounter, status: 'cancelled' } as Encounter;
     await updateResource({ resourceType: 'Encounter', id: encounter.id!, resource: updated as any });
@@ -643,6 +667,7 @@ const PatientQueuePage: React.FC = () => {
           { label: 'Awaiting Clinician', count: awaitingClinician.length, cls: 'bg-yellow-100 text-yellow-800' },
           { label: 'Waiting Patient', count: waitingPatient.length, cls: 'bg-orange-100 text-orange-800' },
           { label: 'In Consultation', count: inConsultation.length, cls: 'bg-blue-100 text-blue-800' },
+          { label: 'Awaiting Medications', count: awaitingMedication.length, cls: 'bg-teal-100 text-teal-800' },
           { label: 'Awaiting Billing', count: awaitingBilling.length, cls: 'bg-purple-100 text-purple-800' },
           { label: 'Completed', count: completed.length, cls: 'bg-green-100 text-green-800' },
           { label: 'Cancelled', count: cancelled.length, cls: 'bg-gray-100 text-gray-600' },
@@ -698,6 +723,15 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="in-consultation"
             encounters={inConsultation}
+            role={role ?? 'psa'}
+            onEncounterAction={handleEncounterAction}
+            isUpdating={isUpdating}
+            showDate={showDate}
+            patientMap={patientMap}
+          />
+          <QueueSection
+            stage="awaiting-medication"
+            encounters={awaitingMedication}
             role={role ?? 'psa'}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
