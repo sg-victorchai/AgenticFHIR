@@ -60,64 +60,211 @@ interface FilterField {
 const ENC_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'date', type: 'date' },
   { key: 'type', label: 'Type', param: 'type:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['planned', 'in-progress', 'on-hold', 'discharged', 'completed', 'cancelled', 'entered-in-error', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'planned',
+      'in-progress',
+      'on-hold',
+      'discharged',
+      'completed',
+      'cancelled',
+      'entered-in-error',
+      'unknown',
+    ],
+  },
 ];
 
 const COND_FILTERS: FilterField[] = [
   { key: 'date', label: 'Onset', param: 'onset-date', type: 'date' },
   { key: 'code', label: 'Condition', param: 'code:text', type: 'text' },
-  { key: 'clinicalStatus', label: 'Clinical Status', param: 'clinical-status', type: 'status', options: ['active', 'recurrence', 'relapse', 'inactive', 'remission', 'resolved'] },
+  {
+    key: 'clinicalStatus',
+    label: 'Clinical Status',
+    param: 'clinical-status',
+    type: 'status',
+    options: [
+      'active',
+      'recurrence',
+      'relapse',
+      'inactive',
+      'remission',
+      'resolved',
+    ],
+  },
 ];
 
 const OBS_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'date', type: 'date' },
   { key: 'code', label: 'Code', param: 'code:text', type: 'text' },
   { key: 'category', label: 'Category', param: 'category:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['registered', 'preliminary', 'final', 'amended', 'corrected', 'cancelled', 'entered-in-error', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'registered',
+      'preliminary',
+      'final',
+      'amended',
+      'corrected',
+      'cancelled',
+      'entered-in-error',
+      'unknown',
+    ],
+  },
 ];
 
 const SR_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'authored', type: 'date' },
   { key: 'code', label: 'Order', param: 'code:text', type: 'text' },
   { key: 'category', label: 'Category', param: 'category:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['draft', 'active', 'on-hold', 'revoked', 'completed', 'entered-in-error', 'unknown'] },
-  { key: 'priority', label: 'Priority', param: 'priority', type: 'status', options: ['routine', 'urgent', 'asap', 'stat'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'draft',
+      'active',
+      'on-hold',
+      'revoked',
+      'completed',
+      'entered-in-error',
+      'unknown',
+    ],
+  },
+  {
+    key: 'priority',
+    label: 'Priority',
+    param: 'priority',
+    type: 'status',
+    options: ['routine', 'urgent', 'asap', 'stat'],
+  },
 ];
 
 const DR_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'date', type: 'date' },
   { key: 'code', label: 'Report', param: 'code:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['registered', 'partial', 'preliminary', 'final', 'amended', 'corrected', 'appended', 'cancelled', 'entered-in-error', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'registered',
+      'partial',
+      'preliminary',
+      'final',
+      'amended',
+      'corrected',
+      'appended',
+      'cancelled',
+      'entered-in-error',
+      'unknown',
+    ],
+  },
 ];
 
 const MED_REQ_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'authoredon', type: 'date' },
   { key: 'medication', label: 'Medication', param: 'code:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['active', 'on-hold', 'ended', 'stopped', 'completed', 'cancelled', 'entered-in-error', 'draft', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'active',
+      'on-hold',
+      'ended',
+      'stopped',
+      'completed',
+      'cancelled',
+      'entered-in-error',
+      'draft',
+      'unknown',
+    ],
+  },
 ];
 
 const MED_DISP_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'whenhandedover', type: 'date' },
   { key: 'medication', label: 'Medication', param: 'code:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['preparation', 'in-progress', 'cancelled', 'on-hold', 'completed', 'entered-in-error', 'stopped', 'declined', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'preparation',
+      'in-progress',
+      'cancelled',
+      'on-hold',
+      'completed',
+      'entered-in-error',
+      'stopped',
+      'declined',
+      'unknown',
+    ],
+  },
 ];
 
 const MED_STMT_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'date', type: 'date' },
   { key: 'medication', label: 'Medication', param: 'code:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['recorded', 'entered-in-error', 'draft'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: ['recorded', 'entered-in-error', 'draft'],
+  },
 ];
 
 const PROC_FILTERS: FilterField[] = [
   { key: 'date', label: 'Date', param: 'date', type: 'date' },
   { key: 'code', label: 'Procedure', param: 'code:text', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['preparation', 'in-progress', 'not-done', 'on-hold', 'stopped', 'completed', 'entered-in-error', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'preparation',
+      'in-progress',
+      'not-done',
+      'on-hold',
+      'stopped',
+      'completed',
+      'entered-in-error',
+      'unknown',
+    ],
+  },
 ];
 
 const CP_FILTERS: FilterField[] = [
   { key: 'date', label: 'Period', param: 'date', type: 'date' },
   { key: 'title', label: 'Title', param: 'title:contains', type: 'text' },
-  { key: 'status', label: 'Status', param: 'status', type: 'status', options: ['draft', 'active', 'on-hold', 'revoked', 'completed', 'entered-in-error', 'unknown'] },
+  {
+    key: 'status',
+    label: 'Status',
+    param: 'status',
+    type: 'status',
+    options: [
+      'draft',
+      'active',
+      'on-hold',
+      'revoked',
+      'completed',
+      'entered-in-error',
+      'unknown',
+    ],
+  },
   { key: 'category', label: 'Category', param: 'category:text', type: 'text' },
 ];
 
@@ -144,9 +291,15 @@ function buildExtraParams(
 }
 
 const DEFAULT_RESOURCE_TYPES = [
-  'Encounter', 'Observation', 'DiagnosticReport', 'Condition',
-  'MedicationRequest', 'MedicationDispense', 'MedicationStatement',
-  'Procedure', 'CarePlan',
+  'Encounter',
+  'Observation',
+  'DiagnosticReport',
+  'Condition',
+  'MedicationRequest',
+  'MedicationDispense',
+  'MedicationStatement',
+  'Procedure',
+  'CarePlan',
 ];
 
 const AI_BASE_URL = (
@@ -156,16 +309,24 @@ const AI_BASE_URL = (
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 const getResourceTypesFromQuery = (query: string): string[] => {
   const q = query.toLowerCase().trim();
   if (q.startsWith('visit') || q.startsWith('encounter')) return ['Encounter'];
-  if (q.startsWith('problem') || q.startsWith('condition')) return ['Condition'];
-  if (q.startsWith('lab') || q.startsWith('test')) return ['Observation', 'DiagnosticReport', 'ServiceRequest'];
+  if (q.startsWith('problem') || q.startsWith('condition'))
+    return ['Condition'];
+  if (q.startsWith('lab') || q.startsWith('test'))
+    return ['Observation', 'DiagnosticReport', 'ServiceRequest'];
   if (q.startsWith('procedure')) return ['Procedure'];
-  if (/^meds?\b/.test(q) || q.startsWith('medication')) return ['MedicationRequest', 'MedicationDispense', 'MedicationStatement'];
-  if (q.startsWith('care plan') || q.startsWith('careplan') || q.startsWith('plan')) return ['CarePlan'];
+  if (/^meds?\b/.test(q) || q.startsWith('medication'))
+    return ['MedicationRequest', 'MedicationDispense', 'MedicationStatement'];
+  if (
+    q.startsWith('care plan') ||
+    q.startsWith('careplan') ||
+    q.startsWith('plan')
+  )
+    return ['CarePlan'];
   return DEFAULT_RESOURCE_TYPES;
 };
 
@@ -173,23 +334,31 @@ const getResourceTypesFromQuery = (query: string): string[] => {
 
 const fmt = (dt?: string) => {
   if (!dt) return '—';
-  return new Date(dt).toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(dt).toLocaleString('en-SG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 };
 
 const StatusBadge: React.FC<{ status?: string }> = ({ status }) => {
   if (!status) return <span className="text-gray-400">—</span>;
   const cls =
-    status === 'active' || status === 'final' || status === 'completed' || status === 'finished'
+    status === 'active' ||
+    status === 'final' ||
+    status === 'completed' ||
+    status === 'finished'
       ? 'bg-green-100 text-green-800'
       : status === 'in-progress' || status === 'preliminary'
-      ? 'bg-blue-100 text-blue-800'
-      : status === 'cancelled' || status === 'entered-in-error'
-      ? 'bg-red-100 text-red-800'
-      : status === 'draft' || status === 'planned'
-      ? 'bg-yellow-100 text-yellow-800'
-      : 'bg-gray-100 text-gray-700';
+        ? 'bg-blue-100 text-blue-800'
+        : status === 'cancelled' || status === 'entered-in-error'
+          ? 'bg-red-100 text-red-800'
+          : status === 'draft' || status === 'planned'
+            ? 'bg-yellow-100 text-yellow-800'
+            : 'bg-gray-100 text-gray-700';
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
+    >
       {status}
     </span>
   );
@@ -205,8 +374,13 @@ const TH: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
   </th>
 );
 
-const TD: React.FC<{ children?: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <td className={`px-4 py-3 text-sm text-gray-800 ${className ?? ''}`}>{children ?? '—'}</td>
+const TD: React.FC<{ children?: React.ReactNode; className?: string }> = ({
+  children,
+  className,
+}) => (
+  <td className={`px-4 py-3 text-sm text-gray-800 ${className ?? ''}`}>
+    {children ?? '—'}
+  </td>
 );
 
 const Loading = () => (
@@ -248,11 +422,16 @@ const Pagination: React.FC<{
   const totalPages = Math.ceil(total / pageSize);
   if (totalPages <= 1) return null;
 
-  const hasPrev = links ? links.some((l) => l.relation === 'previous') : page > 1;
-  const hasNext = links ? links.some((l) => l.relation === 'next') : page < totalPages;
+  const hasPrev = links
+    ? links.some((l) => l.relation === 'previous')
+    : page > 1;
+  const hasNext = links
+    ? links.some((l) => l.relation === 'next')
+    : page < totalPages;
 
   const getPages = (): (number | '...')[] => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (totalPages <= 7)
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
     const pages: (number | '...')[] = [];
     const delta = 1;
     const left = Math.max(2, page - delta);
@@ -276,7 +455,8 @@ const Pagination: React.FC<{
     }
   };
 
-  const btnBase = 'inline-flex items-center justify-center h-8 min-w-[2rem] px-2 rounded-md text-sm font-medium transition-colors focus:outline-none';
+  const btnBase =
+    'inline-flex items-center justify-center h-8 min-w-[2rem] px-2 rounded-md text-sm font-medium transition-colors focus:outline-none';
   const btnActive = `${btnBase} bg-blue-600 text-white shadow-sm`;
   const btnInactive = `${btnBase} text-gray-600 hover:bg-gray-100 border border-gray-200`;
   const btnDisabled = `${btnBase} text-gray-300 cursor-not-allowed border border-gray-100`;
@@ -284,8 +464,11 @@ const Pagination: React.FC<{
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 py-2 px-1">
       <span className="text-xs text-gray-500 whitespace-nowrap">
-        Showing <span className="font-medium text-gray-700">{from}–{to}</span> of{' '}
-        <span className="font-medium text-gray-700">{total}</span> records
+        Showing{' '}
+        <span className="font-medium text-gray-700">
+          {from}–{to}
+        </span>{' '}
+        of <span className="font-medium text-gray-700">{total}</span> records
       </span>
 
       <div className="flex items-center gap-1">
@@ -308,7 +491,10 @@ const Pagination: React.FC<{
 
         {getPages().map((p, i) =>
           p === '...' ? (
-            <span key={`ellipsis-${i}`} className="px-1 text-gray-400 text-sm select-none">
+            <span
+              key={`ellipsis-${i}`}
+              className="px-1 text-gray-400 text-sm select-none"
+            >
               …
             </span>
           ) : (
@@ -374,7 +560,9 @@ const FilterPanel: React.FC<{
       <div className="flex flex-wrap gap-3 items-end justify-end">
         {filters.map((f) => (
           <div key={f.key} className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">{f.label}</label>
+            <label className="text-xs font-medium text-gray-600">
+              {f.label}
+            </label>
             {f.type === 'date' && (
               <div className="flex gap-1">
                 <select
@@ -402,7 +590,11 @@ const FilterPanel: React.FC<{
                 className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
               >
                 <option value="">All</option>
-                {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                {f.options?.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
               </select>
             )}
             {f.type === 'text' && (
@@ -433,11 +625,13 @@ const SearchResultCard: React.FC<{
   result: HybridSearchResult;
   onNavigate?: (tab: TabId, resourceId: string, medSubTab?: MedSubTab) => void;
 }> = ({ result, onNavigate }) => {
-  const { data: resource, isLoading } = useGetResourceByIdQuery(
-    { resourceType: result.resourceType, id: result.resourceId },
-  );
+  const { data: resource, isLoading } = useGetResourceByIdQuery({
+    resourceType: result.resourceType,
+    id: result.resourceId,
+  });
 
-  if (isLoading) return <div className="animate-pulse h-7 bg-gray-100 rounded" />;
+  if (isLoading)
+    return <div className="animate-pulse h-7 bg-gray-100 rounded" />;
   if (!resource) return null;
 
   const r = resource as any;
@@ -445,15 +639,32 @@ const SearchResultCard: React.FC<{
   const getSummary = (): string => {
     switch (result.resourceType) {
       case 'Encounter':
-        return [r.type?.[0]?.text || r.class?.[0]?.coding?.[0]?.display || 'Visit', r.reason?.[0]?.value?.[0]?.concept?.text].filter(Boolean).join(' — ');
+        return [
+          r.type?.[0]?.text || r.class?.[0]?.coding?.[0]?.display || 'Visit',
+          r.reason?.[0]?.value?.[0]?.concept?.text,
+        ]
+          .filter(Boolean)
+          .join(' — ');
       case 'Condition':
         return `${r.code?.coding?.[0]?.display || r.code?.text || '—'} (${r.clinicalStatus?.coding?.[0]?.code || r.status || '—'})`;
       case 'MedicationRequest':
-        return [r.medication?.concept?.text || r.medication?.concept?.coding?.[0]?.display, r.dosageInstruction?.[0]?.text].filter(Boolean).join(' · ') || '—';
+        return (
+          [
+            r.medication?.concept?.text ||
+              r.medication?.concept?.coding?.[0]?.display,
+            r.dosageInstruction?.[0]?.text,
+          ]
+            .filter(Boolean)
+            .join(' · ') || '—'
+        );
       case 'MedicationDispense':
         return `${r.medication?.concept?.text || r.medication?.concept?.coding?.[0]?.display || '—'} — dispensed`;
       case 'MedicationStatement':
-        return r.medication?.concept?.text || r.medication?.concept?.coding?.[0]?.display || '—';
+        return (
+          r.medication?.concept?.text ||
+          r.medication?.concept?.coding?.[0]?.display ||
+          '—'
+        );
       case 'DiagnosticReport':
         return r.code?.text || r.code?.coding?.[0]?.display || '—';
       case 'Observation':
@@ -468,40 +679,59 @@ const SearchResultCard: React.FC<{
   };
 
   const getDate = (): string =>
-    r.authoredOn || r.effectiveDateTime || r.issued || r.actualPeriod?.start ||
-    r.period?.start || r.performedDateTime || r.occurrenceDateTime ||
-    r.onsetDateTime || r.dateAsserted || '';
+    r.authoredOn ||
+    r.effectiveDateTime ||
+    r.issued ||
+    r.actualPeriod?.start ||
+    r.period?.start ||
+    r.performedDateTime ||
+    r.occurrenceDateTime ||
+    r.onsetDateTime ||
+    r.dateAsserted ||
+    '';
 
   const sourceCls =
     result.sources.includes('vector') && result.sources.includes('keyword')
       ? 'bg-purple-100 text-purple-700'
       : result.sources.includes('vector')
-      ? 'bg-blue-100 text-blue-700'
-      : 'bg-amber-100 text-amber-700';
+        ? 'bg-blue-100 text-blue-700'
+        : 'bg-amber-100 text-amber-700';
 
   const getNavTarget = (): { tab: TabId; medSubTab?: MedSubTab } | null => {
     const r2 = resource as any;
     switch (result.resourceType) {
-      case 'Encounter': return { tab: 'encounter' };
-      case 'Observation': return { tab: 'observation' };
-      case 'ServiceRequest': return { tab: 'orders' };
+      case 'Encounter':
+        return { tab: 'encounter' };
+      case 'Observation':
+        return { tab: 'observation' };
+      case 'ServiceRequest':
+        return { tab: 'orders' };
       case 'DiagnosticReport': {
         const isRad = r2?.category?.some((c: any) =>
-          c.coding?.some((cd: any) =>
-            cd.code === 'RAD' || cd.code === '4261000179101' ||
-            cd.display?.toLowerCase().includes('rad') ||
-            cd.display?.toLowerCase().includes('imaging'),
+          c.coding?.some(
+            (cd: any) =>
+              cd.code === 'RAD' ||
+              cd.code === '4261000179101' ||
+              cd.display?.toLowerCase().includes('rad') ||
+              cd.display?.toLowerCase().includes('imaging'),
           ),
         );
         return { tab: isRad ? 'rad-report' : 'lab-results' };
       }
-      case 'MedicationRequest': return { tab: 'medication', medSubTab: 'request' };
-      case 'MedicationDispense': return { tab: 'medication', medSubTab: 'dispense' };
-      case 'MedicationStatement': return { tab: 'medication', medSubTab: 'statement' };
-      case 'Procedure': return { tab: 'procedure' };
-      case 'CarePlan': return { tab: 'careplan' };
-      case 'Condition': return { tab: 'condition' };
-      default: return null;
+      case 'MedicationRequest':
+        return { tab: 'medication', medSubTab: 'request' };
+      case 'MedicationDispense':
+        return { tab: 'medication', medSubTab: 'dispense' };
+      case 'MedicationStatement':
+        return { tab: 'medication', medSubTab: 'statement' };
+      case 'Procedure':
+        return { tab: 'procedure' };
+      case 'CarePlan':
+        return { tab: 'careplan' };
+      case 'Condition':
+        return { tab: 'condition' };
+      default:
+        return null;
     }
   };
 
@@ -517,7 +747,8 @@ const SearchResultCard: React.FC<{
       title={navTarget ? 'Click to navigate to this record' : undefined}
       onClick={
         navTarget && onNavigate
-          ? () => onNavigate(navTarget.tab, result.resourceId, navTarget.medSubTab)
+          ? () =>
+              onNavigate(navTarget.tab, result.resourceId, navTarget.medSubTab)
           : undefined
       }
     >
@@ -525,8 +756,14 @@ const SearchResultCard: React.FC<{
         {result.resourceType}
       </span>
       <span className="flex-1 text-gray-800 truncate">{getSummary()}</span>
-      {getDate() && <span className="text-gray-400 whitespace-nowrap shrink-0">{fmt(getDate())}</span>}
-      <span className={`px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0 ${sourceCls}`}>
+      {getDate() && (
+        <span className="text-gray-400 whitespace-nowrap shrink-0">
+          {fmt(getDate())}
+        </span>
+      )}
+      <span
+        className={`px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0 ${sourceCls}`}
+      >
         {result.sources.join('+')}
       </span>
       <span className="text-gray-400 whitespace-nowrap shrink-0 w-10 text-right">
@@ -565,7 +802,8 @@ const PatientRecordsPage: React.FC = () => {
   // ── Search state ──
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [searchInput, setSearchInput] = useState('');
-  const [searchResults, setSearchResults] = useState<HybridSearchResponse | null>(null);
+  const [searchResults, setSearchResults] =
+    useState<HybridSearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -609,7 +847,11 @@ const PatientRecordsPage: React.FC = () => {
   // ── Navigation from search results ──
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
-  const handleNavigate = (tab: TabId, resourceId: string, medSubTab?: MedSubTab) => {
+  const handleNavigate = (
+    tab: TabId,
+    resourceId: string,
+    medSubTab?: MedSubTab,
+  ) => {
     setActiveTab(tab);
     if (medSubTab) setMedSubTab(medSubTab);
     setExpandedId(resourceId);
@@ -619,14 +861,21 @@ const PatientRecordsPage: React.FC = () => {
   useEffect(() => {
     if (!highlightId) return;
     const scrollTimer = setTimeout(() => {
-      document.getElementById(`record-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document
+        .getElementById(`record-${highlightId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 120);
     const clearTimer = setTimeout(() => setHighlightId(null), 2500);
-    return () => { clearTimeout(scrollTimer); clearTimeout(clearTimer); };
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
   }, [highlightId]);
 
   // ── Patient ──
-  const { data: patient } = useGetPatientQuery(patientId!, { skip: !patientId });
+  const { data: patient } = useGetPatientQuery(patientId!, {
+    skip: !patientId,
+  });
 
   const patientName =
     patient?.name?.[0]?.text ||
@@ -642,72 +891,178 @@ const PatientRecordsPage: React.FC = () => {
     _offset: String((currentPage - 1) * PAGE_SIZE),
   };
 
-  const encExtraParams  = { ...buildExtraParams(ENC_FILTERS,      filterValues, 'date',           sortDir), ...pageOffset };
-  const condExtraParams = { ...buildExtraParams(COND_FILTERS,     filterValues, 'onset-date',     sortDir), ...pageOffset };
-  const obsExtraParams  = { ...buildExtraParams(OBS_FILTERS,      filterValues, 'date',           sortDir), ...pageOffset };
-  const srExtraParams   = { ...buildExtraParams(SR_FILTERS,       filterValues, 'authored',       sortDir), ...pageOffset };
-  const labDrExtraParams = { ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir), ...pageOffset, category: 'LAB' };
-  const radDrExtraParams = { ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir), ...pageOffset, category: 'RAD' };
-  const medReqExtraParams  = { ...buildExtraParams(MED_REQ_FILTERS,  filterValues, 'authoredon',     sortDir), ...pageOffset };
-  const medDispExtraParams = { ...buildExtraParams(MED_DISP_FILTERS, filterValues, 'whenhandedover', sortDir), ...pageOffset };
-  const medStmtExtraParams = { ...buildExtraParams(MED_STMT_FILTERS, filterValues, 'date',           sortDir), ...pageOffset };
-  const procExtraParams = { ...buildExtraParams(PROC_FILTERS,     filterValues, 'date',           sortDir), ...pageOffset };
-  const cpExtraParams   = { ...buildExtraParams(CP_FILTERS,       filterValues, 'date',           sortDir), ...pageOffset };
+  const encExtraParams = {
+    ...buildExtraParams(ENC_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+  };
+  const condExtraParams = {
+    ...buildExtraParams(COND_FILTERS, filterValues, 'onset-date', sortDir),
+    ...pageOffset,
+  };
+  const obsExtraParams = {
+    ...buildExtraParams(OBS_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+  };
+  const srExtraParams = {
+    ...buildExtraParams(SR_FILTERS, filterValues, 'authored', sortDir),
+    ...pageOffset,
+  };
+  const labDrExtraParams = {
+    ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+    category: 'LAB',
+  };
+  const radDrExtraParams = {
+    ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+    category: 'RAD',
+  };
+  const medReqExtraParams = {
+    ...buildExtraParams(MED_REQ_FILTERS, filterValues, 'authoredon', sortDir),
+    ...pageOffset,
+  };
+  const medDispExtraParams = {
+    ...buildExtraParams(
+      MED_DISP_FILTERS,
+      filterValues,
+      'whenhandedover',
+      sortDir,
+    ),
+    ...pageOffset,
+  };
+  const medStmtExtraParams = {
+    ...buildExtraParams(MED_STMT_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+  };
+  const procExtraParams = {
+    ...buildExtraParams(PROC_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+  };
+  const cpExtraParams = {
+    ...buildExtraParams(CP_FILTERS, filterValues, 'date', sortDir),
+    ...pageOffset,
+  };
 
   const { data: encBundle, isLoading: encLoading } = useSearchByPatientQuery(
-    { resourceType: 'Encounter', patientId: patientId!, extraParams: encExtraParams },
+    {
+      resourceType: 'Encounter',
+      patientId: patientId!,
+      extraParams: encExtraParams,
+    },
     { skip: !patientId || activeTab !== 'encounter' },
   );
   const { data: condBundle, isLoading: condLoading } = useSearchByPatientQuery(
-    { resourceType: 'Condition', patientId: patientId!, extraParams: condExtraParams },
+    {
+      resourceType: 'Condition',
+      patientId: patientId!,
+      extraParams: condExtraParams,
+    },
     { skip: !patientId || activeTab !== 'condition' },
   );
   const { data: obsBundle, isLoading: obsLoading } = useSearchByPatientQuery(
-    { resourceType: 'Observation', patientId: patientId!, extraParams: obsExtraParams },
+    {
+      resourceType: 'Observation',
+      patientId: patientId!,
+      extraParams: obsExtraParams,
+    },
     { skip: !patientId || activeTab !== 'observation' },
   );
   const { data: srBundle, isLoading: srLoading } = useSearchByPatientQuery(
-    { resourceType: 'ServiceRequest', patientId: patientId!, extraParams: srExtraParams },
+    {
+      resourceType: 'ServiceRequest',
+      patientId: patientId!,
+      extraParams: srExtraParams,
+    },
     { skip: !patientId || activeTab !== 'orders' },
   );
-  const { data: labDrBundle, isLoading: labDrLoading } = useSearchByPatientQuery(
-    { resourceType: 'DiagnosticReport', patientId: patientId!, extraParams: labDrExtraParams },
-    { skip: !patientId || activeTab !== 'lab-results' },
-  );
-  const { data: radDrBundle, isLoading: radDrLoading } = useSearchByPatientQuery(
-    { resourceType: 'DiagnosticReport', patientId: patientId!, extraParams: radDrExtraParams },
-    { skip: !patientId || activeTab !== 'rad-report' },
-  );
-  const { data: medReqBundle, isLoading: medReqLoading } = useSearchByPatientQuery(
-    { resourceType: 'MedicationRequest', patientId: patientId!, extraParams: medReqExtraParams },
-    { skip: !patientId || activeTab !== 'medication' || medSubTab !== 'request' },
-  );
-  const { data: medDispBundle, isLoading: medDispLoading } = useSearchByPatientQuery(
-    { resourceType: 'MedicationDispense', patientId: patientId!, extraParams: medDispExtraParams },
-    { skip: !patientId || activeTab !== 'medication' || medSubTab !== 'dispense' },
-  );
-  const { data: medStmtBundle, isLoading: medStmtLoading } = useSearchByPatientQuery(
-    { resourceType: 'MedicationStatement', patientId: patientId!, extraParams: medStmtExtraParams },
-    { skip: !patientId || activeTab !== 'medication' || medSubTab !== 'statement' },
-  );
+  const { data: labDrBundle, isLoading: labDrLoading } =
+    useSearchByPatientQuery(
+      {
+        resourceType: 'DiagnosticReport',
+        patientId: patientId!,
+        extraParams: labDrExtraParams,
+      },
+      { skip: !patientId || activeTab !== 'lab-results' },
+    );
+  const { data: radDrBundle, isLoading: radDrLoading } =
+    useSearchByPatientQuery(
+      {
+        resourceType: 'DiagnosticReport',
+        patientId: patientId!,
+        extraParams: radDrExtraParams,
+      },
+      { skip: !patientId || activeTab !== 'rad-report' },
+    );
+  const { data: medReqBundle, isLoading: medReqLoading } =
+    useSearchByPatientQuery(
+      {
+        resourceType: 'MedicationRequest',
+        patientId: patientId!,
+        extraParams: medReqExtraParams,
+      },
+      {
+        skip:
+          !patientId || activeTab !== 'medication' || medSubTab !== 'request',
+      },
+    );
+  const { data: medDispBundle, isLoading: medDispLoading } =
+    useSearchByPatientQuery(
+      {
+        resourceType: 'MedicationDispense',
+        patientId: patientId!,
+        extraParams: medDispExtraParams,
+      },
+      {
+        skip:
+          !patientId || activeTab !== 'medication' || medSubTab !== 'dispense',
+      },
+    );
+  const { data: medStmtBundle, isLoading: medStmtLoading } =
+    useSearchByPatientQuery(
+      {
+        resourceType: 'MedicationStatement',
+        patientId: patientId!,
+        extraParams: medStmtExtraParams,
+      },
+      {
+        skip:
+          !patientId || activeTab !== 'medication' || medSubTab !== 'statement',
+      },
+    );
   const { data: procBundle, isLoading: procLoading } = useSearchByPatientQuery(
-    { resourceType: 'Procedure', patientId: patientId!, extraParams: procExtraParams },
+    {
+      resourceType: 'Procedure',
+      patientId: patientId!,
+      extraParams: procExtraParams,
+    },
     { skip: !patientId || activeTab !== 'procedure' },
   );
   const { data: cpBundle, isLoading: cpLoading } = useSearchByPatientQuery(
-    { resourceType: 'CarePlan', patientId: patientId!, extraParams: cpExtraParams },
+    {
+      resourceType: 'CarePlan',
+      patientId: patientId!,
+      extraParams: cpExtraParams,
+    },
     { skip: !patientId || activeTab !== 'careplan' },
   );
 
   // ── Resource extraction ──
-  const encounters = (encBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const conditions = (condBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean)
-    .filter((c: any) => c.clinicalStatus?.coding?.[0]?.code !== 'entered-in-error');
+  const encounters = (encBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
+  const conditions = (condBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean)
+    .filter(
+      (c: any) => c.clinicalStatus?.coding?.[0]?.code !== 'entered-in-error',
+    );
   const observations = (obsBundle?.entry ?? [])
     .map((e) => e.resource as any)
     .filter(Boolean)
     .filter((o: any) => o.status !== 'entered-in-error');
-  const serviceRequests = (srBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
+  const serviceRequests = (srBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
   const allDiagnosticReports = [] as any[]; // kept for reference; use labResults/radReports below
 
   const isLabReport = (dr: any) =>
@@ -731,83 +1086,198 @@ const PatientRecordsPage: React.FC = () => {
       ),
     );
 
-  void allDiagnosticReports; void isLabReport; void isRadReport; // kept for reference
+  void allDiagnosticReports;
+  void isLabReport;
+  void isRadReport; // kept for reference
 
-  const labResults = (labDrBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const radReports = (radDrBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
+  const labResults = (labDrBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
+  const radReports = (radDrBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
 
-  const medRequests = (medReqBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const medDispenses = (medDispBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const medStatements = (medStmtBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const procedures = (procBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
-  const carePlans = (cpBundle?.entry ?? []).map((e) => e.resource as any).filter(Boolean);
+  const medRequests = (medReqBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
+  const medDispenses = (medDispBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
+  const medStatements = (medStmtBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
+  const procedures = (procBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
+  const carePlans = (cpBundle?.entry ?? [])
+    .map((e) => e.resource as any)
+    .filter(Boolean);
 
   // ── Toggle helper ──
-  const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
+  const toggle = (id: string) =>
+    setExpandedId((prev) => (prev === id ? null : id));
 
   // ─── Tab renders ──────────────────────────────────────────────────────────
 
   const renderConditionTab = () => {
     return (
       <div>
-        {showFilter && <FilterPanel filters={COND_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={condBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={condBundle?.link as Array<{ relation: string; url: string }>} />
-        {condLoading ? <Loading /> : !conditions.length ? <Empty /> : (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortHeader label="Onset" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-              {['Condition', 'Clinical Status', 'Severity', 'Category'].map((h) => (
-                <TH key={h}>{h}</TH>
-              ))}
-              <TH />
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {conditions.map((cond: any) => (
-              <React.Fragment key={cond.id}>
-                <tr
-                  id={`record-${cond.id}`}
-                  className={`cursor-pointer transition-colors ${highlightId === cond.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => toggle(cond.id)}
-                >
-                  <TD>{fmt(cond.onsetDateTime || cond.recordedDate)}</TD>
-                  <TD>{cond.code?.coding?.[0]?.display || cond.code?.text || '—'}</TD>
-                  <TD><StatusBadge status={cond.clinicalStatus?.coding?.[0]?.code} /></TD>
-                  <TD>{cond.severity?.coding?.[0]?.display || cond.severity?.text || '—'}</TD>
-                  <TD>{cond.category?.[0]?.coding?.[0]?.display || cond.category?.[0]?.text || '—'}</TD>
-                  <td className="px-4 py-3 text-right">
-                    <ExpandToggle open={expandedId === cond.id} />
-                  </td>
-                </tr>
-                {expandedId === cond.id && (
-                  <tr>
-                    <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                        <div><span className="font-medium">ID:</span> {cond.id}</div>
-                        <div><span className="font-medium">Verification:</span> {cond.verificationStatus?.coding?.[0]?.code || '—'}</div>
-                        <div><span className="font-medium">Recorded:</span> {fmt(cond.recordedDate)}</div>
-                        <div><span className="font-medium">Recorder:</span> {cond.recorder?.display || cond.recorder?.reference || '—'}</div>
-                        <div><span className="font-medium">Asserter:</span> {cond.asserter?.display || cond.asserter?.reference || '—'}</div>
-                        <div><span className="font-medium">Encounter:</span> {cond.encounter?.reference || '—'}</div>
-                        <div className="col-span-2"><span className="font-medium">Body Site:</span> {cond.bodySite?.map((b: any) => b.coding?.[0]?.display || b.text).filter(Boolean).join(', ') || '—'}</div>
-                        <div className="col-span-2"><span className="font-medium">Note:</span> {cond.note?.map((n: any) => n.text).join('; ') || '—'}</div>
-                        {cond.abatementDateTime && <div><span className="font-medium">Abatement:</span> {fmt(cond.abatementDateTime)}</div>}
-                        {cond.stage?.length ? (
-                          <div className="col-span-2"><span className="font-medium">Stage:</span> {cond.stage.map((s: any) => s.summary?.coding?.[0]?.display || s.summary?.text).filter(Boolean).join(', ')}</div>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={COND_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={condBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={condBundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={condBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={condBundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {condLoading ? (
+          <Loading />
+        ) : !conditions.length ? (
+          <Empty />
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader
+                    label="Onset"
+                    sortDir={sortDir}
+                    onToggle={() =>
+                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                    }
+                  />
+                  {['Condition', 'Clinical Status', 'Severity', 'Category'].map(
+                    (h) => (
+                      <TH key={h}>{h}</TH>
+                    ),
+                  )}
+                  <TH />
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {conditions.map((cond: any) => (
+                  <React.Fragment key={cond.id}>
+                    <tr
+                      id={`record-${cond.id}`}
+                      className={`cursor-pointer transition-colors ${highlightId === cond.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => toggle(cond.id)}
+                    >
+                      <TD>{fmt(cond.onsetDateTime || cond.recordedDate)}</TD>
+                      <TD>
+                        {cond.code?.coding?.[0]?.display ||
+                          cond.code?.text ||
+                          '—'}
+                      </TD>
+                      <TD>
+                        <StatusBadge
+                          status={cond.clinicalStatus?.coding?.[0]?.code}
+                        />
+                      </TD>
+                      <TD>
+                        {cond.severity?.coding?.[0]?.display ||
+                          cond.severity?.text ||
+                          '—'}
+                      </TD>
+                      <TD>
+                        {cond.category?.[0]?.coding?.[0]?.display ||
+                          cond.category?.[0]?.text ||
+                          '—'}
+                      </TD>
+                      <td className="px-4 py-3 text-right">
+                        <ExpandToggle open={expandedId === cond.id} />
+                      </td>
+                    </tr>
+                    {expandedId === cond.id && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                        >
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                            <div>
+                              <span className="font-medium">ID:</span> {cond.id}
+                            </div>
+                            <div>
+                              <span className="font-medium">Verification:</span>{' '}
+                              {cond.verificationStatus?.coding?.[0]?.code ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Recorded:</span>{' '}
+                              {fmt(cond.recordedDate)}
+                            </div>
+                            <div>
+                              <span className="font-medium">Recorder:</span>{' '}
+                              {cond.recorder?.display ||
+                                cond.recorder?.reference ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Asserter:</span>{' '}
+                              {cond.asserter?.display ||
+                                cond.asserter?.reference ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Encounter:</span>{' '}
+                              {cond.encounter?.reference || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Body Site:</span>{' '}
+                              {cond.bodySite
+                                ?.map(
+                                  (b: any) => b.coding?.[0]?.display || b.text,
+                                )
+                                .filter(Boolean)
+                                .join(', ') || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Note:</span>{' '}
+                              {cond.note?.map((n: any) => n.text).join('; ') ||
+                                '—'}
+                            </div>
+                            {cond.abatementDateTime && (
+                              <div>
+                                <span className="font-medium">Abatement:</span>{' '}
+                                {fmt(cond.abatementDateTime)}
+                              </div>
+                            )}
+                            {cond.stage?.length ? (
+                              <div className="col-span-2">
+                                <span className="font-medium">Stage:</span>{' '}
+                                {cond.stage
+                                  .map(
+                                    (s: any) =>
+                                      s.summary?.coding?.[0]?.display ||
+                                      s.summary?.text,
+                                  )
+                                  .filter(Boolean)
+                                  .join(', ')}
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          total={condBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={condBundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
@@ -815,81 +1285,129 @@ const PatientRecordsPage: React.FC = () => {
   const renderEncounterTab = () => {
     return (
       <div>
-        {showFilter && <FilterPanel filters={ENC_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={encBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={encBundle?.link as Array<{ relation: string; url: string }>} />
-        {encLoading ? <Loading /> : !encounters.length ? <Empty /> : (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-              {['Type', 'Status', 'Chief Complaint'].map((h) => (
-                <TH key={h}>{h}</TH>
-              ))}
-              <TH />
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {encounters.map((enc: any) => (
-              <React.Fragment key={enc.id}>
-                <tr
-                  id={`record-${enc.id}`}
-                  className={`cursor-pointer transition-colors ${highlightId === enc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => toggle(enc.id)}
-                >
-                  <TD>{fmt(enc.actualPeriod?.start || enc.period?.start)}</TD>
-                  <TD>
-                    {enc.type?.[0]?.text ||
-                      enc.class?.[0]?.coding?.[0]?.display ||
-                      '—'}
-                  </TD>
-                  <TD>
-                    <StatusBadge status={enc.status} />
-                  </TD>
-                  <TD>{enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}</TD>
-                  <td className="px-4 py-3 text-right">
-                    <ExpandToggle open={expandedId === enc.id} />
-                  </td>
-                </tr>
-                {expandedId === enc.id && (
-                  <tr>
-                    <td colSpan={5} className="bg-gray-50 px-6 py-4 text-sm">
-                      <div className="grid grid-cols-2 gap-2 text-gray-700">
-                        <div><span className="font-medium">Encounter ID:</span> {enc.id}</div>
-                        <div><span className="font-medium">Identifier:</span> {enc.identifier?.[0]?.value || '—'}</div>
-                        <div>
-                          <span className="font-medium">Period:</span>{' '}
-                          {fmt(enc.actualPeriod?.start || enc.period?.start)} →{' '}
-                          {fmt(enc.actualPeriod?.end || enc.period?.end)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Location:</span>{' '}
-                          {enc.location
-                            ?.map(
-                              (l: any) =>
-                                l.location?.identifier?.value || l.location?.reference || '—',
-                            )
-                            .join(', ') || '—'}
-                        </div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Participants:</span>{' '}
-                          {enc.participant
-                            ?.map(
-                              (p: any) => p.actor?.display || p.actor?.reference || '—',
-                            )
-                            .join(', ') || '—'}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={ENC_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={encBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={encBundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={encBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={encBundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {encLoading ? (
+          <Loading />
+        ) : !encounters.length ? (
+          <Empty />
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader
+                    label="Date"
+                    sortDir={sortDir}
+                    onToggle={() =>
+                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                    }
+                  />
+                  {['Type', 'Status', 'Chief Complaint'].map((h) => (
+                    <TH key={h}>{h}</TH>
+                  ))}
+                  <TH />
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {encounters.map((enc: any) => (
+                  <React.Fragment key={enc.id}>
+                    <tr
+                      id={`record-${enc.id}`}
+                      className={`cursor-pointer transition-colors ${highlightId === enc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => toggle(enc.id)}
+                    >
+                      <TD>
+                        {fmt(enc.actualPeriod?.start || enc.period?.start)}
+                      </TD>
+                      <TD>
+                        {enc.type?.[0]?.text ||
+                          enc.class?.[0]?.coding?.[0]?.display ||
+                          '—'}
+                      </TD>
+                      <TD>
+                        <StatusBadge status={enc.status} />
+                      </TD>
+                      <TD>
+                        {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
+                      </TD>
+                      <td className="px-4 py-3 text-right">
+                        <ExpandToggle open={expandedId === enc.id} />
+                      </td>
+                    </tr>
+                    {expandedId === enc.id && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="bg-gray-50 px-6 py-4 text-sm"
+                        >
+                          <div className="grid grid-cols-2 gap-2 text-gray-700">
+                            <div>
+                              <span className="font-medium">Encounter ID:</span>{' '}
+                              {enc.id}
+                            </div>
+                            <div>
+                              <span className="font-medium">Identifier:</span>{' '}
+                              {enc.identifier?.[0]?.value || '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Period:</span>{' '}
+                              {fmt(
+                                enc.actualPeriod?.start || enc.period?.start,
+                              )}{' '}
+                              → {fmt(enc.actualPeriod?.end || enc.period?.end)}
+                            </div>
+                            <div>
+                              <span className="font-medium">Location:</span>{' '}
+                              {enc.location
+                                ?.map(
+                                  (l: any) =>
+                                    l.location?.identifier?.value ||
+                                    l.location?.reference ||
+                                    '—',
+                                )
+                                .join(', ') || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Participants:</span>{' '}
+                              {enc.participant
+                                ?.map(
+                                  (p: any) =>
+                                    p.actor?.display ||
+                                    p.actor?.reference ||
+                                    '—',
+                                )
+                                .join(', ') || '—'}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          total={encBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={encBundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
@@ -897,107 +1415,155 @@ const PatientRecordsPage: React.FC = () => {
   const renderObservationTab = () => {
     return (
       <div>
-        {showFilter && <FilterPanel filters={OBS_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={obsBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={obsBundle?.link as Array<{ relation: string; url: string }>} />
-        {obsLoading ? <Loading /> : !observations.length ? <Empty /> : (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-              {['Code', 'Category', 'Value', 'Status'].map((h) => (
-                <TH key={h}>{h}</TH>
-              ))}
-              <TH />
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {observations.map((obs: any) => {
-              const value = obs.valueQuantity
-                ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
-                : obs.valueString ||
-                  obs.valueCodeableConcept?.text ||
-                  (obs.component?.length ? `${obs.component.length} components` : '—');
-              return (
-                <React.Fragment key={obs.id}>
-                <tr
-                  id={`record-${obs.id}`}
-                  className={`cursor-pointer transition-colors ${highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => toggle(obs.id)}
-                >
-                    <TD>{fmt(obs.effectiveDateTime)}</TD>
-                    <TD>
-                      {obs.code?.coding?.[0]?.display ||
-                        obs.code?.text ||
-                        obs.code?.coding?.[0]?.code ||
-                        '—'}
-                    </TD>
-                    <TD>
-                      {obs.category?.[0]?.coding?.[0]?.display ||
-                        obs.category?.[0]?.coding?.[0]?.code ||
-                        '—'}
-                    </TD>
-                    <TD>{value}</TD>
-                    <TD>
-                      <StatusBadge status={obs.status} />
-                    </TD>
-                    <td className="px-4 py-3 text-right">
-                      <ExpandToggle open={expandedId === obs.id} />
-                    </td>
-                  </tr>
-                  {expandedId === obs.id && (
-                    <tr>
-                      <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
-                        {obs.component?.length ? (
-                          <div>
-                            <p className="font-medium mb-2">Components:</p>
-                            <table className="text-xs border border-gray-200 rounded">
-                              <thead className="bg-gray-100">
-                                <tr>
-                                  <th className="px-3 py-1 text-left">Code</th>
-                                  <th className="px-3 py-1 text-left">Value</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {obs.component.map((c: any, i: number) => (
-                                  <tr key={i} className="border-t border-gray-200">
-                                    <td className="px-3 py-1">
-                                      {c.code?.coding?.[0]?.display || c.code?.text || '—'}
-                                    </td>
-                                    <td className="px-3 py-1">
-                                      {c.valueQuantity
-                                        ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
-                                        : c.valueString || '—'}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div><span className="font-medium">Value:</span> {value}</div>
-                            <div>
-                              <span className="font-medium">Interpretation:</span>{' '}
-                              {obs.interpretation?.[0]?.coding?.[0]?.display || '—'}
-                            </div>
-                            <div className="col-span-2">
-                              <span className="font-medium">Note:</span>{' '}
-                              {obs.note?.[0]?.text || '—'}
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={OBS_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={obsBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={obsBundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={obsBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={obsBundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {obsLoading ? (
+          <Loading />
+        ) : !observations.length ? (
+          <Empty />
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader
+                    label="Date"
+                    sortDir={sortDir}
+                    onToggle={() =>
+                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                    }
+                  />
+                  {['Code', 'Category', 'Value', 'Status'].map((h) => (
+                    <TH key={h}>{h}</TH>
+                  ))}
+                  <TH />
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {observations.map((obs: any) => {
+                  const value = obs.valueQuantity
+                    ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
+                    : obs.valueString ||
+                      obs.valueCodeableConcept?.text ||
+                      (obs.component?.length
+                        ? `${obs.component.length} components`
+                        : '—');
+                  return (
+                    <React.Fragment key={obs.id}>
+                      <tr
+                        id={`record-${obs.id}`}
+                        className={`cursor-pointer transition-colors ${highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggle(obs.id)}
+                      >
+                        <TD>{fmt(obs.effectiveDateTime)}</TD>
+                        <TD>
+                          {obs.code?.coding?.[0]?.display ||
+                            obs.code?.text ||
+                            obs.code?.coding?.[0]?.code ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          {obs.category?.[0]?.coding?.[0]?.display ||
+                            obs.category?.[0]?.coding?.[0]?.code ||
+                            '—'}
+                        </TD>
+                        <TD>{value}</TD>
+                        <TD>
+                          <StatusBadge status={obs.status} />
+                        </TD>
+                        <td className="px-4 py-3 text-right">
+                          <ExpandToggle open={expandedId === obs.id} />
+                        </td>
+                      </tr>
+                      {expandedId === obs.id && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                          >
+                            {obs.component?.length ? (
+                              <div>
+                                <p className="font-medium mb-2">Components:</p>
+                                <table className="text-xs border border-gray-200 rounded">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="px-3 py-1 text-left">
+                                        Code
+                                      </th>
+                                      <th className="px-3 py-1 text-left">
+                                        Value
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {obs.component.map((c: any, i: number) => (
+                                      <tr
+                                        key={i}
+                                        className="border-t border-gray-200"
+                                      >
+                                        <td className="px-3 py-1">
+                                          {c.code?.coding?.[0]?.display ||
+                                            c.code?.text ||
+                                            '—'}
+                                        </td>
+                                        <td className="px-3 py-1">
+                                          {c.valueQuantity
+                                            ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
+                                            : c.valueString || '—'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="font-medium">Value:</span>{' '}
+                                  {value}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Interpretation:
+                                  </span>{' '}
+                                  {obs.interpretation?.[0]?.coding?.[0]
+                                    ?.display || '—'}
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="font-medium">Note:</span>{' '}
+                                  {obs.note?.[0]?.text || '—'}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          total={obsBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={obsBundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
@@ -1005,185 +1571,269 @@ const PatientRecordsPage: React.FC = () => {
   const renderOrdersTab = () => {
     return (
       <div>
-        {showFilter && <FilterPanel filters={SR_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={srBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={srBundle?.link as Array<{ relation: string; url: string }>} />
-        {srLoading ? <Loading /> : !serviceRequests.length ? <Empty /> : (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-              {['Order', 'Category', 'Status', 'Priority'].map((h) => (
-                <TH key={h}>{h}</TH>
-              ))}
-              <TH />
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {serviceRequests.map((sr: any) => (
-              <React.Fragment key={sr.id}>
-                <tr
-                  id={`record-${sr.id}`}
-                  className={`cursor-pointer transition-colors ${highlightId === sr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => toggle(sr.id)}
-                >
-                  <TD>{fmt(sr.authoredOn)}</TD>
-                  <TD>
-                    {sr.code?.coding?.[0]?.display || sr.code?.text || '—'}
-                  </TD>
-                  <TD>
-                    {sr.category?.[0]?.coding?.[0]?.display ||
-                      sr.category?.[0]?.coding?.[0]?.code ||
-                      '—'}
-                  </TD>
-                  <TD>
-                    <StatusBadge status={sr.status} />
-                  </TD>
-                  <TD>{sr.priority || '—'}</TD>
-                  <td className="px-4 py-3 text-right">
-                    <ExpandToggle open={expandedId === sr.id} />
-                  </td>
-                </tr>
-                {expandedId === sr.id && (
-                  <tr>
-                    <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm">
-                      <div className="grid grid-cols-2 gap-2 text-gray-700">
-                        <div>
-                          <span className="font-medium">Requester:</span>{' '}
-                          {sr.requester?.display || sr.requester?.reference || '—'}
-                        </div>
-                        <div>
-                          <span className="font-medium">Performer:</span>{' '}
-                          {sr.performer?.[0]?.display || '—'}
-                        </div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Note:</span>{' '}
-                          {sr.note?.[0]?.text || '—'}
-                        </div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Reason:</span>{' '}
-                          {sr.reasonCode?.[0]?.text ||
-                            sr.reason?.[0]?.concept?.text ||
-                            '—'}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={SR_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={srBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={srBundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={srBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={srBundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {srLoading ? (
+          <Loading />
+        ) : !serviceRequests.length ? (
+          <Empty />
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader
+                    label="Date"
+                    sortDir={sortDir}
+                    onToggle={() =>
+                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                    }
+                  />
+                  {['Order', 'Category', 'Status', 'Priority'].map((h) => (
+                    <TH key={h}>{h}</TH>
+                  ))}
+                  <TH />
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {serviceRequests.map((sr: any) => (
+                  <React.Fragment key={sr.id}>
+                    <tr
+                      id={`record-${sr.id}`}
+                      className={`cursor-pointer transition-colors ${highlightId === sr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => toggle(sr.id)}
+                    >
+                      <TD>{fmt(sr.authoredOn)}</TD>
+                      <TD>
+                        {sr.code?.coding?.[0]?.display || sr.code?.text || '—'}
+                      </TD>
+                      <TD>
+                        {sr.category?.[0]?.coding?.[0]?.display ||
+                          sr.category?.[0]?.coding?.[0]?.code ||
+                          '—'}
+                      </TD>
+                      <TD>
+                        <StatusBadge status={sr.status} />
+                      </TD>
+                      <TD>{sr.priority || '—'}</TD>
+                      <td className="px-4 py-3 text-right">
+                        <ExpandToggle open={expandedId === sr.id} />
+                      </td>
+                    </tr>
+                    {expandedId === sr.id && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="bg-gray-50 px-6 py-4 text-sm"
+                        >
+                          <div className="grid grid-cols-2 gap-2 text-gray-700">
+                            <div>
+                              <span className="font-medium">Requester:</span>{' '}
+                              {sr.requester?.display ||
+                                sr.requester?.reference ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Performer:</span>{' '}
+                              {sr.performer?.[0]?.display || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Note:</span>{' '}
+                              {sr.note?.[0]?.text || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Reason:</span>{' '}
+                              {sr.reasonCode?.[0]?.text ||
+                                sr.reason?.[0]?.concept?.text ||
+                                '—'}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          total={srBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={srBundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
 
-  const renderDiagnosticReportTable = (reports: any[], loading: boolean, bundle?: any) => {
+  const renderDiagnosticReportTable = (
+    reports: any[],
+    loading: boolean,
+    bundle?: any,
+  ) => {
     return (
       <div>
-        {showFilter && <FilterPanel filters={DR_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={bundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={bundle?.link as Array<{ relation: string; url: string }>} />
-        {loading ? <Loading /> : !reports.length ? <Empty /> : (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-              {['Report', 'Status', 'Performer'].map((h) => (
-                <TH key={h}>{h}</TH>
-              ))}
-              <TH />
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {reports.map((dr: any) => (
-              <React.Fragment key={dr.id}>
-                <tr
-                  id={`record-${dr.id}`}
-                  className={`cursor-pointer transition-colors ${highlightId === dr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => toggle(dr.id)}
-                >
-                  <TD>{fmt(dr.effectiveDateTime || dr.issued)}</TD>
-                  <TD>
-                    {dr.code?.text || dr.code?.coding?.[0]?.display || '—'}
-                  </TD>
-                  <TD>
-                    <StatusBadge status={dr.status} />
-                  </TD>
-                  <TD>{dr.performer?.[0]?.display || '—'}</TD>
-                  <td className="px-4 py-3 text-right">
-                    <ExpandToggle open={expandedId === dr.id} />
-                  </td>
-                </tr>
-                {expandedId === dr.id && (
-                  <tr>
-                    <td colSpan={5} className="bg-gray-50 px-6 py-4 text-sm">
-                      <div className="grid grid-cols-2 gap-2 text-gray-700 mb-3">
-                        <div><span className="font-medium">Report ID:</span> {dr.id}</div>
-                        <div><span className="font-medium">Issued:</span> {fmt(dr.issued)}</div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Category:</span>{' '}
-                          {dr.category
-                            ?.map(
-                              (c: any) =>
-                                c.coding?.[0]?.display || c.coding?.[0]?.code || c.text,
-                            )
-                            .join(', ') || '—'}
-                        </div>
-                      </div>
-                      {dr.result?.length ? (
-                        <div className="mb-3">
-                          <p className="font-medium mb-2">Results:</p>
-                          <ul className="list-disc list-inside text-xs space-y-1">
-                            {dr.result.map((ref: any, i: number) => {
-                              const refId = ref.reference?.split('/')?.[1];
-                              const contained = (dr.contained ?? []).find(
-                                (c: any) => c.id === refId,
-                              );
-                              if (contained) {
-                                const label =
-                                  contained.code?.coding?.[0]?.display ||
-                                  contained.code?.text ||
-                                  ref.display ||
-                                  ref.reference;
-                                const val = contained.component?.length
-                                  ? contained.component
-                                      .map(
-                                        (c: any) =>
-                                          `${c.code?.coding?.[0]?.display || '?'}: ${
-                                            c.valueQuantity
-                                              ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
-                                              : c.valueString || '—'
-                                          }`,
-                                      )
-                                      .join(', ')
-                                  : contained.valueQuantity
-                                  ? `${contained.valueQuantity.value} ${contained.valueQuantity.unit ?? ''}`.trim()
-                                  : '—';
-                                return <li key={i}>{label}: {val}</li>;
-                              }
-                              return <li key={i}>{ref.display || ref.reference}</li>;
-                            })}
-                          </ul>
-                        </div>
-                      ) : null}
-                      <div>
-                        <span className="font-medium">Conclusion:</span>{' '}
-                        {dr.conclusion || '—'}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={DR_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={bundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={bundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={bundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={bundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {loading ? (
+          <Loading />
+        ) : !reports.length ? (
+          <Empty />
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader
+                    label="Date"
+                    sortDir={sortDir}
+                    onToggle={() =>
+                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                    }
+                  />
+                  {['Report', 'Status', 'Performer'].map((h) => (
+                    <TH key={h}>{h}</TH>
+                  ))}
+                  <TH />
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {reports.map((dr: any) => (
+                  <React.Fragment key={dr.id}>
+                    <tr
+                      id={`record-${dr.id}`}
+                      className={`cursor-pointer transition-colors ${highlightId === dr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => toggle(dr.id)}
+                    >
+                      <TD>{fmt(dr.effectiveDateTime || dr.issued)}</TD>
+                      <TD>
+                        {dr.code?.text || dr.code?.coding?.[0]?.display || '—'}
+                      </TD>
+                      <TD>
+                        <StatusBadge status={dr.status} />
+                      </TD>
+                      <TD>{dr.performer?.[0]?.display || '—'}</TD>
+                      <td className="px-4 py-3 text-right">
+                        <ExpandToggle open={expandedId === dr.id} />
+                      </td>
+                    </tr>
+                    {expandedId === dr.id && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="bg-gray-50 px-6 py-4 text-sm"
+                        >
+                          <div className="grid grid-cols-2 gap-2 text-gray-700 mb-3">
+                            <div>
+                              <span className="font-medium">Report ID:</span>{' '}
+                              {dr.id}
+                            </div>
+                            <div>
+                              <span className="font-medium">Issued:</span>{' '}
+                              {fmt(dr.issued)}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Category:</span>{' '}
+                              {dr.category
+                                ?.map(
+                                  (c: any) =>
+                                    c.coding?.[0]?.display ||
+                                    c.coding?.[0]?.code ||
+                                    c.text,
+                                )
+                                .join(', ') || '—'}
+                            </div>
+                          </div>
+                          {dr.result?.length ? (
+                            <div className="mb-3">
+                              <p className="font-medium mb-2">Results:</p>
+                              <ul className="list-disc list-inside text-xs space-y-1">
+                                {dr.result.map((ref: any, i: number) => {
+                                  const refId = ref.reference?.split('/')?.[1];
+                                  const contained = (dr.contained ?? []).find(
+                                    (c: any) => c.id === refId,
+                                  );
+                                  if (contained) {
+                                    const label =
+                                      contained.code?.coding?.[0]?.display ||
+                                      contained.code?.text ||
+                                      ref.display ||
+                                      ref.reference;
+                                    const val = contained.component?.length
+                                      ? contained.component
+                                          .map(
+                                            (c: any) =>
+                                              `${c.code?.coding?.[0]?.display || '?'}: ${
+                                                c.valueQuantity
+                                                  ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
+                                                  : c.valueString || '—'
+                                              }`,
+                                          )
+                                          .join(', ')
+                                      : contained.valueQuantity
+                                        ? `${contained.valueQuantity.value} ${contained.valueQuantity.unit ?? ''}`.trim()
+                                        : '—';
+                                    return (
+                                      <li key={i}>
+                                        {label}: {val}
+                                      </li>
+                                    );
+                                  }
+                                  return (
+                                    <li key={i}>
+                                      {ref.display || ref.reference}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          ) : null}
+                          <div>
+                            <span className="font-medium">Conclusion:</span>{' '}
+                            {dr.conclusion || '—'}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          total={bundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={bundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
@@ -1198,103 +1848,212 @@ const PatientRecordsPage: React.FC = () => {
     const renderRequests = () => {
       return (
         <div>
-          {showFilter && <FilterPanel filters={MED_REQ_FILTERS} values={filterValues} onChange={setFilterValues} />}
-          <Pagination total={medReqBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medReqBundle?.link as Array<{ relation: string; url: string }>} />
-          {medReqLoading ? <Loading /> : !medRequests.length ? <Empty /> : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-                {['Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
-                  <TH key={h}>{h}</TH>
-                ))}
-                <TH />
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {medRequests.map((mr: any) => (
-                <React.Fragment key={mr.id}>
-                  <tr
-                    id={`record-${mr.id}`}
-                    className={`cursor-pointer transition-colors ${highlightId === mr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                    onClick={() => toggle(mr.id)}
-                  >
-                    <TD>{fmt(mr.authoredOn)}</TD>
-                    <TD>
-                      {mr.medication?.concept?.text ||
-                        mr.medication?.concept?.coding?.[0]?.display ||
-                        mr.medication?.reference?.display ||
-                        '—'}
-                    </TD>
-                    <TD>
-                      <StatusBadge status={mr.status} />
-                    </TD>
-                    <TD>
-                      {mr.dosageInstruction?.[0]?.text ||
-                        (mr.dosageInstruction?.[0]?.timing?.repeat?.frequency
-                          ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
-                          : '—')}
-                    </TD>
-                    <TD>
-                      {mr.reasonCode?.[0]?.text ||
-                        mr.reasonCode?.[0]?.coding?.[0]?.display ||
-                        mr.reason?.[0]?.concept?.text ||
-                        mr.reason?.[0]?.concept?.coding?.[0]?.display ||
-                        mr.reason?.[0]?.reference?.display ||
-                        '—'}
-                    </TD>
-                    <td className="px-4 py-3 text-right">
-                      <ExpandToggle open={expandedId === mr.id} />
-                    </td>
-                  </tr>
-                  {expandedId === mr.id && (
-                    <tr>
-                      <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                          <div><span className="font-medium">ID:</span> {mr.id || '—'}</div>
-                          <div><span className="font-medium">Identifier:</span> {mr.identifier?.[0]?.value || '—'}</div>
-                          <div><span className="font-medium">Intent:</span> {mr.intent || '—'}</div>
-                          <div><span className="font-medium">Priority:</span> {mr.priority || '—'}</div>
-                          <div><span className="font-medium">Requester:</span> {mr.requester?.display || mr.requester?.reference || '—'}</div>
-                          <div><span className="font-medium">Encounter:</span> {mr.encounter?.reference || '—'}</div>
-                          <div>
-                            <span className="font-medium">Reason:</span>{' '}
-                            {mr.reasonCode?.[0]?.text ||
-                              mr.reasonCode?.[0]?.coding?.[0]?.display ||
-                              mr.reason?.[0]?.concept?.text ||
-                              mr.reason?.[0]?.concept?.coding?.[0]?.display ||
-                              mr.reason?.[0]?.reference?.display || '—'}
-                          </div>
-                          <div><span className="font-medium">Subject:</span> {mr.subject?.reference || '—'}</div>
-                          <div className="col-span-2">
-                            <span className="font-medium">Dosage Instructions:</span>{' '}
-                            {mr.dosageInstruction?.map((d: any) => {
-                              const parts = [
-                                d.text,
-                                d.route?.coding?.[0]?.display ? `Route: ${d.route.coding[0].display}` : null,
-                                d.timing?.repeat?.frequency ? `${d.timing.repeat.frequency}× per ${d.timing.repeat.period} ${d.timing.repeat.periodUnit}` : null,
-                                d.doseAndRate?.[0]?.doseQuantity ? `Dose: ${d.doseAndRate[0].doseQuantity.value} ${d.doseAndRate[0].doseQuantity.unit}` : null,
-                              ].filter(Boolean).join(' | ');
-                              return parts || null;
-                            }).filter(Boolean).join('; ') || '—'}
-                          </div>
-                          <div><span className="font-medium">Dispense Qty:</span> {mr.dispenseRequest?.quantity?.value != null ? `${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim() : '—'}</div>
-                          <div><span className="font-medium">Supply Duration:</span> {mr.dispenseRequest?.expectedSupplyDuration?.value != null ? `${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim() : '—'}</div>
-                          <div><span className="font-medium">Repeats Allowed:</span> {mr.dispenseRequest?.numberOfRepeatsAllowed ?? '—'}</div>
-                          <div><span className="font-medium">Substitution Allowed:</span> {mr.substitution?.allowedBoolean != null ? (mr.substitution.allowedBoolean ? 'Yes' : 'No') : mr.substitution?.allowedCodeableConcept?.text || '—'}</div>
-                          <div className="col-span-2"><span className="font-medium">Note:</span> {mr.note?.map((n: any) => n.text).join('; ') || '—'}</div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {showFilter && (
+            <FilterPanel
+              filters={MED_REQ_FILTERS}
+              values={filterValues}
+              onChange={setFilterValues}
+            />
           )}
-          <Pagination total={medReqBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medReqBundle?.link as Array<{ relation: string; url: string }>} />
+          <Pagination
+            total={medReqBundle?.total}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            onChange={setCurrentPage}
+            links={
+              medReqBundle?.link as Array<{ relation: string; url: string }>
+            }
+          />
+          {medReqLoading ? (
+            <Loading />
+          ) : !medRequests.length ? (
+            <Empty />
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <SortHeader
+                      label="Date"
+                      sortDir={sortDir}
+                      onToggle={() =>
+                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                      }
+                    />
+                    {['Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
+                      <TH key={h}>{h}</TH>
+                    ))}
+                    <TH />
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {medRequests.map((mr: any) => (
+                    <React.Fragment key={mr.id}>
+                      <tr
+                        id={`record-${mr.id}`}
+                        className={`cursor-pointer transition-colors ${highlightId === mr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggle(mr.id)}
+                      >
+                        <TD>{fmt(mr.authoredOn)}</TD>
+                        <TD>
+                          {mr.medication?.concept?.text ||
+                            mr.medication?.concept?.coding?.[0]?.display ||
+                            mr.medication?.reference?.display ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          <StatusBadge status={mr.status} />
+                        </TD>
+                        <TD>
+                          {mr.dosageInstruction?.[0]?.text ||
+                            (mr.dosageInstruction?.[0]?.timing?.repeat
+                              ?.frequency
+                              ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
+                              : '—')}
+                        </TD>
+                        <TD>
+                          {mr.reasonCode?.[0]?.text ||
+                            mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                            mr.reason?.[0]?.concept?.text ||
+                            mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                            mr.reason?.[0]?.reference?.display ||
+                            '—'}
+                        </TD>
+                        <td className="px-4 py-3 text-right">
+                          <ExpandToggle open={expandedId === mr.id} />
+                        </td>
+                      </tr>
+                      {expandedId === mr.id && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                          >
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                              <div>
+                                <span className="font-medium">ID:</span>{' '}
+                                {mr.id || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Identifier:</span>{' '}
+                                {mr.identifier?.[0]?.value || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Intent:</span>{' '}
+                                {mr.intent || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Priority:</span>{' '}
+                                {mr.priority || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Requester:</span>{' '}
+                                {mr.requester?.display ||
+                                  mr.requester?.reference ||
+                                  '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Encounter:</span>{' '}
+                                {mr.encounter?.reference || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Reason:</span>{' '}
+                                {mr.reasonCode?.[0]?.text ||
+                                  mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                                  mr.reason?.[0]?.concept?.text ||
+                                  mr.reason?.[0]?.concept?.coding?.[0]
+                                    ?.display ||
+                                  mr.reason?.[0]?.reference?.display ||
+                                  '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Subject:</span>{' '}
+                                {mr.subject?.reference || '—'}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="font-medium">
+                                  Dosage Instructions:
+                                </span>{' '}
+                                {mr.dosageInstruction
+                                  ?.map((d: any) => {
+                                    const parts = [
+                                      d.text,
+                                      d.route?.coding?.[0]?.display
+                                        ? `Route: ${d.route.coding[0].display}`
+                                        : null,
+                                      d.timing?.repeat?.frequency
+                                        ? `${d.timing.repeat.frequency}× per ${d.timing.repeat.period} ${d.timing.repeat.periodUnit}`
+                                        : null,
+                                      d.doseAndRate?.[0]?.doseQuantity
+                                        ? `Dose: ${d.doseAndRate[0].doseQuantity.value} ${d.doseAndRate[0].doseQuantity.unit}`
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' | ');
+                                    return parts || null;
+                                  })
+                                  .filter(Boolean)
+                                  .join('; ') || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Dispense Qty:
+                                </span>{' '}
+                                {mr.dispenseRequest?.quantity?.value != null
+                                  ? `${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim()
+                                  : '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Supply Duration:
+                                </span>{' '}
+                                {mr.dispenseRequest?.expectedSupplyDuration
+                                  ?.value != null
+                                  ? `${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim()
+                                  : '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Repeats Allowed:
+                                </span>{' '}
+                                {mr.dispenseRequest?.numberOfRepeatsAllowed ??
+                                  '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Substitution Allowed:
+                                </span>{' '}
+                                {mr.substitution?.allowedBoolean != null
+                                  ? mr.substitution.allowedBoolean
+                                    ? 'Yes'
+                                    : 'No'
+                                  : mr.substitution?.allowedCodeableConcept
+                                      ?.text || '—'}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="font-medium">Note:</span>{' '}
+                                {mr.note?.map((n: any) => n.text).join('; ') ||
+                                  '—'}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Pagination
+            total={medReqBundle?.total}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            onChange={setCurrentPage}
+            links={
+              medReqBundle?.link as Array<{ relation: string; url: string }>
+            }
+          />
         </div>
       );
     };
@@ -1302,68 +2061,107 @@ const PatientRecordsPage: React.FC = () => {
     const renderDispenses = () => {
       return (
         <div>
-          {showFilter && <FilterPanel filters={MED_DISP_FILTERS} values={filterValues} onChange={setFilterValues} />}
-          <Pagination total={medDispBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medDispBundle?.link as Array<{ relation: string; url: string }>} />
-          {medDispLoading ? <Loading /> : !medDispenses.length ? <Empty /> : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-                {['Medication', 'Status', 'Quantity'].map((h) => (
-                  <TH key={h}>{h}</TH>
-                ))}
-                <TH />
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {medDispenses.map((md: any) => (
-                <React.Fragment key={md.id}>
-                  <tr
-                    id={`record-${md.id}`}
-                    className={`cursor-pointer transition-colors ${highlightId === md.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                    onClick={() => toggle(md.id)}
-                  >
-                    <TD>{fmt(md.whenHandedOver || md.whenPrepared)}</TD>
-                    <TD>
-                      {md.medication?.concept?.text ||
-                        md.medication?.concept?.coding?.[0]?.display ||
-                        '—'}
-                    </TD>
-                    <TD>
-                      <StatusBadge status={md.status} />
-                    </TD>
-                    <TD>
-                      {md.quantity?.value != null
-                        ? `${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()
-                        : '—'}
-                    </TD>
-                    <td className="px-4 py-3 text-right">
-                      <ExpandToggle open={expandedId === md.id} />
-                    </td>
-                  </tr>
-                  {expandedId === md.id && (
-                    <tr>
-                      <td colSpan={5} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><span className="font-medium">ID:</span> {md.id}</div>
-                          <div>
-                            <span className="font-medium">Days Supply:</span>{' '}
-                            {md.daysSupply?.value != null
-                              ? `${md.daysSupply.value} ${md.daysSupply.unit ?? ''}`.trim()
-                              : '—'}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {showFilter && (
+            <FilterPanel
+              filters={MED_DISP_FILTERS}
+              values={filterValues}
+              onChange={setFilterValues}
+            />
           )}
-          <Pagination total={medDispBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medDispBundle?.link as Array<{ relation: string; url: string }>} />
+          <Pagination
+            total={medDispBundle?.total}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            onChange={setCurrentPage}
+            links={
+              medDispBundle?.link as Array<{ relation: string; url: string }>
+            }
+          />
+          {medDispLoading ? (
+            <Loading />
+          ) : !medDispenses.length ? (
+            <Empty />
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <SortHeader
+                      label="Date"
+                      sortDir={sortDir}
+                      onToggle={() =>
+                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                      }
+                    />
+                    {['Medication', 'Status', 'Quantity'].map((h) => (
+                      <TH key={h}>{h}</TH>
+                    ))}
+                    <TH />
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {medDispenses.map((md: any) => (
+                    <React.Fragment key={md.id}>
+                      <tr
+                        id={`record-${md.id}`}
+                        className={`cursor-pointer transition-colors ${highlightId === md.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggle(md.id)}
+                      >
+                        <TD>{fmt(md.whenHandedOver || md.whenPrepared)}</TD>
+                        <TD>
+                          {md.medication?.concept?.text ||
+                            md.medication?.concept?.coding?.[0]?.display ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          <StatusBadge status={md.status} />
+                        </TD>
+                        <TD>
+                          {md.quantity?.value != null
+                            ? `${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()
+                            : '—'}
+                        </TD>
+                        <td className="px-4 py-3 text-right">
+                          <ExpandToggle open={expandedId === md.id} />
+                        </td>
+                      </tr>
+                      {expandedId === md.id && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                          >
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="font-medium">ID:</span> {md.id}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Days Supply:
+                                </span>{' '}
+                                {md.daysSupply?.value != null
+                                  ? `${md.daysSupply.value} ${md.daysSupply.unit ?? ''}`.trim()
+                                  : '—'}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Pagination
+            total={medDispBundle?.total}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            onChange={setCurrentPage}
+            links={
+              medDispBundle?.link as Array<{ relation: string; url: string }>
+            }
+          />
         </div>
       );
     };
@@ -1371,64 +2169,103 @@ const PatientRecordsPage: React.FC = () => {
     const renderStatements = () => {
       return (
         <div>
-          {showFilter && <FilterPanel filters={MED_STMT_FILTERS} values={filterValues} onChange={setFilterValues} />}
-          <Pagination total={medStmtBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medStmtBundle?.link as Array<{ relation: string; url: string }>} />
-          {medStmtLoading ? <Loading /> : !medStatements.length ? <Empty /> : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-                {['Medication', 'Status', 'Effective'].map((h) => (
-                  <TH key={h}>{h}</TH>
-                ))}
-                <TH />
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {medStatements.map((ms: any) => (
-                <React.Fragment key={ms.id}>
-                  <tr
-                    id={`record-${ms.id}`}
-                    className={`cursor-pointer transition-colors ${highlightId === ms.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                    onClick={() => toggle(ms.id)}
-                  >
-                    <TD>{fmt(ms.dateAsserted)}</TD>
-                    <TD>
-                      {ms.medication?.concept?.text ||
-                        ms.medication?.concept?.coding?.[0]?.display ||
-                        '—'}
-                    </TD>
-                    <TD>
-                      <StatusBadge status={ms.status} />
-                    </TD>
-                    <TD>
-                      {fmt(ms.effectivePeriod?.start || ms.effectiveDateTime)}
-                    </TD>
-                    <td className="px-4 py-3 text-right">
-                      <ExpandToggle open={expandedId === ms.id} />
-                    </td>
-                  </tr>
-                  {expandedId === ms.id && (
-                    <tr>
-                      <td colSpan={5} className="bg-gray-50 px-6 py-4 text-sm text-gray-700">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><span className="font-medium">ID:</span> {ms.id}</div>
-                          <div>
-                            <span className="font-medium">Note:</span>{' '}
-                            {ms.note?.[0]?.text || '—'}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {showFilter && (
+            <FilterPanel
+              filters={MED_STMT_FILTERS}
+              values={filterValues}
+              onChange={setFilterValues}
+            />
           )}
-          <Pagination total={medStmtBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={medStmtBundle?.link as Array<{ relation: string; url: string }>} />
+          <Pagination
+            total={medStmtBundle?.total}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            onChange={setCurrentPage}
+            links={
+              medStmtBundle?.link as Array<{ relation: string; url: string }>
+            }
+          />
+          {medStmtLoading ? (
+            <Loading />
+          ) : !medStatements.length ? (
+            <Empty />
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <SortHeader
+                      label="Date"
+                      sortDir={sortDir}
+                      onToggle={() =>
+                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                      }
+                    />
+                    {['Medication', 'Status', 'Effective'].map((h) => (
+                      <TH key={h}>{h}</TH>
+                    ))}
+                    <TH />
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {medStatements.map((ms: any) => (
+                    <React.Fragment key={ms.id}>
+                      <tr
+                        id={`record-${ms.id}`}
+                        className={`cursor-pointer transition-colors ${highlightId === ms.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggle(ms.id)}
+                      >
+                        <TD>{fmt(ms.dateAsserted)}</TD>
+                        <TD>
+                          {ms.medication?.concept?.text ||
+                            ms.medication?.concept?.coding?.[0]?.display ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          <StatusBadge status={ms.status} />
+                        </TD>
+                        <TD>
+                          {fmt(
+                            ms.effectivePeriod?.start || ms.effectiveDateTime,
+                          )}
+                        </TD>
+                        <td className="px-4 py-3 text-right">
+                          <ExpandToggle open={expandedId === ms.id} />
+                        </td>
+                      </tr>
+                      {expandedId === ms.id && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                          >
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="font-medium">ID:</span> {ms.id}
+                              </div>
+                              <div>
+                                <span className="font-medium">Note:</span>{' '}
+                                {ms.note?.[0]?.text || '—'}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Pagination
+            total={medStmtBundle?.total}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            onChange={setCurrentPage}
+            links={
+              medStmtBundle?.link as Array<{ relation: string; url: string }>
+            }
+          />
         </div>
       );
     };
@@ -1439,7 +2276,12 @@ const PatientRecordsPage: React.FC = () => {
           {subTabs.map((st) => (
             <button
               key={st.id}
-              onClick={() => { setMedSubTab(st.id); setExpandedId(null); resetSortFilter(); setCurrentPage(1); }}
+              onClick={() => {
+                setMedSubTab(st.id);
+                setExpandedId(null);
+                resetSortFilter();
+                setCurrentPage(1);
+              }}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                 medSubTab === st.id
                   ? 'bg-blue-600 text-white'
@@ -1460,92 +2302,246 @@ const PatientRecordsPage: React.FC = () => {
   const renderProcedureTab = () => {
     return (
       <div>
-        {showFilter && <FilterPanel filters={PROC_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={procBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={procBundle?.link as Array<{ relation: string; url: string }>} />
-        {procLoading ? <Loading /> : !procedures.length ? <Empty /> : (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortHeader label="Date" sortDir={sortDir} onToggle={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')} />
-              {['Procedure', 'Status', 'Performer', 'Reason'].map((h) => (
-                <TH key={h}>{h}</TH>
-              ))}
-              <TH />
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {procedures.map((proc: any) => (
-              <React.Fragment key={proc.id}>
-                <tr
-                  id={`record-${proc.id}`}
-                  className={`cursor-pointer transition-colors ${highlightId === proc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => toggle(proc.id)}
-                >
-                  <TD>
-                    {fmt(
-                      proc.performedDateTime ||
-                        proc.performedPeriod?.start ||
-                        proc.occurrenceDateTime,
-                    )}
-                  </TD>
-                  <TD>
-                    {proc.code?.coding?.[0]?.display || proc.code?.text || '—'}
-                  </TD>
-                  <TD>
-                    <StatusBadge status={proc.status} />
-                  </TD>
-                  <TD>{proc.performer?.[0]?.actor?.display || proc.performer?.[0]?.actor?.reference || '—'}</TD>
-                  <TD>
-                    {proc.reasonCode?.[0]?.text ||
-                      proc.reasonCode?.[0]?.coding?.[0]?.display ||
-                      proc.reason?.[0]?.concept?.text ||
-                      proc.reason?.[0]?.concept?.coding?.[0]?.display ||
-                      proc.reason?.[0]?.reference?.display ||
-                      '—'}
-                  </TD>
-                  <td className="px-4 py-3 text-right">
-                    <ExpandToggle open={expandedId === proc.id} />
-                  </td>
-                </tr>
-                {expandedId === proc.id && (
-                  <tr>
-                    <td colSpan={6} className="bg-gray-50 px-6 py-4 text-sm">
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
-                        <div><span className="font-medium">ID:</span> {proc.id || '—'}</div>
-                        <div><span className="font-medium">Identifier:</span> {proc.identifier?.[0]?.value || '—'}</div>
-                        <div><span className="font-medium">Category:</span> {proc.category?.coding?.[0]?.display || proc.category?.text || proc.category?.[0]?.coding?.[0]?.display || '—'}</div>
-                        <div><span className="font-medium">Status Reason:</span> {proc.statusReason?.coding?.[0]?.display || proc.statusReason?.text || '—'}</div>
-                        <div><span className="font-medium">Encounter:</span> {proc.encounter?.reference || '—'}</div>
-                        <div><span className="font-medium">Location:</span> {proc.location?.display || proc.location?.reference || '—'}</div>
-                        <div><span className="font-medium">Recorder:</span> {proc.recorder?.display || proc.recorder?.reference || '—'}</div>
-                        <div><span className="font-medium">Asserter:</span> {proc.asserter?.display || proc.asserter?.reference || '—'}</div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Performers:</span>{' '}
-                          {proc.performer?.map((p: any) => [p.function?.coding?.[0]?.display, p.actor?.display || p.actor?.reference].filter(Boolean).join(' — ')).join('; ') || '—'}
-                        </div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Reason:</span>{' '}
-                          {proc.reasonCode?.map((r: any) => r.text || r.coding?.[0]?.display).filter(Boolean).join('; ') ||
-                            proc.reason?.map((r: any) => r.concept?.text || r.concept?.coding?.[0]?.display || r.reference?.display).filter(Boolean).join('; ') || '—'}
-                        </div>
-                        <div><span className="font-medium">Body Site:</span> {proc.bodySite?.map((b: any) => b.coding?.[0]?.display || b.text).filter(Boolean).join(', ') || '—'}</div>
-                        <div><span className="font-medium">Outcome:</span> {proc.outcome?.coding?.[0]?.display || proc.outcome?.text || '—'}</div>
-                        <div><span className="font-medium">Complication:</span> {proc.complication?.map((c: any) => c.concept?.text || c.concept?.coding?.[0]?.display || c.reference?.display).filter(Boolean).join('; ') || proc.complicationDetail?.map((c: any) => c.display || c.reference).filter(Boolean).join('; ') || '—'}</div>
-                        <div><span className="font-medium">Follow-up:</span> {proc.followUp?.map((f: any) => f.coding?.[0]?.display || f.text).filter(Boolean).join(', ') || '—'}</div>
-                        <div className="col-span-2"><span className="font-medium">Used:</span> {proc.usedCode?.map((c: any) => c.coding?.[0]?.display || c.text).filter(Boolean).join(', ') || proc.used?.map((u: any) => u.concept?.text || u.reference?.display).filter(Boolean).join(', ') || '—'}</div>
-                        <div className="col-span-2"><span className="font-medium">Note:</span> {proc.note?.map((n: any) => n.text).join('; ') || '—'}</div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={PROC_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={procBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={procBundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={procBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={procBundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {procLoading ? (
+          <Loading />
+        ) : !procedures.length ? (
+          <Empty />
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader
+                    label="Date"
+                    sortDir={sortDir}
+                    onToggle={() =>
+                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                    }
+                  />
+                  {['Procedure', 'Status', 'Performer', 'Reason'].map((h) => (
+                    <TH key={h}>{h}</TH>
+                  ))}
+                  <TH />
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {procedures.map((proc: any) => (
+                  <React.Fragment key={proc.id}>
+                    <tr
+                      id={`record-${proc.id}`}
+                      className={`cursor-pointer transition-colors ${highlightId === proc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => toggle(proc.id)}
+                    >
+                      <TD>
+                        {fmt(
+                          proc.performedDateTime ||
+                            proc.performedPeriod?.start ||
+                            proc.occurrenceDateTime,
+                        )}
+                      </TD>
+                      <TD>
+                        {proc.code?.coding?.[0]?.display ||
+                          proc.code?.text ||
+                          '—'}
+                      </TD>
+                      <TD>
+                        <StatusBadge status={proc.status} />
+                      </TD>
+                      <TD>
+                        {proc.performer?.[0]?.actor?.display ||
+                          proc.performer?.[0]?.actor?.reference ||
+                          '—'}
+                      </TD>
+                      <TD>
+                        {proc.reasonCode?.[0]?.text ||
+                          proc.reasonCode?.[0]?.coding?.[0]?.display ||
+                          proc.reason?.[0]?.concept?.text ||
+                          proc.reason?.[0]?.concept?.coding?.[0]?.display ||
+                          proc.reason?.[0]?.reference?.display ||
+                          '—'}
+                      </TD>
+                      <td className="px-4 py-3 text-right">
+                        <ExpandToggle open={expandedId === proc.id} />
+                      </td>
+                    </tr>
+                    {expandedId === proc.id && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="bg-gray-50 px-6 py-4 text-sm"
+                        >
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
+                            <div>
+                              <span className="font-medium">ID:</span>{' '}
+                              {proc.id || '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Identifier:</span>{' '}
+                              {proc.identifier?.[0]?.value || '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Category:</span>{' '}
+                              {proc.category?.coding?.[0]?.display ||
+                                proc.category?.text ||
+                                proc.category?.[0]?.coding?.[0]?.display ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">
+                                Status Reason:
+                              </span>{' '}
+                              {proc.statusReason?.coding?.[0]?.display ||
+                                proc.statusReason?.text ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Encounter:</span>{' '}
+                              {proc.encounter?.reference || '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Location:</span>{' '}
+                              {proc.location?.display ||
+                                proc.location?.reference ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Recorder:</span>{' '}
+                              {proc.recorder?.display ||
+                                proc.recorder?.reference ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Asserter:</span>{' '}
+                              {proc.asserter?.display ||
+                                proc.asserter?.reference ||
+                                '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Performers:</span>{' '}
+                              {proc.performer
+                                ?.map((p: any) =>
+                                  [
+                                    p.function?.coding?.[0]?.display,
+                                    p.actor?.display || p.actor?.reference,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' — '),
+                                )
+                                .join('; ') || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Reason:</span>{' '}
+                              {proc.reasonCode
+                                ?.map(
+                                  (r: any) => r.text || r.coding?.[0]?.display,
+                                )
+                                .filter(Boolean)
+                                .join('; ') ||
+                                proc.reason
+                                  ?.map(
+                                    (r: any) =>
+                                      r.concept?.text ||
+                                      r.concept?.coding?.[0]?.display ||
+                                      r.reference?.display,
+                                  )
+                                  .filter(Boolean)
+                                  .join('; ') ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Body Site:</span>{' '}
+                              {proc.bodySite
+                                ?.map(
+                                  (b: any) => b.coding?.[0]?.display || b.text,
+                                )
+                                .filter(Boolean)
+                                .join(', ') || '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Outcome:</span>{' '}
+                              {proc.outcome?.coding?.[0]?.display ||
+                                proc.outcome?.text ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Complication:</span>{' '}
+                              {proc.complication
+                                ?.map(
+                                  (c: any) =>
+                                    c.concept?.text ||
+                                    c.concept?.coding?.[0]?.display ||
+                                    c.reference?.display,
+                                )
+                                .filter(Boolean)
+                                .join('; ') ||
+                                proc.complicationDetail
+                                  ?.map((c: any) => c.display || c.reference)
+                                  .filter(Boolean)
+                                  .join('; ') ||
+                                '—'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Follow-up:</span>{' '}
+                              {proc.followUp
+                                ?.map(
+                                  (f: any) => f.coding?.[0]?.display || f.text,
+                                )
+                                .filter(Boolean)
+                                .join(', ') || '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Used:</span>{' '}
+                              {proc.usedCode
+                                ?.map(
+                                  (c: any) => c.coding?.[0]?.display || c.text,
+                                )
+                                .filter(Boolean)
+                                .join(', ') ||
+                                proc.used
+                                  ?.map(
+                                    (u: any) =>
+                                      u.concept?.text || u.reference?.display,
+                                  )
+                                  .filter(Boolean)
+                                  .join(', ') ||
+                                '—'}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Note:</span>{' '}
+                              {proc.note?.map((n: any) => n.text).join('; ') ||
+                                '—'}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          total={procBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={procBundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
@@ -1556,76 +2552,111 @@ const PatientRecordsPage: React.FC = () => {
         <div className="flex items-center gap-2 mb-2">
           <span className="text-xs text-gray-500">Period:</span>
           <button
-            onClick={() => setSortDir((d) => d === 'desc' ? 'asc' : 'desc')}
+            onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
             className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600"
           >
             {sortDir === 'desc' ? '↓ Newest first' : '↑ Oldest first'}
           </button>
         </div>
-        {showFilter && <FilterPanel filters={CP_FILTERS} values={filterValues} onChange={setFilterValues} />}
-        <Pagination total={cpBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={cpBundle?.link as Array<{ relation: string; url: string }>} />
-        {cpLoading ? <Loading /> : !carePlans.length ? <Empty /> : (
-      <div className="space-y-4">
-        {carePlans.map((cp: any) => (
-          <div
-            key={cp.id}
-            id={`record-${cp.id}`}
-            className={`bg-white rounded-lg shadow-sm border overflow-hidden cursor-pointer transition-colors ${
-              highlightId === cp.id ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
-            }`}
-            onClick={() => toggle(cp.id)}
-          >
-            <div className="px-6 py-4 flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <h3 className="text-base font-semibold text-gray-800">
-                    {cp.title || cp.category?.[0]?.coding?.[0]?.display || 'Care Plan'}
-                  </h3>
-                  <StatusBadge status={cp.status} />
-                </div>
-                <div className="text-sm text-gray-500">
-                  Period: {fmt(cp.period?.start)} → {fmt(cp.period?.end)}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">{cp.description || '—'}</div>
-              </div>
-              <ExpandToggle open={expandedId === cp.id} />
-            </div>
-            {expandedId === cp.id && (
-              <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 text-sm text-gray-700">
-                {cp.goal?.length ? (
-                  <div className="mb-3">
-                    <p className="font-medium mb-1">Goals:</p>
-                    <ul className="list-disc list-inside space-y-1 text-xs">
-                      {cp.goal.map((g: any, i: number) => (
-                        <li key={i}>{g.display || g.reference || JSON.stringify(g)}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {cp.activity?.length ? (
-                  <div>
-                    <p className="font-medium mb-1">Activities:</p>
-                    <ul className="list-disc list-inside space-y-1 text-xs">
-                      {cp.activity.map((act: any, i: number) => {
-                        const detail = act.plannedActivityDetail || act.detail;
-                        const label =
-                          detail?.code?.coding?.[0]?.display ||
-                          detail?.code?.text ||
-                          act.reference?.display ||
-                          act.reference?.reference ||
-                          '—';
-                        return <li key={i}>{label} — {detail?.status || '—'}</li>;
-                      })}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+        {showFilter && (
+          <FilterPanel
+            filters={CP_FILTERS}
+            values={filterValues}
+            onChange={setFilterValues}
+          />
         )}
-        <Pagination total={cpBundle?.total} page={currentPage} pageSize={PAGE_SIZE} onChange={setCurrentPage} links={cpBundle?.link as Array<{ relation: string; url: string }>} />
+        <Pagination
+          total={cpBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={cpBundle?.link as Array<{ relation: string; url: string }>}
+        />
+        {cpLoading ? (
+          <Loading />
+        ) : !carePlans.length ? (
+          <Empty />
+        ) : (
+          <div className="space-y-4">
+            {carePlans.map((cp: any) => (
+              <div
+                key={cp.id}
+                id={`record-${cp.id}`}
+                className={`bg-white rounded-lg shadow-sm border overflow-hidden cursor-pointer transition-colors ${
+                  highlightId === cp.id
+                    ? 'border-amber-400 bg-amber-50'
+                    : 'border-gray-200'
+                }`}
+                onClick={() => toggle(cp.id)}
+              >
+                <div className="px-6 py-4 flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="text-base font-semibold text-gray-800">
+                        {cp.title ||
+                          cp.category?.[0]?.coding?.[0]?.display ||
+                          'Care Plan'}
+                      </h3>
+                      <StatusBadge status={cp.status} />
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Period: {fmt(cp.period?.start)} → {fmt(cp.period?.end)}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {cp.description || '—'}
+                    </div>
+                  </div>
+                  <ExpandToggle open={expandedId === cp.id} />
+                </div>
+                {expandedId === cp.id && (
+                  <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 text-sm text-gray-700">
+                    {cp.goal?.length ? (
+                      <div className="mb-3">
+                        <p className="font-medium mb-1">Goals:</p>
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                          {cp.goal.map((g: any, i: number) => (
+                            <li key={i}>
+                              {g.display || g.reference || JSON.stringify(g)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {cp.activity?.length ? (
+                      <div>
+                        <p className="font-medium mb-1">Activities:</p>
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                          {cp.activity.map((act: any, i: number) => {
+                            const detail =
+                              act.plannedActivityDetail || act.detail;
+                            const label =
+                              detail?.code?.coding?.[0]?.display ||
+                              detail?.code?.text ||
+                              act.reference?.display ||
+                              act.reference?.reference ||
+                              '—';
+                            return (
+                              <li key={i}>
+                                {label} — {detail?.status || '—'}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <Pagination
+          total={cpBundle?.total}
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          onChange={setCurrentPage}
+          links={cpBundle?.link as Array<{ relation: string; url: string }>}
+        />
       </div>
     );
   };
@@ -1643,9 +2674,13 @@ const PatientRecordsPage: React.FC = () => {
           </Link>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-xl font-bold text-gray-900">Patient Records</h1>
+              <h1 className="text-xl font-bold text-gray-900">
+                Patient Records
+              </h1>
               <span className="text-gray-600">{patientName}</span>
-              <span className="text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{mrn}</span>
+              <span className="text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                {mrn}
+              </span>
             </div>
             <div className="flex flex-col items-end gap-2">
               <button
@@ -1656,16 +2691,38 @@ const PatientRecordsPage: React.FC = () => {
                     : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
                 }`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-4 h-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                  />
                 </svg>
                 Global Search
               </button>
               {showGlobalSearch && (
                 <form onSubmit={handleSearch} className="flex gap-2 w-[480px]">
                   <div className="relative flex-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                      className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                      />
                     </svg>
                     <input
                       type="text"
@@ -1705,14 +2762,28 @@ const PatientRecordsPage: React.FC = () => {
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-3.5 h-3.5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                  />
                 </svg>
                 {searchResults
                   ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for "${searchResults.query}"`
                   : 'Search error'}
               </span>
-              <button onClick={clearSearch} className="text-xs text-blue-400 hover:text-blue-700 font-medium">
+              <button
+                onClick={clearSearch}
+                className="text-xs text-blue-400 hover:text-blue-700 font-medium"
+              >
                 Clear ×
               </button>
             </div>
@@ -1721,7 +2792,9 @@ const PatientRecordsPage: React.FC = () => {
                 {searchError}
               </div>
             ) : searchResults?.results.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">No matching records found.</p>
+              <p className="text-xs text-gray-400 py-1">
+                No matching records found.
+              </p>
             ) : (
               <div className="space-y-1">
                 {searchResults?.results.map((r) => (
@@ -1780,8 +2853,10 @@ const PatientRecordsPage: React.FC = () => {
         {activeTab === 'condition' && renderConditionTab()}
         {activeTab === 'observation' && renderObservationTab()}
         {activeTab === 'orders' && renderOrdersTab()}
-        {activeTab === 'lab-results' && renderDiagnosticReportTable(labResults, labDrLoading, labDrBundle)}
-        {activeTab === 'rad-report'  && renderDiagnosticReportTable(radReports, radDrLoading, radDrBundle)}
+        {activeTab === 'lab-results' &&
+          renderDiagnosticReportTable(labResults, labDrLoading, labDrBundle)}
+        {activeTab === 'rad-report' &&
+          renderDiagnosticReportTable(radReports, radDrLoading, radDrBundle)}
         {activeTab === 'medication' && renderMedicationTab()}
         {activeTab === 'procedure' && renderProcedureTab()}
         {activeTab === 'careplan' && renderCarePlanTab()}
