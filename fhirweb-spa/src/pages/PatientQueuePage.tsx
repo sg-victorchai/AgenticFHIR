@@ -140,18 +140,6 @@ const applyStartConsult = (enc: Encounter): Encounter => {
   return { ...enc, location: locs as any };
 };
 
-const applyCompleteConsult = (enc: Encounter): Encounter => {
-  const locs = [...((enc.location || []) as any[])];
-  const idx = locs.reduceRight((found, l, i) =>
-    found === -1 && getLocId(l) === 'in-consultation' && (l.status === 'active' || l.status === 'planned') ? i : found, -1);
-  if (idx >= 0) {
-    const existing = locs[idx];
-    locs[idx] = { ...existing, status: 'completed', period: { ...(existing.period || {}), end: nowISO() } };
-  }
-  locs.push({ location: { identifier: { value: 'medication' } }, status: 'planned' });
-  return { ...enc, status: 'in-progress', location: locs as any } as Encounter;
-};
-
 const applyMedicationDispense = (enc: Encounter): Encounter => {
   const locs = [...((enc.location || []) as any[])];
   const idx = locs.reduceRight((found, l, i) =>
@@ -215,7 +203,7 @@ const PatientDetailPanel: React.FC<{ patient?: Patient }> = ({ patient }) => {
 interface QueueRowProps {
   encounter: Encounter;
   role: 'psa' | 'clinician';
-  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
+  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
   isUpdating: boolean;
   showDate: boolean;
   patientMap: Map<string, Patient>;
@@ -301,21 +289,12 @@ const QueueRow: React.FC<QueueRowProps> = ({
                 </button>
               )}
               {stage === 'in-consultation' && (
-                <>
-                  <Link
-                    to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                  >
-                    Resume Consult
-                  </Link>
-                  <button
-                    onClick={() => onEncounterAction(encounter, 'complete-consult')}
-                    disabled={isUpdating}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-                  >
-                    Complete Consult
-                  </button>
-                </>
+                <Link
+                  to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Resume Consult
+                </Link>
               )}
               {stage === 'completed' && (
                 <Link
@@ -405,7 +384,7 @@ interface QueueSectionProps {
   stage: QueueStage;
   encounters: Encounter[];
   role: 'psa' | 'clinician';
-  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
+  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
   isUpdating: boolean;
   showDate: boolean;
   patientMap: Map<string, Patient>;
@@ -561,7 +540,7 @@ const PatientQueuePage: React.FC = () => {
 
   const handleEncounterAction = async (
     encounter: Encounter,
-    action: 'call-patient' | 'start-consult' | 'complete-consult' | 'collect-medication' | 'collect-payment' | 'cancel',
+    action: 'call-patient' | 'start-consult' | 'collect-medication' | 'collect-payment' | 'cancel',
   ) => {
     let updated: Encounter;
     if (action === 'call-patient') updated = applyCallPatient(encounter);
@@ -571,7 +550,6 @@ const PatientQueuePage: React.FC = () => {
       navigate(`/patient/${getPatientId(encounter)}/encounter/${encounter.id}/consult`);
       return;
     }
-    else if (action === 'complete-consult') updated = applyCompleteConsult(encounter);
     else if (action === 'collect-medication') updated = applyMedicationDispense(encounter);
     else if (action === 'collect-payment') updated = applyCollectPayment(encounter);
     else updated = { ...encounter, status: 'cancelled' } as Encounter;

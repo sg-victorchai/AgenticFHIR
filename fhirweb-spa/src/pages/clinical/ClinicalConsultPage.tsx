@@ -869,10 +869,22 @@ const ClinicalConsultPage: React.FC = () => {
   const handleFinishConsult = async () => {
     setFinishError('');
     if (!encounterResource || !encounterId) return;
-    const updated = {
-      ...(encounterResource as Encounter),
-      status: 'completed' as const,
-    };
+    // Transition: in-consultation → awaiting-medication
+    // Mark in-consultation entry as completed (with end time), push medication entry
+    const enc = encounterResource as Encounter;
+    const now = new Date().toISOString();
+    const locs = [...((enc.location || []) as any[])];
+    const idx = locs.reduceRight((found: number, l: any, i: number) =>
+      found === -1 &&
+      (l?.location?.identifier?.value === 'in-consultation') &&
+      (l.status === 'active' || l.status === 'planned')
+        ? i : found, -1);
+    if (idx >= 0) {
+      const existing = locs[idx];
+      locs[idx] = { ...existing, status: 'completed', period: { ...(existing.period || {}), end: now } };
+    }
+    locs.push({ location: { identifier: { value: 'medication' } }, status: 'planned' });
+    const updated = { ...enc, status: 'in-progress' as const, location: locs };
     const result = await updateResource({
       resourceType: 'Encounter',
       id: encounterId!,
