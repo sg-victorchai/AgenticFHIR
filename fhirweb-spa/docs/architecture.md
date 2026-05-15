@@ -586,21 +586,28 @@ The four `location[].location.identifier.value` strings used across the workflow
 
 ```typescript
 // Priority rules (PatientQueuePage.tsx)
-if (Encounter.status === 'cancelled')                          → cancelled
-if (Encounter.status in ['completed','finished','discharged']) → completed
-if (no location entries)
-  in-progress → awaiting-clinician  (legacy fallback)
-  else        → awaiting-triage
+if (Encounter.status === 'cancelled') → cancelled
 
-// Location-based (uses getCurrentLocation: last active → last planned → last entry)
+// Location entries are checked FIRST (before Encounter.status) because HAPI FHIR
+// may auto-set Encounter.status = 'completed' mid-flow, which would otherwise
+// bypass medication and billing stages entirely.
+// (uses getCurrentLocation: last active → last planned → last entry)
 locId === 'triage'          && loc.status !== 'completed' → awaiting-triage
 locId === 'triage'          && loc.status === 'completed' → awaiting-clinician
 locId === 'waiting-room'                                  → awaiting-clinician
 locId === 'in-consultation' && loc.status === 'active'    → in-consultation
 locId === 'in-consultation' && loc.status !== 'active'    → waiting-patient
 locId === 'medication'                                    → awaiting-medication
-locId === 'billing'                                       → awaiting-billing
+locId === 'billing'         && loc.status === 'completed' → completed
+locId === 'billing'         && loc.status !== 'completed' → awaiting-billing
+
+// No location data — fall back to Encounter.status
+if (Encounter.status in ['completed','finished','discharged']) → completed
+in-progress → awaiting-clinician  (legacy fallback)
+else        → awaiting-triage
 ```
+
+> **Note:** `applyCompleteConsult` and `applyMedicationDispense` explicitly set `Encounter.status = 'in-progress'` on the PUT payload to prevent HAPI from auto-completing the encounter during intermediate stages.
 
 ### Role-Specific Actions per Stage
 

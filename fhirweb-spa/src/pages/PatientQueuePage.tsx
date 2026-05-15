@@ -61,21 +61,27 @@ const getCurrentLocation = (enc: Encounter): any => {
 
 const classifyEncounter = (enc: Encounter): QueueStage => {
   if (enc.status === 'cancelled') return 'cancelled';
-  if (['completed', 'finished', 'discharged'].includes(enc.status as string)) return 'completed';
+
   const locs = (enc.location || []) as any[];
-  if (locs.length === 0) {
-    // Old encounter with no location data — fall back to status-based classification
-    return enc.status === 'in-progress' ? 'awaiting-clinician' : 'awaiting-triage';
+
+  // Location entries are the source of truth for intermediate stages.
+  // Checking Encounter.status first would cause HAPI-auto-completed encounters
+  // to skip medication and billing stages entirely.
+  if (locs.length > 0) {
+    const loc = getCurrentLocation(enc);
+    if (loc) {
+      const id = getLocId(loc);
+      if (id === 'triage') return loc.status === 'completed' ? 'awaiting-clinician' : 'awaiting-triage';
+      if (id === 'waiting-room') return 'awaiting-clinician';
+      if (id === 'in-consultation') return loc.status === 'active' ? 'in-consultation' : 'waiting-patient';
+      if (id === 'medication') return 'awaiting-medication';
+      if (id === 'billing') return loc.status === 'completed' ? 'completed' : 'awaiting-billing';
+    }
   }
-  const loc = getCurrentLocation(enc);
-  if (!loc) return 'awaiting-triage';
-  const id = getLocId(loc);
-  if (id === 'triage') return loc.status === 'completed' ? 'awaiting-clinician' : 'awaiting-triage';
-  if (id === 'waiting-room') return 'awaiting-clinician';
-  if (id === 'in-consultation') return loc.status === 'active' ? 'in-consultation' : 'waiting-patient';
-  if (id === 'medication') return 'awaiting-medication';
-  if (id === 'billing') return 'awaiting-billing';
-  return 'awaiting-triage';
+
+  // No location data — fall back to Encounter.status
+  if (['completed', 'finished', 'discharged'].includes(enc.status as string)) return 'completed';
+  return enc.status === 'in-progress' ? 'awaiting-clinician' : 'awaiting-triage';
 };
 
 const STAGE_HEADER_CLS: Record<QueueStage, string> = {
@@ -143,7 +149,7 @@ const applyCompleteConsult = (enc: Encounter): Encounter => {
     locs[idx] = { ...existing, status: 'completed', period: { ...(existing.period || {}), end: nowISO() } };
   }
   locs.push({ location: { identifier: { value: 'medication' } }, status: 'planned' });
-  return { ...enc, location: locs as any };
+  return { ...enc, status: 'in-progress', location: locs as any } as Encounter;
 };
 
 const applyMedicationDispense = (enc: Encounter): Encounter => {
@@ -152,7 +158,7 @@ const applyMedicationDispense = (enc: Encounter): Encounter => {
     found === -1 && getLocId(l) === 'medication' && l.status === 'planned' ? i : found, -1);
   if (idx >= 0) locs[idx] = { ...locs[idx], status: 'completed', period: { start: nowISO(), end: nowISO() } };
   locs.push({ location: { identifier: { value: 'billing' } }, status: 'planned' });
-  return { ...enc, location: locs as any };
+  return { ...enc, status: 'in-progress', location: locs as any } as Encounter;
 };
 
 const applyCollectPayment = (enc: Encounter): Encounter => {
