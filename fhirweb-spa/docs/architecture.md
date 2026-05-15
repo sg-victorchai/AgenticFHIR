@@ -616,7 +616,7 @@ else        → awaiting-triage
 | `awaiting-triage`     | **Triage** (→ triage page)       | —                                         |
 | `awaiting-clinician`  | Cancel                           | **Call Patient**                          |
 | `waiting-patient`     | Cancel                           | **Start Consult**                         |
-| `in-consultation`     | Cancel                           | **Resume Consult**                        |
+| `in-consultation`     | —                                | **Resume Consult**                        |
 | `awaiting-medication` | **Collect Medications**          | —                                         |
 | `awaiting-billing`    | **Collect Payment**              | —                                         |
 | `completed`           | —                                | **View Notes**                            |

@@ -348,7 +348,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
                 </button>
               )}
               {stage !== 'completed' && stage !== 'cancelled' &&
-               stage !== 'awaiting-medication' && stage !== 'awaiting-billing' && (
+               stage !== 'in-consultation' && stage !== 'awaiting-medication' && stage !== 'awaiting-billing' && (
                 <button
                   onClick={() => onEncounterAction(encounter, 'cancel')}
                   disabled={isUpdating}
