@@ -340,6 +340,120 @@ SMART on FHIR OAuth flow. `isSMARTContext()` checks for the presence of SMART la
 
 ---
 
+## SMART on FHIR Integration
+
+The app supports both **EHR launch** (initiated by a host EHR) and **standalone launch** (accessed directly), with automatic fallback to API-key auth when no SMART context is detected.
+
+### Library
+
+[`fhirclient`](https://github.com/smart-on-fhir/client-js) v2.6.3 handles the OAuth 2.0 authorization code flow, token exchange, and token storage (in `sessionStorage`).
+
+### Base Path
+
+The app is served under `/smartapp` (configured in `vite.config.ts` and `BrowserRouter`'s `basename`). The OAuth redirect URI is therefore `<origin>/smartapp/`.
+
+### Launch Sequence
+
+```
+EHR / Sandbox
+  │  opens  /smartapp/launch?iss=<fhir-server>&launch=<token>
+  ▼
+LaunchPage.tsx
+  │  calls FHIR.oauth2.authorize({ clientId, scope, redirectUri, iss, launch })
+  │  → browser redirected to Authorization Endpoint
+  ▼
+User authenticates & consents
+  │  → browser redirected back to /smartapp/?state=<key>&code=<auth-code>
+  ▼
+RoleSelectionPage.tsx  (detects `state` query param)
+  │  calls FHIR.oauth2.ready()
+  │  → fhirclient exchanges auth code for access token at Token Endpoint
+  │  → stores token in sessionStorage
+  │  calls reinitializeClient()  (FHIRContext re-creates the FHIR client)
+  │  reads smartClient.patient.id
+  ▼
+Navigate to /patient/<patientId>   (patient context pre-loaded from EHR)
+```
+
+### Key Files
+
+| File | Role |
+|---|---|
+| `src/pages/LaunchPage.tsx` | Reads `iss` + `launch` from URL; calls `FHIR.oauth2.authorize()` |
+| `src/pages/RoleSelectionPage.tsx` | Handles OAuth callback (`state` param); calls `FHIR.oauth2.ready()`; extracts `patient.id` |
+| `src/services/fhir/smartClient.ts` | `isSMARTContext()`, `getSMARTClient()`, `createAuthenticatedFHIRClient()`, `getPatientContext()` |
+| `src/services/fhir/client.ts` | `createFHIRClient()` — branches on SMART vs API-key |
+| `src/contexts/FHIRContext.tsx` | Provides the FHIR client instance app-wide; exposes `reinitializeClient()` |
+| `public/.well-known/smart-configuration.json` | Advertises authorization/token endpoints and capabilities |
+
+### SMART Context Detection (`isSMARTContext`)
+
+1. Checks for `state` query parameter in the current URL (OAuth callback).
+2. Falls back to scanning `sessionStorage` for a key whose JSON value contains `serverUrl` or `tokenResponse` (i.e., a previously stored SMART session).
+
+### FHIR Client Branching (`createFHIRClient`)
+
+```ts
+if (isSMARTContext()) {
+  // Authenticated: Bearer <access_token>, baseUrl = smartClient.state.serverUrl
+  return createAuthenticatedFHIRClient();
+} else {
+  // Fallback: x-api-key header, baseUrl = VITE_FHIR_BASE_URL
+  return new Client({ baseUrl: FHIR_BASE_URL, customHeaders: { 'x-api-key': API_KEY } });
+}
+```
+
+`createFHIRClient()` is called fresh inside **every** RTK Query `queryFn` so the auth strategy can switch at runtime without a stale singleton.
+
+### OAuth Parameters
+
+| Parameter | Value |
+|---|---|
+| `clientId` | `VITE_SMART_CLIENT_ID` env var |
+| `scope` | `launch launch/patient patient/*.read openid fhirUser` |
+| `redirectUri` | `<origin>/smartapp/` |
+| `iss` | FHIR server URL supplied by the EHR in the launch URL |
+| `launch` | Opaque launch token supplied by the EHR in the launch URL |
+
+### SMART Capabilities (`public/.well-known/smart-configuration.json`)
+
+```json
+{
+  "authorization_endpoint": "https://launch.smarthealthit.org/v/r4/auth/authorize",
+  "token_endpoint": "https://launch.smarthealthit.org/v/r4/auth/token",
+  "capabilities": [
+    "launch-ehr", "launch-standalone",
+    "client-public", "client-confidential-symmetric",
+    "sso-openid-connect",
+    "context-ehr-patient",
+    "permission-patient", "permission-offline"
+  ]
+}
+```
+
+> The endpoints above point to the SMART Health IT sandbox. In production, the EHR's own `iss` metadata URL is used instead; the `.well-known` file is consulted only for standalone launch configuration.
+
+### Patient Context
+
+After `FHIR.oauth2.ready()` resolves, the SMART client exposes:
+
+- `client.patient.id` — FHIR Patient ID pre-selected by the EHR
+- `client.patient.read()` — full Patient resource
+- `client.state.serverUrl` — FHIR base URL provided by the EHR
+- `client.state.tokenResponse.access_token` — Bearer token for all subsequent requests
+
+`getPatientContext()` in `smartClient.ts` is a convenience wrapper that returns both `patientId` and the full patient resource.
+
+### Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `VITE_SMART_CLIENT_ID` | OAuth client ID registered with the EHR |
+| `VITE_FHIR_BASE_URL` | Fallback FHIR base URL (non-SMART / development) |
+| `VITE_API_KEY` | API key for non-SMART fallback auth |
+
+---
+
 ## Key Design Decisions
 
 | Decision                                                                          | Rationale                                                                                                                                                                                                             |
