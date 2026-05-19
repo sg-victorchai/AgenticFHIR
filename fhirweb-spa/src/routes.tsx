@@ -22,6 +22,7 @@ import MedicationRequestCrudPage from './pages/crud/MedicationRequestCrudPage';
 import EncounterCrudPage from './pages/crud/EncounterCrudPage';
 import PatientCrudPage from './pages/crud/PatientCrudPage';
 import NotFound from './pages/NotFound';
+import LaunchPage from './pages/LaunchPage';
 import RoleGuard from './components/common/RoleGuard';
 
 const AppRoutes: React.FC = () => {
@@ -31,7 +32,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/" element={<RoleSelectionPage />} />
 
       {/* Shared */}
-      <Route path="/launch" element={<RoleSelectionPage />} />
+      <Route path="/launch" element={<LaunchPage />} />
       <Route path="/queue" element={<PatientQueuePage />} />
       <Route path="/webhooks" element={<WebhookManagementPage />} />
       <Route path="/events" element={<EventMonitorPage />} />
