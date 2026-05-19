@@ -23,7 +23,9 @@ const RoleSelectionPage: React.FC = () => {
           const smartClient = await FHIR.oauth2.ready();
           await reinitializeClient();
           const patientId = smartClient.patient.id;
-          navigate(`/patient/${patientId}`);
+          // SMART launches are always clinician context → skip role selection
+          dispatch(setRole('clinician'));
+          navigate(`/patient/${patientId}/records`);
         } catch (error) {
           console.error('Error handling OAuth callback:', error);
           setIsRedirecting(false);

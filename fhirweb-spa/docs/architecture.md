@@ -365,15 +365,18 @@ LaunchPage.tsx
 User authenticates & consents
   │  → browser redirected back to /smartapp/?state=<key>&code=<auth-code>
   ▼
-RoleSelectionPage.tsx  (detects `state` query param)
+RoleSelectionPage.tsx  (detects `state` query param → skips role-selection UI)
   │  calls FHIR.oauth2.ready()
   │  → fhirclient exchanges auth code for access token at Token Endpoint
   │  → stores token in sessionStorage
   │  calls reinitializeClient()  (FHIRContext re-creates the FHIR client)
   │  reads smartClient.patient.id
+  │  dispatches setRole('clinician')  (SMART launches are always clinician context)
   ▼
-Navigate to /patient/<patientId>   (patient context pre-loaded from EHR)
+Navigate to /patient/<patientId>/records   (PatientRecordsPage, clinician role)
 ```
+
+> **Standalone (non-SMART) launch**: No `state` param is present, so `RoleSelectionPage` renders the role-selection UI as normal. The user picks PSA or Clinician and is routed accordingly.
 
 ### Key Files
 
