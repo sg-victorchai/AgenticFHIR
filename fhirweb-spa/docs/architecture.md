@@ -358,14 +358,15 @@ The app is served under `/smartapp` (configured in `vite.config.ts` and `Browser
 EHR / Sandbox
   │  opens  /smartapp/launch?iss=<fhir-server>&launch=<token>
   ▼
-LaunchPage.tsx
+LaunchPage.tsx  (route: /launch)
+  │  reads iss + launch from query params
   │  calls FHIR.oauth2.authorize({ clientId, scope, redirectUri, iss, launch })
   │  → browser redirected to Authorization Endpoint
   ▼
 User authenticates & consents
   │  → browser redirected back to /smartapp/?state=<key>&code=<auth-code>
   ▼
-RoleSelectionPage.tsx  (detects `state` query param → skips role-selection UI)
+RoleSelectionPage.tsx  (route: /, detects `state` query param → skips role-selection UI)
   │  calls FHIR.oauth2.ready()
   │  → fhirclient exchanges auth code for access token at Token Endpoint
   │  → stores token in sessionStorage
@@ -378,12 +379,20 @@ Navigate to /patient/<patientId>/records   (PatientRecordsPage, clinician role)
 
 > **Standalone (non-SMART) launch**: No `state` param is present, so `RoleSelectionPage` renders the role-selection UI as normal. The user picks PSA or Clinician and is routed accordingly.
 
+### Route Mapping
+
+| Path | Component | Purpose |
+|---|---|---|
+| `/launch` | `LaunchPage` | Entry point for EHR-initiated SMART launch; reads `iss`+`launch` and starts OAuth |
+| `/` | `RoleSelectionPage` | OAuth callback landing page (handles `state` param); also renders role-selection UI for standalone launch |
+
 ### Key Files
 
 | File | Role |
 |---|---|
-| `src/pages/LaunchPage.tsx` | Reads `iss` + `launch` from URL; calls `FHIR.oauth2.authorize()` |
-| `src/pages/RoleSelectionPage.tsx` | Handles OAuth callback (`state` param); calls `FHIR.oauth2.ready()`; extracts `patient.id` |
+| `src/pages/LaunchPage.tsx` | Route `/launch` — reads `iss` + `launch` from URL; calls `FHIR.oauth2.authorize()` |
+| `src/pages/RoleSelectionPage.tsx` | Route `/` — handles OAuth callback (`state` param); auto-sets clinician role; navigates to patient records; also renders manual role-selection UI for standalone launches |
+| `src/routes.tsx` | Maps `/launch` → `LaunchPage`, `/` → `RoleSelectionPage` |
 | `src/services/fhir/smartClient.ts` | `isSMARTContext()`, `getSMARTClient()`, `createAuthenticatedFHIRClient()`, `getPatientContext()` |
 | `src/services/fhir/client.ts` | `createFHIRClient()` — branches on SMART vs API-key |
 | `src/contexts/FHIRContext.tsx` | Provides the FHIR client instance app-wide; exposes `reinitializeClient()` |
