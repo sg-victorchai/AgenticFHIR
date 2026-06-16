@@ -12,19 +12,27 @@ import { RootState } from '../store';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatTime = (iso?: string) =>
-  iso ? new Date(iso).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' }) : '—';
+  iso
+    ? new Date(iso).toLocaleTimeString('en-SG', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—';
 
 const formatDateTime = (iso?: string) =>
   iso
     ? new Date(iso).toLocaleString('en-SG', {
-        day: '2-digit', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       })
     : '—';
 
 const SS_KEY_MODE = 'queue-mode';
 const SS_KEY_FROM = 'queue-from';
-const SS_KEY_TO   = 'queue-to';
+const SS_KEY_TO = 'queue-to';
 
 const getPatientId = (encounter: Encounter): string => {
   const ref = encounter.subject?.reference;
@@ -42,11 +50,21 @@ const getEncounterClass = (encounter: Encounter): string =>
 
 // ─── Location-based stage logic ───────────────────────────────────────────────
 
-type QueueStage = 'awaiting-triage' | 'awaiting-clinician' | 'waiting-patient' | 'in-consultation' | 'awaiting-medication' | 'awaiting-billing' | 'completed' | 'cancelled';
+type QueueStage =
+  | 'awaiting-triage'
+  | 'awaiting-clinician'
+  | 'waiting-patient'
+  | 'in-consultation'
+  | 'awaiting-medication'
+  | 'awaiting-billing'
+  | 'completed'
+  | 'cancelled';
 
 const getLocId = (loc: any): string =>
   loc?.location?.identifier?.value ||
-  (loc?.location?.reference ? (loc.location.reference as string).split('/').pop() ?? '' : '') ||
+  (loc?.location?.reference
+    ? ((loc.location.reference as string).split('/').pop() ?? '')
+    : '') ||
   '';
 
 const getCurrentLocation = (enc: Encounter): any => {
@@ -71,17 +89,25 @@ const classifyEncounter = (enc: Encounter): QueueStage => {
     const loc = getCurrentLocation(enc);
     if (loc) {
       const id = getLocId(loc);
-      if (id === 'triage') return loc.status === 'completed' ? 'awaiting-clinician' : 'awaiting-triage';
+      if (id === 'triage')
+        return loc.status === 'completed'
+          ? 'awaiting-clinician'
+          : 'awaiting-triage';
       if (id === 'waiting-room') return 'awaiting-clinician';
-      if (id === 'in-consultation') return loc.status === 'active' ? 'in-consultation' : 'waiting-patient';
+      if (id === 'in-consultation')
+        return loc.status === 'active' ? 'in-consultation' : 'waiting-patient';
       if (id === 'medication') return 'awaiting-medication';
-      if (id === 'billing') return loc.status === 'completed' ? 'completed' : 'awaiting-billing';
+      if (id === 'billing')
+        return loc.status === 'completed' ? 'completed' : 'awaiting-billing';
     }
   }
 
   // No location data — fall back to Encounter.status
-  if (['completed', 'finished', 'discharged'].includes(enc.status as string)) return 'completed';
-  return enc.status === 'in-progress' ? 'awaiting-clinician' : 'awaiting-triage';
+  if (['completed', 'finished', 'discharged'].includes(enc.status as string))
+    return 'completed';
+  return enc.status === 'in-progress'
+    ? 'awaiting-clinician'
+    : 'awaiting-triage';
 };
 
 const STAGE_HEADER_CLS: Record<QueueStage, string> = {
@@ -121,19 +147,38 @@ const nowISO = () => new Date().toISOString();
 
 const applyCallPatient = (enc: Encounter): Encounter => {
   const locs = [...((enc.location || []) as any[])];
-  const idx = locs.reduceRight((found, l, i) =>
-    found === -1 && getLocId(l) === 'waiting-room' && l.status === 'active' ? i : found, -1);
+  const idx = locs.reduceRight(
+    (found, l, i) =>
+      found === -1 && getLocId(l) === 'waiting-room' && l.status === 'active'
+        ? i
+        : found,
+    -1,
+  );
   if (idx >= 0) {
-    locs[idx] = { ...locs[idx], status: 'completed', period: { start: nowISO(), end: nowISO() } };
+    locs[idx] = {
+      ...locs[idx],
+      status: 'completed',
+      period: { start: nowISO(), end: nowISO() },
+    };
   }
-  locs.push({ location: { identifier: { value: 'in-consultation' } }, status: 'planned' });
+  locs.push({
+    location: { identifier: { value: 'in-consultation' } },
+    status: 'planned',
+  });
   return { ...enc, location: locs as any };
 };
 
 const applyStartConsult = (enc: Encounter): Encounter => {
   const locs = [...((enc.location || []) as any[])];
-  const idx = locs.reduceRight((found, l, i) =>
-    found === -1 && getLocId(l) === 'in-consultation' && l.status === 'planned' ? i : found, -1);
+  const idx = locs.reduceRight(
+    (found, l, i) =>
+      found === -1 &&
+      getLocId(l) === 'in-consultation' &&
+      l.status === 'planned'
+        ? i
+        : found,
+    -1,
+  );
   if (idx >= 0) {
     locs[idx] = { ...locs[idx], status: 'active', period: { start: nowISO() } };
   }
@@ -142,18 +187,41 @@ const applyStartConsult = (enc: Encounter): Encounter => {
 
 const applyMedicationDispense = (enc: Encounter): Encounter => {
   const locs = [...((enc.location || []) as any[])];
-  const idx = locs.reduceRight((found, l, i) =>
-    found === -1 && getLocId(l) === 'medication' && l.status === 'planned' ? i : found, -1);
-  if (idx >= 0) locs[idx] = { ...locs[idx], status: 'completed', period: { start: nowISO(), end: nowISO() } };
-  locs.push({ location: { identifier: { value: 'billing' } }, status: 'planned' });
+  const idx = locs.reduceRight(
+    (found, l, i) =>
+      found === -1 && getLocId(l) === 'medication' && l.status === 'planned'
+        ? i
+        : found,
+    -1,
+  );
+  if (idx >= 0)
+    locs[idx] = {
+      ...locs[idx],
+      status: 'completed',
+      period: { start: nowISO(), end: nowISO() },
+    };
+  locs.push({
+    location: { identifier: { value: 'billing' } },
+    status: 'planned',
+  });
   return { ...enc, status: 'in-progress', location: locs as any } as Encounter;
 };
 
 const applyCollectPayment = (enc: Encounter): Encounter => {
   const locs = [...((enc.location || []) as any[])];
-  const idx = locs.reduceRight((found, l, i) =>
-    found === -1 && getLocId(l) === 'billing' && l.status === 'planned' ? i : found, -1);
-  if (idx >= 0) locs[idx] = { ...locs[idx], status: 'completed', period: { start: nowISO(), end: nowISO() } };
+  const idx = locs.reduceRight(
+    (found, l, i) =>
+      found === -1 && getLocId(l) === 'billing' && l.status === 'planned'
+        ? i
+        : found,
+    -1,
+  );
+  if (idx >= 0)
+    locs[idx] = {
+      ...locs[idx],
+      status: 'completed',
+      period: { start: nowISO(), end: nowISO() },
+    };
   return { ...enc, status: 'completed', location: locs as any } as Encounter;
 };
 
@@ -164,24 +232,44 @@ const applyCollectPayment = (enc: Encounter): Encounter => {
 const formatDOB = (dob?: string): string => {
   if (!dob) return '—';
   const d = new Date(dob);
-  const age = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
+  const age = Math.floor(
+    (Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000),
+  );
   return `${d.toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' })} (${age} yrs)`;
 };
 
 const PatientDetailPanel: React.FC<{ patient?: Patient }> = ({ patient }) => {
-  if (!patient) return <p className="text-sm text-gray-400 italic">Loading patient details…</p>;
+  if (!patient)
+    return (
+      <p className="text-sm text-gray-400 italic">Loading patient details…</p>
+    );
   const n = patient.name?.[0];
-  const name = n?.text || [n?.prefix?.join(' '), n?.given?.join(' '), n?.family].filter(Boolean).join(' ') || '—';
+  const name =
+    n?.text ||
+    [n?.prefix?.join(' '), n?.given?.join(' '), n?.family]
+      .filter(Boolean)
+      .join(' ') ||
+    '—';
   const nric = patient.identifier?.[0]?.value || '—';
-  const phone = patient.telecom?.find((t) => t.system === 'phone')?.value || '—';
+  const phone =
+    patient.telecom?.find((t) => t.system === 'phone')?.value || '—';
   const email = patient.telecom?.find((t) => t.system === 'email')?.value;
   const addr = patient.address?.[0];
-  const addrStr = addr ? [addr.line?.join(', '), addr.city, addr.postalCode].filter(Boolean).join(', ') : '—';
+  const addrStr = addr
+    ? [addr.line?.join(', '), addr.city, addr.postalCode]
+        .filter(Boolean)
+        .join(', ')
+    : '—';
   const fields: [string, string][] = [
     ['Full Name', name],
     ['NRIC / ID', nric],
     ['Date of Birth', formatDOB(patient.birthDate)],
-    ['Gender', patient.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : '—'],
+    [
+      'Gender',
+      patient.gender
+        ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1)
+        : '—',
+    ],
     ['Phone', phone],
     ...(email ? [['Email', email] as [string, string]] : []),
     ['Address', addrStr],
@@ -190,7 +278,9 @@ const PatientDetailPanel: React.FC<{ patient?: Patient }> = ({ patient }) => {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
       {fields.map(([label, value]) => (
         <div key={label}>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">{label}</p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">
+            {label}
+          </p>
           <p className="text-gray-800 font-medium">{value}</p>
         </div>
       ))}
@@ -202,8 +292,16 @@ const PatientDetailPanel: React.FC<{ patient?: Patient }> = ({ patient }) => {
 
 interface QueueRowProps {
   encounter: Encounter;
-  role: 'psa' | 'clinician';
-  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
+  role: 'psa' | 'clinician' | 'patient';
+  onEncounterAction: (
+    enc: Encounter,
+    action:
+      | 'call-patient'
+      | 'start-consult'
+      | 'collect-medication'
+      | 'collect-payment'
+      | 'cancel',
+  ) => void;
   isUpdating: boolean;
   showDate: boolean;
   patientMap: Map<string, Patient>;
@@ -224,8 +322,11 @@ const QueueRow: React.FC<QueueRowProps> = ({
   const badgeCls = STAGE_BADGE_CLS[stage];
 
   // Try patientMap first (populated by _include), fall back to direct fetch
-  const mappedPatient = patientMap.get(patientId) ||
-    (encounter.subject?.reference ? patientMap.get(encounter.subject.reference) : undefined);
+  const mappedPatient =
+    patientMap.get(patientId) ||
+    (encounter.subject?.reference
+      ? patientMap.get(encounter.subject.reference)
+      : undefined);
   const { data: fetchedPatient } = useGetPatientQuery(patientId, {
     skip: !!mappedPatient || !patientId,
   });
@@ -234,9 +335,14 @@ const QueueRow: React.FC<QueueRowProps> = ({
   const patientName = patient
     ? (() => {
         const n = patient.name?.[0];
-        return n?.text ||
-          [n?.prefix?.join(' '), n?.given?.join(' '), n?.family].filter(Boolean).join(' ') ||
-          encounter.subject?.display || '(Unknown)';
+        return (
+          n?.text ||
+          [n?.prefix?.join(' '), n?.given?.join(' '), n?.family]
+            .filter(Boolean)
+            .join(' ') ||
+          encounter.subject?.display ||
+          '(Unknown)'
+        );
       })()
     : encounter.subject?.display || '(Unknown)';
 
@@ -244,137 +350,163 @@ const QueueRow: React.FC<QueueRowProps> = ({
 
   return (
     <>
-      <tr className={`transition-colors ${expanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-      <td className="px-4 py-3 text-xs text-gray-500 font-mono">
-        {patientIdentifier}
-      </td>
-      <td className="px-4 py-3 text-sm font-medium text-gray-800">
-        {patientName}
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600">
-        {getChiefComplaint(encounter)}
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-500">
-        {showDate ? formatDateTime(encounter.actualPeriod?.start) : formatTime(encounter.actualPeriod?.start)}
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
-        {getEncounterClass(encounter)}
-      </td>
-      <td className="px-4 py-3">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${badgeCls}`}>
-          {STAGE_LABEL[stage]}
-        </span>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-1.5">
-          {/* ── Clinician actions ── */}
-          {role === 'clinician' && (
-            <>
-              {stage === 'awaiting-clinician' && (
-                <button
-                  onClick={() => onEncounterAction(encounter, 'call-patient')}
-                  disabled={isUpdating}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50"
-                >
-                  Call Patient
-                </button>
-              )}
-              {stage === 'waiting-patient' && (
-                <button
-                  onClick={() => onEncounterAction(encounter, 'start-consult')}
-                  disabled={isUpdating}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  Start Consult
-                </button>
-              )}
-              {stage === 'in-consultation' && (
-                <Link
-                  to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Resume Consult
-                </Link>
-              )}
-              {stage === 'completed' && (
-                <Link
-                  to={`/patient/${patientId}/encounter/${encounterId}/notes`}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gray-700 text-white rounded-md hover:bg-gray-800 transition-colors"
-                >
-                  View Notes
-                </Link>
-              )}
-            </>
-          )}
-          {role === 'clinician' && (
-            <Link
-              to={`/patient/${patientId}/records`}
-              title="Patient Records"
-              className="inline-flex items-center justify-center p-1.5 text-indigo-700 bg-indigo-100 border border-indigo-200 rounded-md hover:bg-indigo-200 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
-              </svg>
-            </Link>
-          )}
-
-          {/* ── PSA actions ── */}
-          {role === 'psa' && (
-            <>
-              {stage === 'awaiting-triage' && (
-                <Link
-                  to={`/patient/${patientId}/encounter/${encounterId}/triage`}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Triage
-                </Link>
-              )}
-              {stage === 'awaiting-medication' && (
-                <button
-                  onClick={() => onEncounterAction(encounter, 'collect-medication')}
-                  disabled={isUpdating}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
-                >
-                  Dispense Medications
-                </button>
-              )}
-              {stage === 'awaiting-billing' && (
-                <button
-                  onClick={() => onEncounterAction(encounter, 'collect-payment')}
-                  disabled={isUpdating}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50"
-                >
-                  Collect Payment
-                </button>
-              )}
-              {stage !== 'completed' && stage !== 'cancelled' &&
-               stage !== 'in-consultation' && stage !== 'awaiting-medication' && stage !== 'awaiting-billing' && (
-                <button
-                  onClick={() => onEncounterAction(encounter, 'cancel')}
-                  disabled={isUpdating}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              )}
-              <button
-                onClick={() => setExpanded((e) => !e)}
-                className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors"
+      <tr
+        className={`transition-colors ${expanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+      >
+        <td className="px-4 py-3 text-xs text-gray-500 font-mono">
+          {patientIdentifier}
+        </td>
+        <td className="px-4 py-3 text-sm font-medium text-gray-800">
+          {patientName}
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-600">
+          {getChiefComplaint(encounter)}
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-500">
+          {showDate
+            ? formatDateTime(encounter.actualPeriod?.start)
+            : formatTime(encounter.actualPeriod?.start)}
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
+          {getEncounterClass(encounter)}
+        </td>
+        <td className="px-4 py-3">
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${badgeCls}`}
+          >
+            {STAGE_LABEL[stage]}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex flex-wrap gap-1.5">
+            {/* ── Clinician actions ── */}
+            {role === 'clinician' && (
+              <>
+                {stage === 'awaiting-clinician' && (
+                  <button
+                    onClick={() => onEncounterAction(encounter, 'call-patient')}
+                    disabled={isUpdating}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                  >
+                    Call Patient
+                  </button>
+                )}
+                {stage === 'waiting-patient' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'start-consult')
+                    }
+                    disabled={isUpdating}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    Start Consult
+                  </button>
+                )}
+                {stage === 'in-consultation' && (
+                  <Link
+                    to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Resume Consult
+                  </Link>
+                )}
+                {stage === 'completed' && (
+                  <Link
+                    to={`/patient/${patientId}/encounter/${encounterId}/notes`}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gray-700 text-white rounded-md hover:bg-gray-800 transition-colors"
+                  >
+                    View Notes
+                  </Link>
+                )}
+              </>
+            )}
+            {role === 'clinician' && (
+              <Link
+                to={`/patient/${patientId}/records`}
+                title="Patient Records"
+                className="inline-flex items-center justify-center p-1.5 text-indigo-700 bg-indigo-100 border border-indigo-200 rounded-md hover:bg-indigo-200 transition-colors"
               >
-                {expanded ? 'Hide Patient ▲' : 'View Patient ▼'}
-              </button>
-            </>
-          )}
-        </div>
-      </td>
-    </tr>
-    {expanded && (
-      <tr className="bg-blue-50 border-b border-blue-100">
-        <td colSpan={7} className="px-6 py-4">
-          <PatientDetailPanel patient={patient} />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-4 h-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"
+                  />
+                </svg>
+              </Link>
+            )}
+
+            {/* ── PSA actions ── */}
+            {role === 'psa' && (
+              <>
+                {stage === 'awaiting-triage' && (
+                  <Link
+                    to={`/patient/${patientId}/encounter/${encounterId}/triage`}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Triage
+                  </Link>
+                )}
+                {stage === 'awaiting-medication' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'collect-medication')
+                    }
+                    disabled={isUpdating}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
+                  >
+                    Dispense Medications
+                  </button>
+                )}
+                {stage === 'awaiting-billing' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'collect-payment')
+                    }
+                    disabled={isUpdating}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    Collect Payment
+                  </button>
+                )}
+                {stage !== 'completed' &&
+                  stage !== 'cancelled' &&
+                  stage !== 'in-consultation' &&
+                  stage !== 'awaiting-medication' &&
+                  stage !== 'awaiting-billing' && (
+                    <button
+                      onClick={() => onEncounterAction(encounter, 'cancel')}
+                      disabled={isUpdating}
+                      className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                <button
+                  onClick={() => setExpanded((e) => !e)}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  {expanded ? 'Hide Patient ▲' : 'View Patient ▼'}
+                </button>
+              </>
+            )}
+          </div>
         </td>
       </tr>
-    )}
+      {expanded && (
+        <tr className="bg-blue-50 border-b border-blue-100">
+          <td colSpan={7} className="px-6 py-4">
+            <PatientDetailPanel patient={patient} />
+          </td>
+        </tr>
+      )}
     </>
   );
 };
@@ -384,8 +516,16 @@ const QueueRow: React.FC<QueueRowProps> = ({
 interface QueueSectionProps {
   stage: QueueStage;
   encounters: Encounter[];
-  role: 'psa' | 'clinician';
-  onEncounterAction: (enc: Encounter, action: 'call-patient' | 'start-consult' | 'collect-medication' | 'collect-payment' | 'cancel') => void;
+  role: 'psa' | 'clinician' | 'patient';
+  onEncounterAction: (
+    enc: Encounter,
+    action:
+      | 'call-patient'
+      | 'start-consult'
+      | 'collect-medication'
+      | 'collect-payment'
+      | 'cancel',
+  ) => void;
   isUpdating: boolean;
   showDate: boolean;
   patientMap: Map<string, Patient>;
@@ -422,21 +562,29 @@ const QueueSection: React.FC<QueueSectionProps> = ({
       {!collapsed && (
         <div className="overflow-x-auto bg-white">
           {encounters.length === 0 ? (
-            <p className="text-sm text-gray-400 italic px-5 py-4">No encounters.</p>
+            <p className="text-sm text-gray-400 italic px-5 py-4">
+              No encounters.
+            </p>
           ) : (
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-gray-50">
                 <tr>
-                  {['ID', 'Patient', 'Chief Complaint', showDate ? 'Date & Time' : 'Time', 'Type', 'Status', 'Actions'].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className={`px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
-                      >
-                        {h}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    'ID',
+                    'Patient',
+                    'Chief Complaint',
+                    showDate ? 'Date & Time' : 'Time',
+                    'Type',
+                    'Status',
+                    'Actions',
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -493,18 +641,27 @@ const PatientQueuePage: React.FC = () => {
   const showDate = mode === 'range';
 
   const fromISO = mode === 'today' ? todayISO : `${fromMonth}-01`;
-  const toISO = mode === 'today' ? todayISO : (() => {
-    const [y, m] = toMonth.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    const candidate = `${toMonth}-${String(lastDay).padStart(2, '0')}`;
-    return candidate > todayISO ? todayISO : candidate;
-  })();
+  const toISO =
+    mode === 'today'
+      ? todayISO
+      : (() => {
+          const [y, m] = toMonth.split('-').map(Number);
+          const lastDay = new Date(y, m, 0).getDate();
+          const candidate = `${toMonth}-${String(lastDay).padStart(2, '0')}`;
+          return candidate > todayISO ? todayISO : candidate;
+        })();
 
-  const { data: bundle, isLoading, error, refetch } = useGetTodayEncountersQuery(
+  const {
+    data: bundle,
+    isLoading,
+    error,
+    refetch,
+  } = useGetTodayEncountersQuery(
     { from: fromISO, to: toISO },
     { refetchOnMountOrArgChange: true },
   );
-  const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
+  const [updateResource, { isLoading: isUpdating }] =
+    useUpdateResourceMutation();
 
   const patientMap = new Map<string, Patient>();
   ((bundle as Bundle<Resource> | undefined)?.entry ?? []).forEach((e) => {
@@ -518,56 +675,99 @@ const PatientQueuePage: React.FC = () => {
     }
   });
 
-  const encounters: Encounter[] = ((bundle as Bundle<Resource> | undefined)?.entry
-    ?.filter((e) => e.resource?.resourceType === 'Encounter')
-    .map((e) => e.resource as Encounter) ?? [])
-    .filter((enc) => {
-      const start = enc.actualPeriod?.start ?? (enc as any).period?.start;
-      if (!start) return false;
-      const encDate = start.split('T')[0];
-      return encDate >= fromISO && encDate <= toISO;
-    });
+  const encounters: Encounter[] = (
+    (bundle as Bundle<Resource> | undefined)?.entry
+      ?.filter((e) => e.resource?.resourceType === 'Encounter')
+      .map((e) => e.resource as Encounter) ?? []
+  ).filter((enc) => {
+    const start = enc.actualPeriod?.start ?? (enc as any).period?.start;
+    if (!start) return false;
+    const encDate = start.split('T')[0];
+    return encDate >= fromISO && encDate <= toISO;
+  });
 
-  const awaitingTriage = encounters.filter((e) => classifyEncounter(e) === 'awaiting-triage');
-  const awaitingClinician = encounters.filter((e) => classifyEncounter(e) === 'awaiting-clinician');
-  const waitingPatient = encounters.filter((e) => classifyEncounter(e) === 'waiting-patient');
-  const inConsultation = encounters.filter((e) => classifyEncounter(e) === 'in-consultation');
-  const awaitingMedication = encounters.filter((e) => classifyEncounter(e) === 'awaiting-medication');
-  const awaitingBilling = encounters.filter((e) => classifyEncounter(e) === 'awaiting-billing');
-  const completed = encounters.filter((e) => classifyEncounter(e) === 'completed');
-  const cancelled = encounters.filter((e) => classifyEncounter(e) === 'cancelled');
+  const awaitingTriage = encounters.filter(
+    (e) => classifyEncounter(e) === 'awaiting-triage',
+  );
+  const awaitingClinician = encounters.filter(
+    (e) => classifyEncounter(e) === 'awaiting-clinician',
+  );
+  const waitingPatient = encounters.filter(
+    (e) => classifyEncounter(e) === 'waiting-patient',
+  );
+  const inConsultation = encounters.filter(
+    (e) => classifyEncounter(e) === 'in-consultation',
+  );
+  const awaitingMedication = encounters.filter(
+    (e) => classifyEncounter(e) === 'awaiting-medication',
+  );
+  const awaitingBilling = encounters.filter(
+    (e) => classifyEncounter(e) === 'awaiting-billing',
+  );
+  const completed = encounters.filter(
+    (e) => classifyEncounter(e) === 'completed',
+  );
+  const cancelled = encounters.filter(
+    (e) => classifyEncounter(e) === 'cancelled',
+  );
 
   const navigate = useNavigate();
 
   const handleEncounterAction = async (
     encounter: Encounter,
-    action: 'call-patient' | 'start-consult' | 'collect-medication' | 'collect-payment' | 'cancel',
+    action:
+      | 'call-patient'
+      | 'start-consult'
+      | 'collect-medication'
+      | 'collect-payment'
+      | 'cancel',
   ) => {
     let updated: Encounter;
     if (action === 'call-patient') updated = applyCallPatient(encounter);
     else if (action === 'start-consult') {
       updated = applyStartConsult(encounter);
-      await updateResource({ resourceType: 'Encounter', id: encounter.id!, resource: updated as any });
-      navigate(`/patient/${getPatientId(encounter)}/encounter/${encounter.id}/consult`);
+      await updateResource({
+        resourceType: 'Encounter',
+        id: encounter.id!,
+        resource: updated as any,
+      });
+      navigate(
+        `/patient/${getPatientId(encounter)}/encounter/${encounter.id}/consult`,
+      );
       return;
-    }
-    else if (action === 'collect-medication') updated = applyMedicationDispense(encounter);
-    else if (action === 'collect-payment') updated = applyCollectPayment(encounter);
+    } else if (action === 'collect-medication')
+      updated = applyMedicationDispense(encounter);
+    else if (action === 'collect-payment')
+      updated = applyCollectPayment(encounter);
     else updated = { ...encounter, status: 'cancelled' } as Encounter;
-    await updateResource({ resourceType: 'Encounter', id: encounter.id!, resource: updated as any });
+    await updateResource({
+      resourceType: 'Encounter',
+      id: encounter.id!,
+      resource: updated as any,
+    });
     refetch();
   };
 
   const formatMonthLabel = (ym: string) => {
     const [y, m] = ym.split('-').map(Number);
-    return new Date(y, m - 1, 1).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
+    return new Date(y, m - 1, 1).toLocaleDateString('en-SG', {
+      month: 'long',
+      year: 'numeric',
+    });
   };
-  const todayLabel = new Date(todayISO + 'T00:00:00').toLocaleDateString('en-SG', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
-  const rangeLabel = fromMonth === toMonth
-    ? formatMonthLabel(fromMonth)
-    : `${formatMonthLabel(fromMonth)} – ${formatMonthLabel(toMonth)}`;
+  const todayLabel = new Date(todayISO + 'T00:00:00').toLocaleDateString(
+    'en-SG',
+    {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    },
+  );
+  const rangeLabel =
+    fromMonth === toMonth
+      ? formatMonthLabel(fromMonth)
+      : `${formatMonthLabel(fromMonth)} – ${formatMonthLabel(toMonth)}`;
   const subtitleLabel = mode === 'today' ? todayLabel : rangeLabel;
 
   return (
@@ -624,7 +824,8 @@ const PatientQueuePage: React.FC = () => {
                   max={currentYearMonth}
                   onChange={(e) => {
                     setFromMonthAndSave(e.target.value);
-                    if (e.target.value > toMonth) setToMonthAndSave(e.target.value);
+                    if (e.target.value > toMonth)
+                      setToMonthAndSave(e.target.value);
                   }}
                   className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
@@ -648,16 +849,51 @@ const PatientQueuePage: React.FC = () => {
       {/* Summary chips */}
       <div className="flex flex-wrap gap-3 mb-6">
         {[
-          { label: 'Awaiting Triage', count: awaitingTriage.length, cls: 'bg-amber-100 text-amber-800' },
-          { label: 'Awaiting Clinician', count: awaitingClinician.length, cls: 'bg-yellow-100 text-yellow-800' },
-          { label: 'Waiting Patient', count: waitingPatient.length, cls: 'bg-orange-100 text-orange-800' },
-          { label: 'In Consultation', count: inConsultation.length, cls: 'bg-blue-100 text-blue-800' },
-          { label: 'Awaiting Medications', count: awaitingMedication.length, cls: 'bg-teal-100 text-teal-800' },
-          { label: 'Awaiting Billing', count: awaitingBilling.length, cls: 'bg-purple-100 text-purple-800' },
-          { label: 'Completed', count: completed.length, cls: 'bg-green-100 text-green-800' },
-          { label: 'Cancelled', count: cancelled.length, cls: 'bg-gray-100 text-gray-600' },
+          {
+            label: 'Awaiting Triage',
+            count: awaitingTriage.length,
+            cls: 'bg-amber-100 text-amber-800',
+          },
+          {
+            label: 'Awaiting Clinician',
+            count: awaitingClinician.length,
+            cls: 'bg-yellow-100 text-yellow-800',
+          },
+          {
+            label: 'Waiting Patient',
+            count: waitingPatient.length,
+            cls: 'bg-orange-100 text-orange-800',
+          },
+          {
+            label: 'In Consultation',
+            count: inConsultation.length,
+            cls: 'bg-blue-100 text-blue-800',
+          },
+          {
+            label: 'Awaiting Medications',
+            count: awaitingMedication.length,
+            cls: 'bg-teal-100 text-teal-800',
+          },
+          {
+            label: 'Awaiting Billing',
+            count: awaitingBilling.length,
+            cls: 'bg-purple-100 text-purple-800',
+          },
+          {
+            label: 'Completed',
+            count: completed.length,
+            cls: 'bg-green-100 text-green-800',
+          },
+          {
+            label: 'Cancelled',
+            count: cancelled.length,
+            cls: 'bg-gray-100 text-gray-600',
+          },
         ].map((s) => (
-          <span key={s.label} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${s.cls}`}>
+          <span
+            key={s.label}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${s.cls}`}
+          >
             {s.label} <span className="font-bold">{s.count}</span>
           </span>
         ))}

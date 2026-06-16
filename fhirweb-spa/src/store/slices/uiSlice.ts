@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-export type UserRole = 'psa' | 'clinician';
+export type UserRole = 'psa' | 'clinician' | 'patient';
 
 interface UiState {
   sidebarOpen: boolean;
@@ -59,7 +59,13 @@ const uiSlice = createSlice({
   },
 });
 
-export const { toggleSidebar, setTheme, addNotification, removeNotification, setRole, clearRole } =
-  uiSlice.actions;
+export const {
+  toggleSidebar,
+  setTheme,
+  addNotification,
+  removeNotification,
+  setRole,
+  clearRole,
+} = uiSlice.actions;
 
 export default uiSlice.reducer;

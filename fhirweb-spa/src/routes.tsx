@@ -40,37 +40,69 @@ const AppRoutes: React.FC = () => {
       {/* PSA-only routes */}
       <Route
         path="/patients"
-        element={<RoleGuard allowed={['psa']}><PatientSearchPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['psa']}>
+            <PatientSearchPage />
+          </RoleGuard>
+        }
       />
       <Route
         path="/patient/new"
-        element={<RoleGuard allowed={['psa']}><PatientCrudPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['psa']}>
+            <PatientCrudPage />
+          </RoleGuard>
+        }
       />
       <Route
         path="/patient/:id/details"
-        element={<RoleGuard allowed={['psa']}><PatientCrudPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['psa']}>
+            <PatientCrudPage />
+          </RoleGuard>
+        }
       />
       <Route
         path="/patient/:id/visit/new"
-        element={<RoleGuard allowed={['psa']}><VisitRegistrationPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['psa']}>
+            <VisitRegistrationPage />
+          </RoleGuard>
+        }
       />
       <Route
         path="/patient/:id/encounter/:encounterId/triage"
-        element={<RoleGuard allowed={['psa']}><PsaTriagePage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['psa']}>
+            <PsaTriagePage />
+          </RoleGuard>
+        }
       />
 
       {/* Clinician-only routes */}
       <Route
         path="/patient/:id/records"
-        element={<RoleGuard allowed={['clinician']}><PatientRecordsPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['clinician', 'patient']}>
+            <PatientRecordsPage />
+          </RoleGuard>
+        }
       />
       <Route
         path="/patient/:id/encounter/:encounterId/consult"
-        element={<RoleGuard allowed={['clinician']}><ClinicalConsultPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['clinician']}>
+            <ClinicalConsultPage />
+          </RoleGuard>
+        }
       />
       <Route
         path="/patient/:id/encounter/:encounterId/notes"
-        element={<RoleGuard allowed={['clinician']}><ConsultNoteDetailPage /></RoleGuard>}
+        element={
+          <RoleGuard allowed={['clinician']}>
+            <ConsultNoteDetailPage />
+          </RoleGuard>
+        }
       />
 
       {/* Patient detail (nested) — accessible to both roles */}
@@ -84,13 +116,25 @@ const AppRoutes: React.FC = () => {
         <Route path="encounter" element={<EncounterPage />} />
         <Route path="encounter/new" element={<EncounterCrudPage />} />
         <Route path="careplan/crud" element={<CarePlanCrudPage />} />
-        <Route path="careplan/crud/:resourceId" element={<CarePlanCrudPage />} />
+        <Route
+          path="careplan/crud/:resourceId"
+          element={<CarePlanCrudPage />}
+        />
         <Route path="observation/crud" element={<ObservationCrudPage />} />
-        <Route path="observation/crud/:resourceId" element={<ObservationCrudPage />} />
+        <Route
+          path="observation/crud/:resourceId"
+          element={<ObservationCrudPage />}
+        />
         <Route path="medication/crud" element={<MedicationRequestCrudPage />} />
-        <Route path="medication/crud/:resourceId" element={<MedicationRequestCrudPage />} />
+        <Route
+          path="medication/crud/:resourceId"
+          element={<MedicationRequestCrudPage />}
+        />
         <Route path="encounter/crud" element={<EncounterCrudPage />} />
-        <Route path="encounter/crud/:resourceId" element={<EncounterCrudPage />} />
+        <Route
+          path="encounter/crud/:resourceId"
+          element={<EncounterCrudPage />}
+        />
       </Route>
 
       <Route path="*" element={<NotFound />} />

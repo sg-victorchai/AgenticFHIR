@@ -52,7 +52,11 @@ const Header: React.FC = () => {
               </li>
               {role && (
                 <li className="text-blue-200 text-xs border border-blue-400 rounded px-2 py-0.5 capitalize">
-                  {role === 'psa' ? 'PSA' : 'Clinician'}
+                  {role === 'psa'
+                    ? 'PSA'
+                    : role === 'clinician'
+                      ? 'Clinician'
+                      : 'Patient'}
                 </li>
               )}
               {isAuthenticated ? (

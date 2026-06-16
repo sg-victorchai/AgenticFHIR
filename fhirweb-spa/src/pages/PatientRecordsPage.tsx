@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
   useGetResourceByIdQuery,
 } from '../services/fhir/client';
+import { RootState } from '../store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -777,6 +779,7 @@ const SearchResultCard: React.FC<{
 
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
+  const role = useSelector((state: RootState) => state.ui.role);
 
   const [activeTab, setActiveTab] = useState<TabId>('encounter');
   const [medSubTab, setMedSubTab] = useState<MedSubTab>('request');
@@ -2666,12 +2669,14 @@ const PatientRecordsPage: React.FC = () => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
-          <Link
-            to="/queue"
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mb-2"
-          >
-            ← Back to Queue
-          </Link>
+          {role !== 'patient' && (
+            <Link
+              to="/queue"
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mb-2"
+            >
+              ← Back to Queue
+            </Link>
+          )}
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               <h1 className="text-xl font-bold text-gray-900">
