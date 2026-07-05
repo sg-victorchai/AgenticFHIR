@@ -993,14 +993,22 @@ export const fhirApi = createApi({
 
     searchByPatient: builder.query<
       Bundle<Resource>,
-      { resourceType: string; patientId: string; extraParams?: Record<string, string> }
+      {
+        resourceType: string;
+        patientId: string;
+        extraParams?: Record<string, string>;
+      }
     >({
       queryFn: async ({ resourceType, patientId, extraParams }) => {
         try {
           const client = await createFHIRClient();
           const results = await client.search({
             resourceType,
-            searchParams: { _count: '100', ...extraParams, subject: `Patient/${patientId}` },
+            searchParams: {
+              _count: '100',
+              ...extraParams,
+              subject: `Patient/${patientId}`,
+            },
           });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
@@ -1016,8 +1024,15 @@ export const fhirApi = createApi({
           };
         }
       },
-      providesTags: (_result, _error, { resourceType, patientId, extraParams }) => [
-        { type: resourceType as any, id: `${patientId}:${JSON.stringify(extraParams ?? {})}` },
+      providesTags: (
+        _result,
+        _error,
+        { resourceType, patientId, extraParams },
+      ) => [
+        {
+          type: resourceType as any,
+          id: `${patientId}:${JSON.stringify(extraParams ?? {})}`,
+        },
       ],
     }),
 
@@ -1027,7 +1042,10 @@ export const fhirApi = createApi({
           const client = await createFHIRClient();
           const results = await client.search({
             resourceType: 'Observation',
-            searchParams: { _id: ids.join(','), _count: String(ids.length + 10) },
+            searchParams: {
+              _id: ids.join(','),
+              _count: String(ids.length + 10),
+            },
           });
           return { data: results as Bundle<Resource> };
         } catch (error: any) {
@@ -1047,7 +1065,10 @@ export const fhirApi = createApi({
         ids.map((id) => ({ type: 'Observation' as const, id })),
     }),
 
-    getTodayEncounters: builder.query<Bundle<Resource>, { from: string; to: string } | void>({
+    getTodayEncounters: builder.query<
+      Bundle<Resource>,
+      { from: string; to: string } | void
+    >({
       queryFn: async (range) => {
         try {
           const client = await createFHIRClient();
@@ -1081,7 +1102,8 @@ export const fhirApi = createApi({
       providesTags: ['Encounter'],
     }),
 
-    searchChildEncounters: builder.query<Bundle<Resource>, string>({      queryFn: async (encounterId) => {
+    searchChildEncounters: builder.query<Bundle<Resource>, string>({
+      queryFn: async (encounterId) => {
         try {
           const client = await createFHIRClient();
           const results = await client.search({

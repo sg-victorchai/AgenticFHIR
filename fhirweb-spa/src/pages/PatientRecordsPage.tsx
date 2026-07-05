@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import FHIR from 'fhirclient';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
@@ -37,12 +38,49 @@ interface HybridSearchResponse {
   results: HybridSearchResult[];
 }
 
+interface DigitalTwinMissionOutputs {
+  response?: string;
+  confidence?: number;
+  sources?: Array<{ resourceType?: string; id?: string } | string>;
+  disclaimer?: string;
+  executionTimeMs?: number;
+}
+
+interface DigitalTwinMissionStatus {
+  missionId?: string;
+  id?: string;
+  status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | string;
+  success?: boolean;
+  failureReason?: string;
+  summary?: string;
+  message?: string;
+  outputs?: DigitalTwinMissionOutputs;
+}
+
+interface MissionRequestConfig {
+  headers: Record<string, string>;
+  channel: 'patient-portal' | 'in-app';
+}
+
+interface HarmonizerJobStatusResponse {
+  executionId?: string;
+  jobId?: string;
+  status?: string;
+  currentStep?: string;
+  progress?: {
+    percentComplete?: number;
+  };
+  error?: string;
+  message?: string;
+  pollUrl?: string;
+}
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'encounter', label: 'Encounter' },
   { id: 'condition', label: 'Condition' },
   { id: 'observation', label: 'Observation' },
-  { id: 'orders', label: 'Lab & Rad Orders' },
-  { id: 'lab-results', label: 'Lab Results' },
+  { id: 'orders', label: 'Lab & Rad Order' },
+  { id: 'lab-results', label: 'Lab Report' },
   { id: 'rad-report', label: 'Rad Report' },
   { id: 'medication', label: 'Medication' },
   { id: 'procedure', label: 'Procedure' },
@@ -308,10 +346,20 @@ const AI_BASE_URL = (
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir'
 ).replace(/\/fhir\/?$/, '');
 
+const AGENT_API_BASE_URL =
+  import.meta.env.VITE_AGENT_API_BASE_URL || AI_BASE_URL;
+const HARMONIZER_IMPORT_URL =
+  import.meta.env.VITE_HARMONIZER_IMPORT_URL ||
+  `${AGENT_API_BASE_URL}/api/personas/clinical-lab-harmonizer/import`;
+
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
 
 const PAGE_SIZE = 5;
+const MISSION_POLL_INTERVAL_MS = 1000;
+const MISSION_POLL_TIMEOUT_MS = 30000;
+const HARMONIZER_POLL_INTERVAL_MS = 1200;
+const HARMONIZER_POLL_TIMEOUT_MS = 120000;
 
 const getResourceTypesFromQuery = (query: string): string[] => {
   const q = query.toLowerCase().trim();
@@ -780,6 +828,8 @@ const SearchResultCard: React.FC<{
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
   const role = useSelector((state: RootState) => state.ui.role);
+  const pollRunIdRef = useRef(0);
+  const uploadPollRunIdRef = useRef(0);
 
   const [activeTab, setActiveTab] = useState<TabId>('encounter');
   const [medSubTab, setMedSubTab] = useState<MedSubTab>('request');
@@ -804,11 +854,545 @@ const PatientRecordsPage: React.FC = () => {
 
   // ── Search state ──
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [showClinicianUpload, setShowClinicianUpload] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] =
     useState<HybridSearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // ── Patient explainer state ──
+  const [patientQuestion, setPatientQuestion] = useState('');
+  const [missionId, setMissionId] = useState<string | null>(null);
+  const [isMissionSubmitting, setIsMissionSubmitting] = useState(false);
+  const [isMissionPolling, setIsMissionPolling] = useState(false);
+  const [missionError, setMissionError] = useState<string | null>(null);
+  const [missionOutputs, setMissionOutputs] =
+    useState<DigitalTwinMissionOutputs | null>(null);
+
+  // ── Clinician scanned notes upload state ──
+  const [selectedNoteFile, setSelectedNoteFile] = useState<File | null>(null);
+  const [isUploadingNotes, setIsUploadingNotes] = useState(false);
+  const [noteUploadMessage, setNoteUploadMessage] = useState<string | null>(
+    null,
+  );
+  const [noteUploadError, setNoteUploadError] = useState<string | null>(null);
+  const [noteUploadJobId, setNoteUploadJobId] = useState<string | null>(null);
+  const [noteUploadJobStatus, setNoteUploadJobStatus] = useState<string | null>(
+    null,
+  );
+  const [noteUploadCurrentStep, setNoteUploadCurrentStep] = useState<
+    string | null
+  >(null);
+  const [noteUploadPercent, setNoteUploadPercent] = useState<number | null>(
+    null,
+  );
+  const [isNoteUploadPolling, setIsNoteUploadPolling] = useState(false);
+
+  const sleep = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        if (comma === -1) {
+          reject(new Error('Unable to read selected file.'));
+          return;
+        }
+        resolve(result.slice(comma + 1));
+      };
+      reader.onerror = () => reject(new Error('Unable to read selected file.'));
+      reader.readAsDataURL(file);
+    });
+
+  const getHarmonizerDocumentType = (
+    file: File,
+  ): 'text' | 'pdf' | 'cda' | 'hl7v2' | 'image' => {
+    const fileName = file.name.toLowerCase();
+    const mime = (file.type || '').toLowerCase();
+
+    if (mime === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
+    if (
+      mime === 'text/xml' ||
+      mime === 'application/xml' ||
+      fileName.endsWith('.cda')
+    )
+      return 'cda';
+    if (
+      mime.includes('hl7') ||
+      fileName.endsWith('.hl7') ||
+      fileName.endsWith('.hl7v2') ||
+      fileName.endsWith('.v2')
+    )
+      return 'hl7v2';
+    if (mime.startsWith('image/')) return 'image';
+    return 'text';
+  };
+
+  const getHarmonizerPollUrl = (jobId: string, pollUrl?: string): string => {
+    if (pollUrl) {
+      if (/^https?:\/\//i.test(pollUrl)) return pollUrl;
+      if (pollUrl.startsWith('/')) return `${AGENT_API_BASE_URL}${pollUrl}`;
+    }
+    return `${AGENT_API_BASE_URL}/api/personas/clinical-notes-harmonizer/jobs/${encodeURIComponent(jobId)}`;
+  };
+
+  const normalizeHarmonizerStatus = (status?: string): string =>
+    String(status || '').toUpperCase();
+
+  const pollHarmonizerJobStatus = async (
+    jobId: string,
+    headers: Record<string, string>,
+    runId: number,
+    pollUrl?: string,
+  ) => {
+    const started = Date.now();
+    const statusUrl = getHarmonizerPollUrl(jobId, pollUrl);
+    setIsNoteUploadPolling(true);
+
+    while (Date.now() - started < HARMONIZER_POLL_TIMEOUT_MS) {
+      if (runId !== uploadPollRunIdRef.current) return;
+
+      const response = await fetch(statusUrl, { headers });
+
+      let payload: HarmonizerJobStatusResponse = {};
+      try {
+        payload = (await response.json()) as HarmonizerJobStatusResponse;
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok) {
+        const serverMessage =
+          payload.error ||
+          payload.message ||
+          `Harmonizer status request failed (${response.status}).`;
+        throw new Error(serverMessage);
+      }
+
+      const status = normalizeHarmonizerStatus(payload.status) || 'RUNNING';
+      setNoteUploadJobStatus(status);
+      setNoteUploadCurrentStep(payload.currentStep || null);
+      setNoteUploadPercent(
+        typeof payload.progress?.percentComplete === 'number'
+          ? payload.progress.percentComplete
+          : null,
+      );
+
+      if (status === 'COMPLETED') {
+        setIsNoteUploadPolling(false);
+        setNoteUploadMessage(`Harmonizer completed (${jobId}).`);
+        return;
+      }
+
+      if (status === 'FAILED') {
+        const failure =
+          payload.error || payload.message || 'Harmonizer processing failed.';
+        throw new Error(failure);
+      }
+
+      await sleep(HARMONIZER_POLL_INTERVAL_MS);
+    }
+
+    throw new Error('Harmonizer job timed out. Please check again shortly.');
+  };
+
+  const handleUploadScannedNotes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNoteUploadError(null);
+    setNoteUploadMessage(null);
+    setNoteUploadJobId(null);
+    setNoteUploadJobStatus(null);
+    setNoteUploadCurrentStep(null);
+    setNoteUploadPercent(null);
+    setIsNoteUploadPolling(false);
+    setIsUploadingNotes(true);
+
+    uploadPollRunIdRef.current += 1;
+    const currentUploadRunId = uploadPollRunIdRef.current;
+
+    if (!patientId) {
+      setNoteUploadError('Patient context is missing from URL.');
+      return;
+    }
+
+    if (!selectedNoteFile) {
+      setNoteUploadError('Please select a scanned clinical notes file first.');
+      setIsUploadingNotes(false);
+      return;
+    }
+
+    try {
+      const { headers, channel } = await buildMissionRequestConfig();
+      const base64 = await fileToBase64(selectedNoteFile);
+      const documentType = getHarmonizerDocumentType(selectedNoteFile);
+
+      const response = await fetch(HARMONIZER_IMPORT_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          patientId,
+          documentContent: base64,
+          documentType,
+          metadata: {
+            source: 'PORTAL_UPLOAD',
+            channel,
+            filename: selectedNoteFile.name,
+            mimeType: selectedNoteFile.type || 'application/octet-stream',
+            date: new Date().toISOString().slice(0, 10),
+            priority: 'NORMAL',
+          },
+        }),
+      });
+
+      let payload: HarmonizerJobStatusResponse = {};
+      try {
+        payload = (await response.json()) as HarmonizerJobStatusResponse;
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok) {
+        const serverMessage =
+          payload?.message ||
+          payload?.error ||
+          `Harmonizer import failed (${response.status}).`;
+        throw new Error(serverMessage);
+      }
+
+      const executionId = payload.executionId || payload.jobId;
+      const status = normalizeHarmonizerStatus(payload.status) || 'ACCEPTED';
+
+      setNoteUploadMessage(
+        executionId
+          ? `Submitted to Harmonizer (${executionId}, ${status}).`
+          : `Submitted to Harmonizer (${status}).`,
+      );
+
+      if (executionId) {
+        setNoteUploadJobId(executionId);
+        setNoteUploadJobStatus(status);
+        setNoteUploadCurrentStep(payload.currentStep || null);
+        setNoteUploadPercent(
+          typeof payload.progress?.percentComplete === 'number'
+            ? payload.progress.percentComplete
+            : null,
+        );
+
+        if (status !== 'COMPLETED' && status !== 'FAILED') {
+          void pollHarmonizerJobStatus(
+            executionId,
+            headers,
+            currentUploadRunId,
+            payload.pollUrl,
+          ).catch((err: any) => {
+            if (currentUploadRunId === uploadPollRunIdRef.current) {
+              setIsNoteUploadPolling(false);
+              setNoteUploadError(
+                err?.message ||
+                  'Unable to poll Harmonizer job status. Please refresh later.',
+              );
+            }
+          });
+        }
+      }
+
+      setSelectedNoteFile(null);
+    } catch (err: any) {
+      setNoteUploadError(err?.message || 'Failed to upload scanned notes.');
+    } finally {
+      setIsUploadingNotes(false);
+    }
+  };
+
+  const resolveTenantId = (): string | null => {
+    const direct =
+      sessionStorage.getItem('tenantId') ||
+      sessionStorage.getItem('tenant_id') ||
+      localStorage.getItem('tenantId') ||
+      localStorage.getItem('tenant_id');
+
+    if (direct) return direct;
+
+    for (const key of Object.keys(sessionStorage)) {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw) as {
+          tenantId?: string;
+          tenant_id?: string;
+          tenant?: string;
+          tokenResponse?: {
+            tenantId?: string;
+            tenant_id?: string;
+            tenant?: string;
+          };
+        };
+        const tenant =
+          parsed.tenantId ||
+          parsed.tenant_id ||
+          parsed.tenant ||
+          parsed.tokenResponse?.tenantId ||
+          parsed.tokenResponse?.tenant_id ||
+          parsed.tokenResponse?.tenant;
+        if (tenant) return tenant;
+      } catch {
+        // Ignore non-JSON values in session storage.
+      }
+    }
+
+    return null;
+  };
+
+  const buildMissionRequestConfig = async (): Promise<MissionRequestConfig> => {
+    let accessToken: string | undefined;
+    let tenantId: string | null = resolveTenantId();
+
+    try {
+      const smartClient = await FHIR.oauth2.ready();
+      accessToken = smartClient.state.tokenResponse?.access_token;
+      const smartTenant = (smartClient.state as any)?.tenantId;
+      if (!tenantId && smartTenant) tenantId = smartTenant;
+    } catch {
+      // We still allow session-derived context if SMART client is unavailable.
+    }
+
+    const resolvedTenantId =
+      tenantId || import.meta.env.VITE_TENANT_ID || 'default';
+
+    if (!patientId) {
+      throw new Error('Patient context is missing in this page URL.');
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Tenant-ID': resolvedTenantId,
+      'X-Patient-ID': patientId,
+    };
+
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+      return { headers, channel: 'patient-portal' };
+    }
+
+    // Independent in-app mode fallback (non-SMART).
+    if (API_KEY) {
+      headers['x-api-key'] = API_KEY;
+      return { headers, channel: 'in-app' };
+    }
+
+    throw new Error(
+      'No authentication context available. Please sign in or configure API key access.',
+    );
+  };
+
+  const pollMissionStatus = async (
+    currentMissionId: string,
+    headers: Record<string, string>,
+    runId: number,
+  ) => {
+    const started = Date.now();
+    setIsMissionPolling(true);
+
+    while (Date.now() - started < MISSION_POLL_TIMEOUT_MS) {
+      if (runId !== pollRunIdRef.current) return;
+
+      const response = await fetch(
+        `${AGENT_API_BASE_URL}/api/agent/AgentMission/${currentMissionId}`,
+        { headers },
+      );
+
+      let payload: DigitalTwinMissionStatus = {};
+      const raw = await response.text();
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (typeof parsed === 'string') {
+            payload = { summary: parsed, message: parsed };
+          } else if (parsed && typeof parsed === 'object') {
+            payload = parsed as DigitalTwinMissionStatus;
+          }
+        } catch {
+          // Some foreground mission responses are plain text/markdown summaries.
+          payload = { summary: raw, message: raw };
+        }
+      }
+
+      if (!response.ok) {
+        const serverMessage =
+          payload.failureReason ||
+          payload.message ||
+          payload.summary ||
+          `Mission status request failed (${response.status})`;
+        throw new Error(serverMessage);
+      }
+
+      if (payload.status === 'COMPLETED') {
+        setMissionOutputs(
+          payload.outputs ??
+            (payload.summary || payload.message
+              ? {
+                  response: payload.summary || payload.message,
+                }
+              : null),
+        );
+        setIsMissionPolling(false);
+        return;
+      }
+
+      if (payload.status === 'FAILED') {
+        throw new Error(payload.failureReason || 'Mission execution failed.');
+      }
+
+      await sleep(MISSION_POLL_INTERVAL_MS);
+    }
+
+    throw new Error('Digital Twin request timed out. Please try again.');
+  };
+
+  const handleAskPatientExplainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const question = patientQuestion.trim();
+    if (question.length < 6) {
+      setMissionError('Please enter at least 6 characters.');
+      return;
+    }
+
+    pollRunIdRef.current += 1;
+    const currentRunId = pollRunIdRef.current;
+
+    setMissionError(null);
+    setMissionOutputs(null);
+    setMissionId(null);
+    setIsMissionSubmitting(true);
+
+    try {
+      const { headers, channel } = await buildMissionRequestConfig();
+      const response = await fetch(
+        `${AGENT_API_BASE_URL}/api/agent/AgentPersona/digital-twin/AgentMission`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            goal: question,
+            context: {
+              executionMode: 'foreground',
+              patientId,
+              channel,
+            },
+          }),
+        },
+      );
+
+      let payload: DigitalTwinMissionStatus = {};
+      const raw = await response.text();
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (typeof parsed === 'string') {
+            payload = { summary: parsed, message: parsed, success: response.ok };
+          } else if (parsed && typeof parsed === 'object') {
+            payload = parsed as DigitalTwinMissionStatus;
+          }
+        } catch {
+          // Backend may return plain text/markdown when foreground execution completes.
+          payload = { summary: raw, message: raw, success: response.ok };
+        }
+      }
+
+      if (!response.ok) {
+        const serverMessage =
+          payload.message ||
+          payload.summary ||
+          payload.failureReason ||
+          `Failed to start Digital Twin mission (${response.status}).`;
+        throw new Error(serverMessage);
+      }
+
+      const locationHeader = response.headers.get('location') || '';
+      const missionIdFromLocation =
+        locationHeader.match(/AgentMission\/([^/?#]+)/)?.[1] ||
+        locationHeader.match(/\/([^/?#]+)$/)?.[1];
+      const resolvedMissionId =
+        payload.missionId ||
+        payload.id ||
+        response.headers.get('x-mission-id') ||
+        response.headers.get('x-execution-id') ||
+        missionIdFromLocation;
+      if (resolvedMissionId) {
+        setMissionId(resolvedMissionId);
+      }
+
+      const immediateResponse =
+        payload.outputs?.response || payload.summary || payload.message;
+
+      // If mission already completed or failed, show result immediately
+      if (
+        payload.status === 'COMPLETED' ||
+        payload.status === 'FAILED' ||
+        payload.success === true ||
+        payload.success === false
+      ) {
+        if (payload.status === 'FAILED') {
+          throw new Error(
+            payload.failureReason || 'Mission execution failed.',
+          );
+        }
+
+        if (payload.success === false) {
+          throw new Error(
+            payload.failureReason ||
+              immediateResponse ||
+              'Mission execution failed.',
+          );
+        }
+
+        setMissionOutputs(
+          payload.outputs ??
+            (immediateResponse
+              ? {
+                  response: immediateResponse,
+                }
+              : null),
+        );
+        setIsMissionPolling(false);
+        return;
+      }
+
+      if (!resolvedMissionId) {
+        if (immediateResponse) {
+          setMissionOutputs({ response: immediateResponse });
+          setIsMissionPolling(false);
+          return;
+        }
+        throw new Error('No mission ID received from server.');
+      }
+
+      // Otherwise poll for completion
+      await pollMissionStatus(resolvedMissionId, headers, currentRunId);
+    } catch (err: any) {
+      if (currentRunId === pollRunIdRef.current) {
+        setMissionError(
+          err?.message || 'Unable to process request. Please try again.',
+        );
+      }
+    } finally {
+      if (currentRunId === pollRunIdRef.current) {
+        setIsMissionSubmitting(false);
+        setIsMissionPolling(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      pollRunIdRef.current += 1;
+      uploadPollRunIdRef.current += 1;
+    };
+  }, []);
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -1416,6 +2000,28 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const renderObservationTab = () => {
+    const formatReferenceRange = (ranges?: any[]): string => {
+      if (!ranges?.length) return '—';
+
+      const first = ranges[0];
+      const low = first?.low;
+      const high = first?.high;
+
+      if (low?.value != null || high?.value != null) {
+        const lowText =
+          low?.value != null
+            ? `${low.value}${low.unit ? ` ${low.unit}` : ''}`
+            : '—';
+        const highText =
+          high?.value != null
+            ? `${high.value}${high.unit ? ` ${high.unit}` : ''}`
+            : '—';
+        return `${lowText} - ${highText}`;
+      }
+
+      return first?.text || '—';
+    };
+
     return (
       <div>
         {showFilter && (
@@ -1508,6 +2114,9 @@ const PatientRecordsPage: React.FC = () => {
                                       <th className="px-3 py-1 text-left">
                                         Value
                                       </th>
+                                      <th className="px-3 py-1 text-left">
+                                        Ref Range
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1526,6 +2135,11 @@ const PatientRecordsPage: React.FC = () => {
                                             ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
                                             : c.valueString || '—'}
                                         </td>
+                                        <td className="px-3 py-1">
+                                          {formatReferenceRange(
+                                            c.referenceRange,
+                                          )}
+                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -1536,6 +2150,12 @@ const PatientRecordsPage: React.FC = () => {
                                 <div>
                                   <span className="font-medium">Value:</span>{' '}
                                   {value}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Reference Range:
+                                  </span>{' '}
+                                  {formatReferenceRange(obs.referenceRange)}
                                 </div>
                                 <div>
                                   <span className="font-medium">
@@ -2688,30 +3308,59 @@ const PatientRecordsPage: React.FC = () => {
               </span>
             </div>
             <div className="flex flex-col items-end gap-2">
-              <button
-                onClick={() => setShowGlobalSearch((s) => !s)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-                  showGlobalSearch
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
-                }`}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-4 h-4"
+              <div className="flex items-center gap-2">
+                {role === 'clinician' && (
+                  <button
+                    onClick={() => setShowClinicianUpload((s) => !s)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                      showClinicianUpload
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400 hover:text-emerald-600'
+                    }`}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                      className="w-4 h-4"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
+                      />
+                    </svg>
+                    Upload Notes
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setShowGlobalSearch((s) => !s)}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                    showGlobalSearch
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                  }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                  />
-                </svg>
-                Global Search
-              </button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-4 h-4"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                    />
+                  </svg>
+                  Global Search
+                </button>
+              </div>
               {showGlobalSearch && (
                 <form onSubmit={handleSearch} className="flex gap-2 w-[480px]">
                   <div className="relative flex-1">
@@ -2760,6 +3409,198 @@ const PatientRecordsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {role === 'patient' && (
+        <div className="max-w-7xl mx-auto px-6 pt-5">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h2 className="text-sm font-semibold text-indigo-900 mb-2">
+              Ask About My Health Conditions
+            </h2>
+            <p className="text-xs text-indigo-800 mb-3">
+              Ask in plain language and Digital Twin will explain using your own
+              medical record.
+            </p>
+
+            <form onSubmit={handleAskPatientExplainer} className="flex gap-2">
+              <input
+                type="text"
+                value={patientQuestion}
+                onChange={(e) => setPatientQuestion(e.target.value)}
+                placeholder="e.g. Why is my blood pressure high lately?"
+                className="flex-1 px-3 py-2 text-sm border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <button
+                type="submit"
+                disabled={
+                  isMissionSubmitting ||
+                  isMissionPolling ||
+                  patientQuestion.trim().length < 6
+                }
+                className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isMissionSubmitting || isMissionPolling
+                  ? 'Thinking...'
+                  : 'Ask'}
+              </button>
+            </form>
+
+            {missionId && (
+              <p className="mt-2 text-xs text-indigo-700">
+                Mission ID: {missionId}
+              </p>
+            )}
+
+            {missionError && (
+              <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {missionError}
+              </div>
+            )}
+
+            {missionOutputs?.response && (
+              <div className="mt-3 bg-white border border-indigo-200 rounded-lg p-3">
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                  {missionOutputs.response}
+                </p>
+                <div className="mt-2 text-xs text-gray-500 flex flex-wrap gap-3">
+                  {typeof missionOutputs.confidence === 'number' && (
+                    <span>
+                      Confidence: {(missionOutputs.confidence * 100).toFixed(0)}
+                      %
+                    </span>
+                  )}
+                  {typeof missionOutputs.executionTimeMs === 'number' && (
+                    <span>Time: {missionOutputs.executionTimeMs} ms</span>
+                  )}
+                </div>
+                {missionOutputs.disclaimer && (
+                  <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                    {missionOutputs.disclaimer}
+                  </p>
+                )}
+                {!!missionOutputs.sources?.length && (
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-gray-600 mb-1">
+                      Sources
+                    </p>
+                    <ul className="list-disc list-inside text-xs text-gray-500 space-y-0.5">
+                      {missionOutputs.sources.map((source, idx) => (
+                        <li key={idx}>
+                          {typeof source === 'string'
+                            ? source
+                            : `${source.resourceType || 'Resource'}${source.id ? `/${source.id}` : ''}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {role === 'clinician' && showClinicianUpload && (
+        <div className="max-w-7xl mx-auto px-6 pt-5">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <h2 className="text-sm font-semibold text-emerald-900 mb-2">
+              Upload Scanned Clinical Notes
+            </h2>
+            <p className="text-xs text-emerald-800 mb-3">
+              Select a scanned file (PDF/image) to attach as a patient clinical
+              note.
+            </p>
+
+            <form
+              onSubmit={handleUploadScannedNotes}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                onChange={(e) =>
+                  setSelectedNoteFile(e.target.files?.[0] ?? null)
+                }
+                className="text-sm text-gray-700 file:mr-3 file:px-3 file:py-1.5 file:border file:border-emerald-300 file:rounded-md file:bg-white file:text-emerald-700 file:cursor-pointer"
+              />
+              <button
+                type="submit"
+                disabled={!selectedNoteFile || isUploadingNotes}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
+              </button>
+            </form>
+
+            {selectedNoteFile && (
+              <p className="mt-2 text-xs text-emerald-700">
+                Selected file: {selectedNoteFile.name}
+              </p>
+            )}
+
+            {noteUploadMessage && (
+              <div className="mt-3 text-sm text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2">
+                {noteUploadMessage}
+              </div>
+            )}
+
+            {noteUploadJobId && noteUploadJobStatus && (
+              <div className="mt-3 text-xs text-gray-700 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                <p className="font-medium text-gray-800">
+                  Job: {noteUploadJobId}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  {['QUEUED', 'RUNNING', 'COMPLETED'].map((step, index) => {
+                    const currentIndex = [
+                      'QUEUED',
+                      'RUNNING',
+                      'COMPLETED',
+                    ].indexOf(noteUploadJobStatus);
+                    const reached = currentIndex >= index;
+                    const active = noteUploadJobStatus === step;
+                    return (
+                      <React.Fragment key={step}>
+                        {index > 0 && (
+                          <span
+                            className={`h-px w-6 ${reached ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                          />
+                        )}
+                        <span
+                          className={`px-2 py-0.5 rounded-full border font-medium ${
+                            active || reached
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                              : 'bg-gray-100 text-gray-500 border-gray-300'
+                          }`}
+                        >
+                          {step}
+                        </span>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                {(noteUploadCurrentStep || noteUploadPercent !== null) && (
+                  <p className="mt-2 text-gray-600">
+                    {noteUploadCurrentStep && `Step: ${noteUploadCurrentStep}`}
+                    {noteUploadCurrentStep &&
+                      noteUploadPercent !== null &&
+                      ' • '}
+                    {noteUploadPercent !== null &&
+                      `Progress: ${Math.round(noteUploadPercent)}%`}
+                  </p>
+                )}
+                {isNoteUploadPolling && (
+                  <p className="mt-1 text-gray-500">Polling live status...</p>
+                )}
+              </div>
+            )}
+
+            {noteUploadError && (
+              <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {noteUploadError}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Search Results — shown above tab bar */}
       {(searchResults !== null || searchError) && (

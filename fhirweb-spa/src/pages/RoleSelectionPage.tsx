@@ -10,29 +10,6 @@ import { Bundle, Patient as FHIRPatient } from 'fhir/r5';
 
 const SMART_PATIENT_ID_KEY = 'smartPatientId';
 
-const getPatientIdFromSessionStorage = (): string | null => {
-  const direct = sessionStorage.getItem(SMART_PATIENT_ID_KEY);
-  if (direct) return direct;
-
-  for (const key of Object.keys(sessionStorage)) {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) continue;
-
-    try {
-      const parsed = JSON.parse(raw) as {
-        patient?: string;
-        tokenResponse?: { patient?: string };
-      };
-      const id = parsed.patient ?? parsed.tokenResponse?.patient;
-      if (id) return id;
-    } catch {
-      // Ignore non-JSON session values.
-    }
-  }
-
-  return null;
-};
-
 const RoleSelectionPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -125,25 +102,7 @@ const RoleSelectionPage: React.FC = () => {
     }
 
     if (selected === 'patient') {
-      dispatch(setRole('patient'));
       setShowPatientSelector(true);
-
-      let patientId = getPatientIdFromSessionStorage();
-      try {
-        const smartClient = await FHIR.oauth2.ready();
-        patientId = smartClient.patient.id || patientId;
-        if (patientId) sessionStorage.setItem(SMART_PATIENT_ID_KEY, patientId);
-      } catch (error) {
-        console.error(
-          'Unable to resolve SMART patient context for patient role:',
-          error,
-        );
-      }
-
-      if (patientId) {
-        navigate(`/patient/${patientId}/records`);
-      }
-
       return;
     }
   };
