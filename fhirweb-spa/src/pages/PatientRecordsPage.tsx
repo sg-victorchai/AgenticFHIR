@@ -8,6 +8,8 @@ import {
   useGetResourceByIdQuery,
 } from '../services/fhir/client';
 import { RootState } from '../store';
+import AgentConversationModal from '../components/modals/AgentConversationModal';
+import { AgentEndpointConfig } from '../types/agent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,25 +38,6 @@ interface HybridSearchResponse {
   query: string;
   totalResults: number;
   results: HybridSearchResult[];
-}
-
-interface DigitalTwinMissionOutputs {
-  response?: string;
-  confidence?: number;
-  sources?: Array<{ resourceType?: string; id?: string } | string>;
-  disclaimer?: string;
-  executionTimeMs?: number;
-}
-
-interface DigitalTwinMissionStatus {
-  missionId?: string;
-  id?: string;
-  status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | string;
-  success?: boolean;
-  failureReason?: string;
-  summary?: string;
-  message?: string;
-  outputs?: DigitalTwinMissionOutputs;
 }
 
 interface MissionRequestConfig {
@@ -356,8 +339,6 @@ const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
 
 const PAGE_SIZE = 5;
-const MISSION_POLL_INTERVAL_MS = 1000;
-const MISSION_POLL_TIMEOUT_MS = 30000;
 const HARMONIZER_POLL_INTERVAL_MS = 1200;
 const HARMONIZER_POLL_TIMEOUT_MS = 120000;
 
@@ -861,14 +842,18 @@ const PatientRecordsPage: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // ── Patient explainer state ──
-  const [patientQuestion, setPatientQuestion] = useState('');
-  const [missionId, setMissionId] = useState<string | null>(null);
-  const [isMissionSubmitting, setIsMissionSubmitting] = useState(false);
-  const [isMissionPolling, setIsMissionPolling] = useState(false);
-  const [missionError, setMissionError] = useState<string | null>(null);
-  const [missionOutputs, setMissionOutputs] =
-    useState<DigitalTwinMissionOutputs | null>(null);
+  // ── Agent conversation modal state ──
+  const [showAgentModal, setShowAgentModal] = useState(false);
+  const [agentModalError, setAgentModalError] = useState<string | null>(null);
+  const [agentTenantId, setAgentTenantId] = useState<string>(
+    import.meta.env.VITE_TENANT_ID || 'default',
+  );
+  const [agentAccessToken, setAgentAccessToken] = useState<string | undefined>(
+    undefined,
+  );
+  const [agentExtraHeaders, setAgentExtraHeaders] = useState<
+    Record<string, string>
+  >({});
 
   // ── Clinician scanned notes upload state ──
   const [selectedNoteFile, setSelectedNoteFile] = useState<File | null>(null);
@@ -1189,202 +1174,40 @@ const PatientRecordsPage: React.FC = () => {
     );
   };
 
-  const pollMissionStatus = async (
-    currentMissionId: string,
-    headers: Record<string, string>,
-    runId: number,
-  ) => {
-    const started = Date.now();
-    setIsMissionPolling(true);
-
-    while (Date.now() - started < MISSION_POLL_TIMEOUT_MS) {
-      if (runId !== pollRunIdRef.current) return;
-
-      const response = await fetch(
-        `${AGENT_API_BASE_URL}/api/agent/AgentMission/${currentMissionId}`,
-        { headers },
-      );
-
-      let payload: DigitalTwinMissionStatus = {};
-      const raw = await response.text();
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          if (typeof parsed === 'string') {
-            payload = { summary: parsed, message: parsed };
-          } else if (parsed && typeof parsed === 'object') {
-            payload = parsed as DigitalTwinMissionStatus;
-          }
-        } catch {
-          // Some foreground mission responses are plain text/markdown summaries.
-          payload = { summary: raw, message: raw };
-        }
-      }
-
-      if (!response.ok) {
-        const serverMessage =
-          payload.failureReason ||
-          payload.message ||
-          payload.summary ||
-          `Mission status request failed (${response.status})`;
-        throw new Error(serverMessage);
-      }
-
-      if (payload.status === 'COMPLETED') {
-        setMissionOutputs(
-          payload.outputs ??
-            (payload.summary || payload.message
-              ? {
-                  response: payload.summary || payload.message,
-                }
-              : null),
-        );
-        setIsMissionPolling(false);
-        return;
-      }
-
-      if (payload.status === 'FAILED') {
-        throw new Error(payload.failureReason || 'Mission execution failed.');
-      }
-
-      await sleep(MISSION_POLL_INTERVAL_MS);
-    }
-
-    throw new Error('Digital Twin request timed out. Please try again.');
-  };
-
-  const handleAskPatientExplainer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const question = patientQuestion.trim();
-    if (question.length < 6) {
-      setMissionError('Please enter at least 6 characters.');
-      return;
-    }
-
-    pollRunIdRef.current += 1;
-    const currentRunId = pollRunIdRef.current;
-
-    setMissionError(null);
-    setMissionOutputs(null);
-    setMissionId(null);
-    setIsMissionSubmitting(true);
+  const openAgentConversationModal = async () => {
+    setAgentModalError(null);
 
     try {
-      const { headers, channel } = await buildMissionRequestConfig();
-      const response = await fetch(
-        `${AGENT_API_BASE_URL}/api/agent/AgentPersona/digital-twin/AgentMission`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            goal: question,
-            context: {
-              executionMode: 'foreground',
-              patientId,
-              channel,
-            },
-          }),
-        },
-      );
+      const { headers } = await buildMissionRequestConfig();
+      const resolvedTenantId =
+        headers['X-Tenant-ID'] || import.meta.env.VITE_TENANT_ID || 'default';
+      const authorization = headers.Authorization || '';
+      const token = authorization.startsWith('Bearer ')
+        ? authorization.slice(7)
+        : undefined;
 
-      let payload: DigitalTwinMissionStatus = {};
-      const raw = await response.text();
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          if (typeof parsed === 'string') {
-            payload = { summary: parsed, message: parsed, success: response.ok };
-          } else if (parsed && typeof parsed === 'object') {
-            payload = parsed as DigitalTwinMissionStatus;
-          }
-        } catch {
-          // Backend may return plain text/markdown when foreground execution completes.
-          payload = { summary: raw, message: raw, success: response.ok };
-        }
+      const passthroughHeaders: Record<string, string> = {};
+      if (headers['x-api-key']) {
+        passthroughHeaders['x-api-key'] = headers['x-api-key'];
       }
 
-      if (!response.ok) {
-        const serverMessage =
-          payload.message ||
-          payload.summary ||
-          payload.failureReason ||
-          `Failed to start Digital Twin mission (${response.status}).`;
-        throw new Error(serverMessage);
-      }
-
-      const locationHeader = response.headers.get('location') || '';
-      const missionIdFromLocation =
-        locationHeader.match(/AgentMission\/([^/?#]+)/)?.[1] ||
-        locationHeader.match(/\/([^/?#]+)$/)?.[1];
-      const resolvedMissionId =
-        payload.missionId ||
-        payload.id ||
-        response.headers.get('x-mission-id') ||
-        response.headers.get('x-execution-id') ||
-        missionIdFromLocation;
-      if (resolvedMissionId) {
-        setMissionId(resolvedMissionId);
-      }
-
-      const immediateResponse =
-        payload.outputs?.response || payload.summary || payload.message;
-
-      // If mission already completed or failed, show result immediately
-      if (
-        payload.status === 'COMPLETED' ||
-        payload.status === 'FAILED' ||
-        payload.success === true ||
-        payload.success === false
-      ) {
-        if (payload.status === 'FAILED') {
-          throw new Error(
-            payload.failureReason || 'Mission execution failed.',
-          );
-        }
-
-        if (payload.success === false) {
-          throw new Error(
-            payload.failureReason ||
-              immediateResponse ||
-              'Mission execution failed.',
-          );
-        }
-
-        setMissionOutputs(
-          payload.outputs ??
-            (immediateResponse
-              ? {
-                  response: immediateResponse,
-                }
-              : null),
-        );
-        setIsMissionPolling(false);
-        return;
-      }
-
-      if (!resolvedMissionId) {
-        if (immediateResponse) {
-          setMissionOutputs({ response: immediateResponse });
-          setIsMissionPolling(false);
-          return;
-        }
-        throw new Error('No mission ID received from server.');
-      }
-
-      // Otherwise poll for completion
-      await pollMissionStatus(resolvedMissionId, headers, currentRunId);
+      setAgentTenantId(resolvedTenantId);
+      setAgentAccessToken(token);
+      setAgentExtraHeaders(passthroughHeaders);
+      setShowAgentModal(true);
     } catch (err: any) {
-      if (currentRunId === pollRunIdRef.current) {
-        setMissionError(
-          err?.message || 'Unable to process request. Please try again.',
-        );
-      }
-    } finally {
-      if (currentRunId === pollRunIdRef.current) {
-        setIsMissionSubmitting(false);
-        setIsMissionPolling(false);
-      }
+      setAgentModalError(
+        err?.message ||
+          'Unable to initialize AI assistant. Please check your session and try again.',
+      );
     }
+  };
+
+  const patientAgentConfig: AgentEndpointConfig = {
+    endpoint: `${AGENT_API_BASE_URL}/api/agent/AgentPersona/digital-twin/AgentMission`,
+    personaId: 'digital-twin',
+    headers: agentExtraHeaders,
+    supportsContinuation: true,
   };
 
   useEffect(() => {
@@ -3309,6 +3132,28 @@ const PatientRecordsPage: React.FC = () => {
             </div>
             <div className="flex flex-col items-end gap-2">
               <div className="flex items-center gap-2">
+                {role === 'patient' && (
+                  <button
+                    onClick={openAgentConversationModal}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-colors bg-gradient-to-r from-indigo-50 to-fuchsia-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-fuchsia-100 hover:border-indigo-300"
+                  >
+                    <span className="relative inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 via-blue-500 to-fuchsia-500 shadow-[0_0_0_2px_rgba(99,102,241,0.15)]">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                        className="w-3.5 h-3.5 text-white"
+                      >
+                        <path
+                          d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z"
+                        />
+                      </svg>
+                      <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-300 ring-1 ring-white" />
+                    </span>
+                    Ask AI
+                  </button>
+                )}
+
                 {role === 'clinician' && (
                   <button
                     onClick={() => setShowClinicianUpload((s) => !s)}
@@ -3405,99 +3250,15 @@ const PatientRecordsPage: React.FC = () => {
                   </button>
                 </form>
               )}
+              {agentModalError && role === 'patient' && (
+                <p className="text-xs text-red-600 max-w-[480px] text-right">
+                  {agentModalError}
+                </p>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {role === 'patient' && (
-        <div className="max-w-7xl mx-auto px-6 pt-5">
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-indigo-900 mb-2">
-              Ask About My Health Conditions
-            </h2>
-            <p className="text-xs text-indigo-800 mb-3">
-              Ask in plain language and Digital Twin will explain using your own
-              medical record.
-            </p>
-
-            <form onSubmit={handleAskPatientExplainer} className="flex gap-2">
-              <input
-                type="text"
-                value={patientQuestion}
-                onChange={(e) => setPatientQuestion(e.target.value)}
-                placeholder="e.g. Why is my blood pressure high lately?"
-                className="flex-1 px-3 py-2 text-sm border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
-              <button
-                type="submit"
-                disabled={
-                  isMissionSubmitting ||
-                  isMissionPolling ||
-                  patientQuestion.trim().length < 6
-                }
-                className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {isMissionSubmitting || isMissionPolling
-                  ? 'Thinking...'
-                  : 'Ask'}
-              </button>
-            </form>
-
-            {missionId && (
-              <p className="mt-2 text-xs text-indigo-700">
-                Mission ID: {missionId}
-              </p>
-            )}
-
-            {missionError && (
-              <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {missionError}
-              </div>
-            )}
-
-            {missionOutputs?.response && (
-              <div className="mt-3 bg-white border border-indigo-200 rounded-lg p-3">
-                <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                  {missionOutputs.response}
-                </p>
-                <div className="mt-2 text-xs text-gray-500 flex flex-wrap gap-3">
-                  {typeof missionOutputs.confidence === 'number' && (
-                    <span>
-                      Confidence: {(missionOutputs.confidence * 100).toFixed(0)}
-                      %
-                    </span>
-                  )}
-                  {typeof missionOutputs.executionTimeMs === 'number' && (
-                    <span>Time: {missionOutputs.executionTimeMs} ms</span>
-                  )}
-                </div>
-                {missionOutputs.disclaimer && (
-                  <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                    {missionOutputs.disclaimer}
-                  </p>
-                )}
-                {!!missionOutputs.sources?.length && (
-                  <div className="mt-2">
-                    <p className="text-xs font-medium text-gray-600 mb-1">
-                      Sources
-                    </p>
-                    <ul className="list-disc list-inside text-xs text-gray-500 space-y-0.5">
-                      {missionOutputs.sources.map((source, idx) => (
-                        <li key={idx}>
-                          {typeof source === 'string'
-                            ? source
-                            : `${source.resourceType || 'Resource'}${source.id ? `/${source.id}` : ''}`}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {role === 'clinician' && showClinicianUpload && (
         <div className="max-w-7xl mx-auto px-6 pt-5">
@@ -3654,6 +3415,18 @@ const PatientRecordsPage: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {role === 'patient' && patientId && (
+        <AgentConversationModal
+          isOpen={showAgentModal}
+          onClose={() => setShowAgentModal(false)}
+          agentConfig={patientAgentConfig}
+          patientId={patientId}
+          tenantId={agentTenantId}
+          accessToken={agentAccessToken}
+          title="Ask About My Health Conditions"
+        />
       )}
 
       {/* Tab bar */}
