@@ -49,7 +49,11 @@ interface HarmonizerJobStatusResponse {
   executionId?: string;
   jobId?: string;
   status?: string;
+  personaId?: string;
+  completedAt?: number;
+  totalDurationMs?: number;
   currentStep?: string;
+  stepResults?: HarmonizerStepResult[];
   progress?: {
     percentComplete?: number;
   };
@@ -58,12 +62,31 @@ interface HarmonizerJobStatusResponse {
   pollUrl?: string;
 }
 
+interface HarmonizerStepResult {
+  stepName?: string;
+  step?: string;
+  name?: string;
+  status?: string;
+  durationMs?: number;
+  durationSeconds?: number;
+  summary?: Record<string, unknown> | string;
+}
+
+interface HarmonizerJobSummaryResponse {
+  personaId?: string;
+  tenantId?: string;
+  status?: string;
+  stepResults?: HarmonizerStepResult[];
+  summary?: Record<string, unknown>;
+  riskFlags?: Array<Record<string, unknown> | string>;
+}
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'encounter', label: 'Encounter' },
   { id: 'condition', label: 'Condition' },
   { id: 'observation', label: 'Observation' },
   { id: 'orders', label: 'Lab & Rad Order' },
-  { id: 'lab-results', label: 'Lab Report' },
+  { id: 'lab-results', label: 'Lab & Path Report' },
   { id: 'rad-report', label: 'Rad Report' },
   { id: 'medication', label: 'Medication' },
   { id: 'procedure', label: 'Procedure' },
@@ -333,7 +356,12 @@ const AGENT_API_BASE_URL =
   import.meta.env.VITE_AGENT_API_BASE_URL || AI_BASE_URL;
 const HARMONIZER_IMPORT_URL =
   import.meta.env.VITE_HARMONIZER_IMPORT_URL ||
-  `${AGENT_API_BASE_URL}/api/personas/clinical-lab-harmonizer/import`;
+  `${AGENT_API_BASE_URL}/api/personas/clinical-docs-harmonizer/import`;
+const HARMONIZER_JOB_URL_BASE =
+  import.meta.env.VITE_HARMONIZER_JOB_URL_BASE ||
+  `${AGENT_API_BASE_URL}/api/personas/import-jobs`;
+const HARMONIZER_SUMMARY_URL_BASE =
+  import.meta.env.VITE_HARMONIZER_SUMMARY_URL_BASE || HARMONIZER_JOB_URL_BASE;
 
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
@@ -396,7 +424,7 @@ const StatusBadge: React.FC<{ status?: string }> = ({ status }) => {
 };
 
 const ExpandToggle: React.FC<{ open: boolean }> = ({ open }) => (
-  <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+  <span className="text-gray-400 font-semibold">{open ? '−' : '+'}</span>
 );
 
 const TH: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
@@ -872,7 +900,15 @@ const PatientRecordsPage: React.FC = () => {
   const [noteUploadPercent, setNoteUploadPercent] = useState<number | null>(
     null,
   );
+  const [noteUploadStepResults, setNoteUploadStepResults] = useState<
+    HarmonizerStepResult[]
+  >([]);
   const [isNoteUploadPolling, setIsNoteUploadPolling] = useState(false);
+  const [noteUploadRetryMaxAttempts] = useState(3); // Max automatic retry attempts
+  const [noteUploadSummary, setNoteUploadSummary] =
+    useState<HarmonizerJobSummaryResponse | null>(null);
+  const [isLoadingNoteUploadSummary, setIsLoadingNoteUploadSummary] =
+    useState(false);
 
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -919,14 +955,131 @@ const PatientRecordsPage: React.FC = () => {
 
   const getHarmonizerPollUrl = (jobId: string, pollUrl?: string): string => {
     if (pollUrl) {
-      if (/^https?:\/\//i.test(pollUrl)) return pollUrl;
-      if (pollUrl.startsWith('/')) return `${AGENT_API_BASE_URL}${pollUrl}`;
+      const normalizePollPath = (path: string): string => {
+        if (path.includes('/api/personas/import-jobs/')) {
+          if (path.endsWith('/status')) return path;
+          return `${path.replace(/\/+$/, '')}/status`;
+        }
+
+        if (
+          path.includes('/api/personas/clinical-notes-harmonizer/jobs/') ||
+          path.includes('/api/personas/clinical-pathreport-harmonizer/jobs/')
+        ) {
+          return `/api/personas/import-jobs/${encodeURIComponent(jobId)}/status`;
+        }
+
+        return path;
+      };
+
+      if (/^https?:\/\//i.test(pollUrl)) {
+        try {
+          const parsed = new URL(pollUrl);
+          const normalizedPath = normalizePollPath(parsed.pathname);
+          if (normalizedPath !== parsed.pathname) {
+            return `${parsed.origin}${normalizedPath}`;
+          }
+          return `${parsed.origin}${normalizedPath}`;
+        } catch {
+          return `${HARMONIZER_JOB_URL_BASE}/${encodeURIComponent(jobId)}/status`;
+        }
+      }
+
+      if (pollUrl.startsWith('/')) {
+        const normalizedPath = normalizePollPath(pollUrl);
+        return `${AGENT_API_BASE_URL}${normalizedPath}`;
+      }
     }
-    return `${AGENT_API_BASE_URL}/api/personas/clinical-notes-harmonizer/jobs/${encodeURIComponent(jobId)}`;
+    return `${HARMONIZER_JOB_URL_BASE}/${encodeURIComponent(jobId)}/status`;
   };
 
   const normalizeHarmonizerStatus = (status?: string): string =>
     String(status || '').toUpperCase();
+
+  const HARMONIZER_STATUS_STEPS = ['QUEUE', 'RUNNING', 'COMPLETED'] as const;
+
+  const mapHarmonizerStatusToStep = (
+    status?: string,
+  ): (typeof HARMONIZER_STATUS_STEPS)[number] | 'FAILED' => {
+    const normalized = normalizeHarmonizerStatus(status);
+
+    if (
+      normalized === 'FAILED' ||
+      normalized === 'ERROR' ||
+      normalized === 'CANCELLED'
+    ) {
+      return 'FAILED';
+    }
+
+    if (
+      normalized === 'SUBMITTED' ||
+      normalized === 'ACCEPTED' ||
+      normalized === 'QUEUED' ||
+      normalized === 'PENDING' ||
+      normalized === 'QUEUE'
+    ) {
+      return 'QUEUE';
+    }
+
+    if (normalized === 'RUNNING' || normalized === 'IN_PROGRESS') {
+      return 'RUNNING';
+    }
+
+    if (normalized === 'COMPLETED' || normalized === 'SUCCESS') {
+      return 'COMPLETED';
+    }
+
+    return 'QUEUE';
+  };
+
+  const toDisplayJson = (value: unknown): string => {
+    if (typeof value === 'string') return value;
+    if (value == null) return '—';
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+
+  const fetchHarmonizerJobSummary = async (
+    jobId: string,
+    headers: Record<string, string>,
+    runId: number,
+  ) => {
+    if (runId !== uploadPollRunIdRef.current) return;
+
+    const summaryUrl = `${HARMONIZER_SUMMARY_URL_BASE}/${encodeURIComponent(jobId)}/summary`;
+    setIsLoadingNoteUploadSummary(true);
+
+    try {
+      const response = await fetch(summaryUrl, { headers });
+      if (runId !== uploadPollRunIdRef.current) return;
+
+      let payload: HarmonizerJobSummaryResponse = {};
+      try {
+        payload = (await response.json()) as HarmonizerJobSummaryResponse;
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(`Unable to fetch import summary (${response.status}).`);
+      }
+
+      setNoteUploadSummary(payload);
+    } catch (err: any) {
+      if (runId === uploadPollRunIdRef.current) {
+        setNoteUploadError(
+          err?.message ||
+            'Import finished, but summary could not be retrieved right now.',
+        );
+      }
+    } finally {
+      if (runId === uploadPollRunIdRef.current) {
+        setIsLoadingNoteUploadSummary(false);
+      }
+    }
+  };
 
   const pollHarmonizerJobStatus = async (
     jobId: string,
@@ -934,55 +1087,139 @@ const PatientRecordsPage: React.FC = () => {
     runId: number,
     pollUrl?: string,
   ) => {
-    const started = Date.now();
     const statusUrl = getHarmonizerPollUrl(jobId, pollUrl);
-    setIsNoteUploadPolling(true);
+    let lastError: Error | null = null;
 
-    while (Date.now() - started < HARMONIZER_POLL_TIMEOUT_MS) {
+    // Retry loop: attempt polling up to (1 + retryMaxAttempts) times
+    for (
+      let attemptNum = 0;
+      attemptNum <= noteUploadRetryMaxAttempts;
+      attemptNum++
+    ) {
       if (runId !== uploadPollRunIdRef.current) return;
 
-      const response = await fetch(statusUrl, { headers });
+      setIsNoteUploadPolling(true);
+      if (attemptNum > 0) {
+        setNoteUploadMessage(
+          `Retrying job status (attempt ${attemptNum}/${noteUploadRetryMaxAttempts})...`,
+        );
+        // Wait before retrying
+        await sleep(2000);
+      }
 
-      let payload: HarmonizerJobStatusResponse = {};
+      const started = Date.now();
+
       try {
-        payload = (await response.json()) as HarmonizerJobStatusResponse;
-      } catch {
-        payload = {};
+        while (Date.now() - started < HARMONIZER_POLL_TIMEOUT_MS) {
+          if (runId !== uploadPollRunIdRef.current) return;
+
+          const response = await fetch(statusUrl, { headers });
+
+          let payload: HarmonizerJobStatusResponse = {};
+          try {
+            payload = (await response.json()) as HarmonizerJobStatusResponse;
+          } catch {
+            payload = {};
+          }
+
+          if (!response.ok) {
+            const attemptedUrl = response.url || statusUrl;
+            const serverMessage =
+              payload.error ||
+              payload.message ||
+              `Harmonizer status request failed (${response.status}) at ${attemptedUrl}.`;
+            throw new Error(serverMessage);
+          }
+
+          const status = normalizeHarmonizerStatus(payload.status) || 'RUNNING';
+          const mappedStatus = mapHarmonizerStatusToStep(status);
+          const completedStepResults = (payload.stepResults || []).filter(
+            (step) => normalizeHarmonizerStatus(step.status) === 'COMPLETED',
+          );
+
+          if (completedStepResults.length) {
+            setNoteUploadStepResults(completedStepResults);
+          }
+
+          if (mappedStatus !== 'FAILED' && mappedStatus !== 'COMPLETED') {
+            setNoteUploadJobStatus('RUNNING');
+          }
+          setNoteUploadCurrentStep(payload.currentStep || null);
+          setNoteUploadPercent(
+            typeof payload.progress?.percentComplete === 'number'
+              ? payload.progress.percentComplete
+              : null,
+          );
+
+          if (mappedStatus === 'COMPLETED') {
+            setNoteUploadJobStatus('COMPLETED');
+            setIsNoteUploadPolling(false);
+            setNoteUploadError(null); // Clear any previous error
+            setNoteUploadMessage(`Harmonizer completed (${jobId}).`);
+            void fetchHarmonizerJobSummary(jobId, headers, runId);
+            return;
+          }
+
+          if (mappedStatus === 'FAILED') {
+            setNoteUploadJobStatus('FAILED');
+            setIsNoteUploadPolling(false);
+            const failure =
+              payload.error ||
+              payload.message ||
+              'Harmonizer processing failed.';
+            throw new Error(failure);
+          }
+
+          await sleep(HARMONIZER_POLL_INTERVAL_MS);
+        }
+
+        // If we exit the while loop without return, it means timeout
+        throw new Error('Harmonizer job timed out. Retrying...');
+      } catch (err: any) {
+        lastError = err;
+        const isTimeout = err?.message?.includes('timed out');
+        const hasMoreRetries = attemptNum < noteUploadRetryMaxAttempts;
+
+        if (isTimeout && hasMoreRetries) {
+          // Continue to next retry
+          continue;
+        } else {
+          // No more retries or non-timeout error
+          setIsNoteUploadPolling(false);
+          throw lastError;
+        }
       }
-
-      if (!response.ok) {
-        const serverMessage =
-          payload.error ||
-          payload.message ||
-          `Harmonizer status request failed (${response.status}).`;
-        throw new Error(serverMessage);
-      }
-
-      const status = normalizeHarmonizerStatus(payload.status) || 'RUNNING';
-      setNoteUploadJobStatus(status);
-      setNoteUploadCurrentStep(payload.currentStep || null);
-      setNoteUploadPercent(
-        typeof payload.progress?.percentComplete === 'number'
-          ? payload.progress.percentComplete
-          : null,
-      );
-
-      if (status === 'COMPLETED') {
-        setIsNoteUploadPolling(false);
-        setNoteUploadMessage(`Harmonizer completed (${jobId}).`);
-        return;
-      }
-
-      if (status === 'FAILED') {
-        const failure =
-          payload.error || payload.message || 'Harmonizer processing failed.';
-        throw new Error(failure);
-      }
-
-      await sleep(HARMONIZER_POLL_INTERVAL_MS);
     }
 
-    throw new Error('Harmonizer job timed out. Please check again shortly.');
+    // All retries exhausted
+    setIsNoteUploadPolling(false);
+    throw (
+      lastError ||
+      new Error('Harmonizer job timed out. Please check again shortly.')
+    );
+  };
+
+  const handleCheckNoteUploadStatus = async () => {
+    if (!noteUploadJobId) return;
+
+    setNoteUploadError(null);
+    setNoteUploadMessage('Checking job status...');
+
+    uploadPollRunIdRef.current += 1;
+    const currentUploadRunId = uploadPollRunIdRef.current;
+
+    try {
+      const { headers } = await buildMissionRequestConfig();
+      await pollHarmonizerJobStatus(
+        noteUploadJobId,
+        headers,
+        currentUploadRunId,
+      );
+    } catch (err: any) {
+      setNoteUploadError(
+        err?.message || 'Unable to check job status. Please try again later.',
+      );
+    }
   };
 
   const handleUploadScannedNotes = async (e: React.FormEvent) => {
@@ -993,7 +1230,10 @@ const PatientRecordsPage: React.FC = () => {
     setNoteUploadJobStatus(null);
     setNoteUploadCurrentStep(null);
     setNoteUploadPercent(null);
+    setNoteUploadStepResults([]);
     setIsNoteUploadPolling(false);
+    setNoteUploadSummary(null);
+    setIsLoadingNoteUploadSummary(false);
     setIsUploadingNotes(true);
 
     uploadPollRunIdRef.current += 1;
@@ -1020,11 +1260,13 @@ const PatientRecordsPage: React.FC = () => {
         headers,
         body: JSON.stringify({
           patientId,
+          executionMode: 'background',
           documentContent: base64,
           documentType,
           metadata: {
             source: 'PORTAL_UPLOAD',
             channel,
+            mode: 'background',
             filename: selectedNoteFile.name,
             mimeType: selectedNoteFile.type || 'application/octet-stream',
             date: new Date().toISOString().slice(0, 10),
@@ -1053,14 +1295,19 @@ const PatientRecordsPage: React.FC = () => {
 
       setNoteUploadMessage(
         executionId
-          ? `Submitted to Harmonizer (${executionId}, ${status}).`
-          : `Submitted to Harmonizer (${status}).`,
+          ? `Submitted to Harmonizer in background (${executionId}, ${status}).`
+          : `Submitted to Harmonizer in background (${status}).`,
       );
 
       if (executionId) {
         setNoteUploadJobId(executionId);
-        setNoteUploadJobStatus(status);
+        setNoteUploadJobStatus('QUEUE');
         setNoteUploadCurrentStep(payload.currentStep || null);
+        setNoteUploadStepResults(
+          (payload.stepResults || []).filter(
+            (step) => normalizeHarmonizerStatus(step.status) === 'COMPLETED',
+          ),
+        );
         setNoteUploadPercent(
           typeof payload.progress?.percentComplete === 'number'
             ? payload.progress.percentComplete
@@ -1082,6 +1329,12 @@ const PatientRecordsPage: React.FC = () => {
               );
             }
           });
+        } else if (status === 'COMPLETED') {
+          void fetchHarmonizerJobSummary(
+            executionId,
+            headers,
+            currentUploadRunId,
+          );
         }
       }
 
@@ -1320,7 +1573,7 @@ const PatientRecordsPage: React.FC = () => {
   const labDrExtraParams = {
     ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir),
     ...pageOffset,
-    category: 'LAB',
+    category: 'LAB,PAT',
   };
   const radDrExtraParams = {
     ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir),
@@ -1562,11 +1815,15 @@ const PatientRecordsPage: React.FC = () => {
                       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                     }
                   />
-                  {['Condition', 'Clinical Status', 'Severity', 'Category'].map(
-                    (h) => (
-                      <TH key={h}>{h}</TH>
-                    ),
-                  )}
+                  {[
+                    'Condition',
+                    'Clinical Status',
+                    'Severity',
+                    'Category',
+                    'Last Updated',
+                  ].map((h) => (
+                    <TH key={h}>{h}</TH>
+                  ))}
                   <TH />
                 </tr>
               </thead>
@@ -1599,6 +1856,7 @@ const PatientRecordsPage: React.FC = () => {
                           cond.category?.[0]?.text ||
                           '—'}
                       </TD>
+                      <TD>{fmt(cond.meta?.lastUpdated)}</TD>
                       <td className="px-4 py-3 text-right">
                         <ExpandToggle open={expandedId === cond.id} />
                       </td>
@@ -1606,7 +1864,7 @@ const PatientRecordsPage: React.FC = () => {
                     {expandedId === cond.id && (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
                         >
                           <div className="grid grid-cols-2 gap-x-6 gap-y-2">
@@ -1725,9 +1983,11 @@ const PatientRecordsPage: React.FC = () => {
                       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                     }
                   />
-                  {['Type', 'Status', 'Chief Complaint'].map((h) => (
-                    <TH key={h}>{h}</TH>
-                  ))}
+                  {['Type', 'Status', 'Chief Complaint', 'Last Updated'].map(
+                    (h) => (
+                      <TH key={h}>{h}</TH>
+                    ),
+                  )}
                   <TH />
                 </tr>
               </thead>
@@ -1753,6 +2013,7 @@ const PatientRecordsPage: React.FC = () => {
                       <TD>
                         {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
                       </TD>
+                      <TD>{fmt(enc.meta?.lastUpdated)}</TD>
                       <td className="px-4 py-3 text-right">
                         <ExpandToggle open={expandedId === enc.id} />
                       </td>
@@ -1760,7 +2021,7 @@ const PatientRecordsPage: React.FC = () => {
                     {expandedId === enc.id && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="bg-gray-50 px-6 py-4 text-sm"
                         >
                           <div className="grid grid-cols-2 gap-2 text-gray-700">
@@ -1877,9 +2138,11 @@ const PatientRecordsPage: React.FC = () => {
                       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                     }
                   />
-                  {['Code', 'Category', 'Value', 'Status'].map((h) => (
-                    <TH key={h}>{h}</TH>
-                  ))}
+                  {['Code', 'Category', 'Value', 'Status', 'Last Updated'].map(
+                    (h) => (
+                      <TH key={h}>{h}</TH>
+                    ),
+                  )}
                   <TH />
                 </tr>
               </thead>
@@ -1915,6 +2178,7 @@ const PatientRecordsPage: React.FC = () => {
                         <TD>
                           <StatusBadge status={obs.status} />
                         </TD>
+                        <TD>{fmt(obs.meta?.lastUpdated)}</TD>
                         <td className="px-4 py-3 text-right">
                           <ExpandToggle open={expandedId === obs.id} />
                         </td>
@@ -1922,7 +2186,7 @@ const PatientRecordsPage: React.FC = () => {
                       {expandedId === obs.id && (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={7}
                             className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
                           >
                             {obs.component?.length ? (
@@ -2047,7 +2311,13 @@ const PatientRecordsPage: React.FC = () => {
                       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                     }
                   />
-                  {['Order', 'Category', 'Status', 'Priority'].map((h) => (
+                  {[
+                    'Order',
+                    'Category',
+                    'Status',
+                    'Priority',
+                    'Last Updated',
+                  ].map((h) => (
                     <TH key={h}>{h}</TH>
                   ))}
                   <TH />
@@ -2074,6 +2344,7 @@ const PatientRecordsPage: React.FC = () => {
                         <StatusBadge status={sr.status} />
                       </TD>
                       <TD>{sr.priority || '—'}</TD>
+                      <TD>{fmt(sr.meta?.lastUpdated)}</TD>
                       <td className="px-4 py-3 text-right">
                         <ExpandToggle open={expandedId === sr.id} />
                       </td>
@@ -2081,7 +2352,7 @@ const PatientRecordsPage: React.FC = () => {
                     {expandedId === sr.id && (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="bg-gray-50 px-6 py-4 text-sm"
                         >
                           <div className="grid grid-cols-2 gap-2 text-gray-700">
@@ -2163,9 +2434,11 @@ const PatientRecordsPage: React.FC = () => {
                       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                     }
                   />
-                  {['Report', 'Status', 'Performer'].map((h) => (
-                    <TH key={h}>{h}</TH>
-                  ))}
+                  {['Report', 'Status', 'Performer', 'Last Updated'].map(
+                    (h) => (
+                      <TH key={h}>{h}</TH>
+                    ),
+                  )}
                   <TH />
                 </tr>
               </thead>
@@ -2185,6 +2458,7 @@ const PatientRecordsPage: React.FC = () => {
                         <StatusBadge status={dr.status} />
                       </TD>
                       <TD>{dr.performer?.[0]?.display || '—'}</TD>
+                      <TD>{fmt(dr.meta?.lastUpdated)}</TD>
                       <td className="px-4 py-3 text-right">
                         <ExpandToggle open={expandedId === dr.id} />
                       </td>
@@ -2192,7 +2466,7 @@ const PatientRecordsPage: React.FC = () => {
                     {expandedId === dr.id && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="bg-gray-50 px-6 py-4 text-sm"
                         >
                           <div className="grid grid-cols-2 gap-2 text-gray-700 mb-3">
@@ -2326,7 +2600,13 @@ const PatientRecordsPage: React.FC = () => {
                         setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                       }
                     />
-                    {['Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
+                    {[
+                      'Medication',
+                      'Status',
+                      'Dosage',
+                      'Reason',
+                      'Last Updated',
+                    ].map((h) => (
                       <TH key={h}>{h}</TH>
                     ))}
                     <TH />
@@ -2365,6 +2645,7 @@ const PatientRecordsPage: React.FC = () => {
                             mr.reason?.[0]?.reference?.display ||
                             '—'}
                         </TD>
+                        <TD>{fmt(mr.meta?.lastUpdated)}</TD>
                         <td className="px-4 py-3 text-right">
                           <ExpandToggle open={expandedId === mr.id} />
                         </td>
@@ -2372,7 +2653,7 @@ const PatientRecordsPage: React.FC = () => {
                       {expandedId === mr.id && (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={7}
                             className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
                           >
                             <div className="grid grid-cols-2 gap-x-6 gap-y-2">
@@ -2539,9 +2820,11 @@ const PatientRecordsPage: React.FC = () => {
                         setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                       }
                     />
-                    {['Medication', 'Status', 'Quantity'].map((h) => (
-                      <TH key={h}>{h}</TH>
-                    ))}
+                    {['Medication', 'Status', 'Quantity', 'Last Updated'].map(
+                      (h) => (
+                        <TH key={h}>{h}</TH>
+                      ),
+                    )}
                     <TH />
                   </tr>
                 </thead>
@@ -2567,6 +2850,7 @@ const PatientRecordsPage: React.FC = () => {
                             ? `${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()
                             : '—'}
                         </TD>
+                        <TD>{fmt(md.meta?.lastUpdated)}</TD>
                         <td className="px-4 py-3 text-right">
                           <ExpandToggle open={expandedId === md.id} />
                         </td>
@@ -2574,7 +2858,7 @@ const PatientRecordsPage: React.FC = () => {
                       {expandedId === md.id && (
                         <tr>
                           <td
-                            colSpan={5}
+                            colSpan={6}
                             className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
                           >
                             <div className="grid grid-cols-2 gap-2">
@@ -2647,9 +2931,11 @@ const PatientRecordsPage: React.FC = () => {
                         setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                       }
                     />
-                    {['Medication', 'Status', 'Effective'].map((h) => (
-                      <TH key={h}>{h}</TH>
-                    ))}
+                    {['Medication', 'Status', 'Effective', 'Last Updated'].map(
+                      (h) => (
+                        <TH key={h}>{h}</TH>
+                      ),
+                    )}
                     <TH />
                   </tr>
                 </thead>
@@ -2675,6 +2961,7 @@ const PatientRecordsPage: React.FC = () => {
                             ms.effectivePeriod?.start || ms.effectiveDateTime,
                           )}
                         </TD>
+                        <TD>{fmt(ms.meta?.lastUpdated)}</TD>
                         <td className="px-4 py-3 text-right">
                           <ExpandToggle open={expandedId === ms.id} />
                         </td>
@@ -2682,7 +2969,7 @@ const PatientRecordsPage: React.FC = () => {
                       {expandedId === ms.id && (
                         <tr>
                           <td
-                            colSpan={5}
+                            colSpan={6}
                             className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
                           >
                             <div className="grid grid-cols-2 gap-2">
@@ -2778,7 +3065,13 @@ const PatientRecordsPage: React.FC = () => {
                       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                     }
                   />
-                  {['Procedure', 'Status', 'Performer', 'Reason'].map((h) => (
+                  {[
+                    'Procedure',
+                    'Status',
+                    'Performer',
+                    'Reason',
+                    'Last Updated',
+                  ].map((h) => (
                     <TH key={h}>{h}</TH>
                   ))}
                   <TH />
@@ -2820,6 +3113,7 @@ const PatientRecordsPage: React.FC = () => {
                           proc.reason?.[0]?.reference?.display ||
                           '—'}
                       </TD>
+                      <TD>{fmt(proc.meta?.lastUpdated)}</TD>
                       <td className="px-4 py-3 text-right">
                         <ExpandToggle open={expandedId === proc.id} />
                       </td>
@@ -2827,7 +3121,7 @@ const PatientRecordsPage: React.FC = () => {
                     {expandedId === proc.id && (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="bg-gray-50 px-6 py-4 text-sm"
                         >
                           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
@@ -3048,6 +3342,9 @@ const PatientRecordsPage: React.FC = () => {
                     <div className="text-sm text-gray-500">
                       Period: {fmt(cp.period?.start)} → {fmt(cp.period?.end)}
                     </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      Last Updated: {fmt(cp.meta?.lastUpdated)}
+                    </div>
                     <div className="text-sm text-gray-600 mt-1">
                       {cp.description || '—'}
                     </div>
@@ -3144,9 +3441,7 @@ const PatientRecordsPage: React.FC = () => {
                         viewBox="0 0 24 24"
                         className="w-3.5 h-3.5 text-white"
                       >
-                        <path
-                          d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z"
-                        />
+                        <path d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z" />
                       </svg>
                       <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-300 ring-1 ring-white" />
                     </span>
@@ -3310,14 +3605,17 @@ const PatientRecordsPage: React.FC = () => {
                   Job: {noteUploadJobId}
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  {['QUEUED', 'RUNNING', 'COMPLETED'].map((step, index) => {
-                    const currentIndex = [
-                      'QUEUED',
-                      'RUNNING',
-                      'COMPLETED',
-                    ].indexOf(noteUploadJobStatus);
-                    const reached = currentIndex >= index;
-                    const active = noteUploadJobStatus === step;
+                  {HARMONIZER_STATUS_STEPS.map((step, index) => {
+                    const mappedStatus =
+                      mapHarmonizerStatusToStep(noteUploadJobStatus);
+                    const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
+                      mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
+                    );
+                    const reached =
+                      mappedStatus === 'FAILED'
+                        ? index <= 2
+                        : currentIndex >= index;
+                    const active = mappedStatus === step;
                     return (
                       <React.Fragment key={step}>
                         {index > 0 && (
@@ -3338,25 +3636,134 @@ const PatientRecordsPage: React.FC = () => {
                     );
                   })}
                 </div>
-                {(noteUploadCurrentStep || noteUploadPercent !== null) && (
-                  <p className="mt-2 text-gray-600">
-                    {noteUploadCurrentStep && `Step: ${noteUploadCurrentStep}`}
-                    {noteUploadCurrentStep &&
-                      noteUploadPercent !== null &&
-                      ' • '}
-                    {noteUploadPercent !== null &&
-                      `Progress: ${Math.round(noteUploadPercent)}%`}
+                {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
+                  'FAILED' && (
+                  <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-red-700 font-medium">
+                    FAILED
                   </p>
+                )}
+                {noteUploadStepResults.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-gray-700 font-medium">Completed Steps</p>
+                    <ul className="mt-1 space-y-1 text-gray-600">
+                      {noteUploadStepResults.map((step, idx) => (
+                        <li
+                          key={`${step.stepName || step.step || step.name || 'step'}-${idx}`}
+                        >
+                          •{' '}
+                          {step.stepName ||
+                            step.step ||
+                            step.name ||
+                            `Step ${idx + 1}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(noteUploadCurrentStep || noteUploadPercent !== null) && (
+                  <div className="mt-2">
+                    <p className="text-gray-600">
+                      {noteUploadCurrentStep &&
+                        `Step: ${noteUploadCurrentStep}`}
+                      {noteUploadCurrentStep &&
+                        noteUploadPercent !== null &&
+                        ' • '}
+                      {noteUploadPercent !== null &&
+                        `Progress: ${Math.round(noteUploadPercent)}%`}
+                    </p>
+                    {noteUploadPercent !== null && (
+                      <progress
+                        className="mt-2 h-2 w-full"
+                        value={Math.max(0, Math.min(100, noteUploadPercent))}
+                        max={100}
+                      />
+                    )}
+                  </div>
                 )}
                 {isNoteUploadPolling && (
                   <p className="mt-1 text-gray-500">Polling live status...</p>
                 )}
+                {isLoadingNoteUploadSummary && (
+                  <p className="mt-1 text-gray-500">
+                    Loading import summary...
+                  </p>
+                )}
+              </div>
+            )}
+
+            {noteUploadSummary && (
+              <div className="mt-3 text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-indigo-900">
+                <p className="font-medium">Import Summary</p>
+                <p className="mt-1">
+                  Status:{' '}
+                  {noteUploadSummary.status || noteUploadJobStatus || '—'}
+                </p>
+                <p>
+                  Persona: {noteUploadSummary.personaId || '—'} • Tenant:{' '}
+                  {noteUploadSummary.tenantId || '—'}
+                </p>
+
+                <div className="mt-2">
+                  <p className="font-medium">Extracted Entities</p>
+                  <pre className="mt-1 text-xs bg-white border border-indigo-100 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">
+                    {toDisplayJson(noteUploadSummary.summary)}
+                  </pre>
+                </div>
+
+                {noteUploadSummary.stepResults?.length ? (
+                  <div className="mt-2">
+                    <p className="font-medium">Step Results</p>
+                    <ul className="mt-1 space-y-1 text-xs">
+                      {noteUploadSummary.stepResults.map((step, idx) => (
+                        <li
+                          key={`${step.stepName || step.step || step.name || 'step'}-${idx}`}
+                        >
+                          <span className="font-medium">
+                            {step.stepName ||
+                              step.step ||
+                              step.name ||
+                              `Step ${idx + 1}`}
+                          </span>{' '}
+                          • {step.status || 'UNKNOWN'}
+                          {typeof step.durationMs === 'number' &&
+                            ` • ${Math.round(step.durationMs)} ms`}
+                          {typeof step.durationSeconds === 'number' &&
+                            typeof step.durationMs !== 'number' &&
+                            ` • ${step.durationSeconds}s`}
+                          {step.summary && ` • ${toDisplayJson(step.summary)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {noteUploadSummary.riskFlags?.length ? (
+                  <div className="mt-2">
+                    <p className="font-medium text-amber-800">Risk Flags</p>
+                    <ul className="mt-1 list-disc list-inside space-y-1 text-xs text-amber-900">
+                      {noteUploadSummary.riskFlags.map((flag, idx) => (
+                        <li key={`risk-flag-${idx}`}>{toDisplayJson(flag)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             )}
 
             {noteUploadError && (
               <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {noteUploadError}
+                <div className="flex items-center justify-between gap-3">
+                  <div>{noteUploadError}</div>
+                  {noteUploadJobId && (
+                    <button
+                      onClick={handleCheckNoteUploadStatus}
+                      disabled={isNoteUploadPolling}
+                      className="shrink-0 px-3 py-1 text-xs font-medium bg-red-200 hover:bg-red-300 text-red-800 rounded transition-colors disabled:opacity-50"
+                    >
+                      {isNoteUploadPolling ? 'Checking...' : 'Check Status'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
