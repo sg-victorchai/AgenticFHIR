@@ -6,6 +6,7 @@ import {
   useGetPatientQuery,
   useSearchByPatientQuery,
   useGetResourceByIdQuery,
+  useGetObservationsByIdsQuery,
 } from '../services/fhir/client';
 import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
@@ -451,6 +452,189 @@ const Loading = () => (
 const Empty = () => (
   <div className="text-center py-12 text-gray-400">No records found.</div>
 );
+
+const parseReference = (reference?: string): { type: string; id: string } | null => {
+  if (!reference) return null;
+  const normalized = reference.split('?')[0].replace(/\/$/, '');
+  const parts = normalized.split('/');
+  if (parts.length < 2) return null;
+  const id = parts[parts.length - 1];
+  const type = parts[parts.length - 2];
+  if (!id || !type) return null;
+  return { type, id };
+};
+
+const getObservationSummaryValue = (obs: any): string => {
+  if (obs.valueQuantity) {
+    return `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim();
+  }
+  return (
+    obs.valueString ||
+    obs.valueCodeableConcept?.text ||
+    (obs.component?.length ? `${obs.component.length} components` : '—')
+  );
+};
+
+const DiagnosticReportReferencedResources: React.FC<{ report: any }> = ({
+  report,
+}) => {
+  const groupedReferences = React.useMemo(() => {
+    const grouped = new Map<
+      string,
+      Array<{ ref: any; resourceId: string; resource?: any }>
+    >();
+    const containedById = new Map<string, any>(
+      (report.contained ?? [])
+        .filter((c: any) => c?.id)
+        .map((c: any) => [String(c.id), c]),
+    );
+
+    for (const ref of report.result ?? []) {
+      const rawReference = String(ref.reference ?? '');
+      const parsed = parseReference(rawReference);
+      const containedRefId = rawReference.startsWith('#')
+        ? rawReference.slice(1)
+        : '';
+      const refId = parsed?.id ?? containedRefId;
+      const contained = refId ? containedById.get(refId) : undefined;
+      const resourceType = contained?.resourceType || parsed?.type || 'Unknown';
+      const bucket = grouped.get(resourceType) ?? [];
+      bucket.push({
+        ref,
+        resourceId: refId,
+        resource: contained,
+      });
+      grouped.set(resourceType, bucket);
+    }
+
+    return grouped;
+  }, [report.contained, report.result]);
+
+  const observationRefs = groupedReferences.get('Observation') ?? [];
+  const observationIdsToFetch = React.useMemo(
+    () =>
+      observationRefs
+        .filter((r) => !r.resource && r.resourceId)
+        .map((r) => r.resourceId),
+    [observationRefs],
+  );
+
+  const { data: referencedObservationsBundle } = useGetObservationsByIdsQuery(
+    observationIdsToFetch,
+    { skip: observationIdsToFetch.length === 0 },
+  );
+
+  const referencedObservationsById = React.useMemo(
+    () =>
+      new Map<string, any>(
+        (referencedObservationsBundle?.entry ?? [])
+          .map((e: any) => e.resource)
+          .filter((r: any) => r?.resourceType === 'Observation' && r?.id)
+          .map((r: any) => [String(r.id), r]),
+      ),
+    [referencedObservationsBundle],
+  );
+
+  const resolvedObservationResources = observationRefs
+    .map((r) => r.resource || referencedObservationsById.get(r.resourceId))
+    .filter(Boolean);
+
+  const otherReferenceTypes = Array.from(groupedReferences.keys()).filter(
+    (type) => type !== 'Observation',
+  );
+
+  if (!observationRefs.length && !otherReferenceTypes.length) return null;
+
+  return (
+    <div className="space-y-3">
+      {observationRefs.length ? (
+        <div>
+          <p className="font-medium mb-2">Included Observations:</p>
+          {!resolvedObservationResources.length ? (
+            <div className="text-xs text-gray-500">No observation details found.</div>
+          ) : (
+            <div className="overflow-auto border border-gray-200 rounded bg-white">
+              <table className="min-w-full divide-y divide-gray-200 text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Date', 'Code', 'Category', 'Value', 'Status', 'Last Updated'].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          {h}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {resolvedObservationResources.map((obs: any) => (
+                    <tr key={obs.id}>
+                      <td className="px-3 py-2">{fmt(obs.effectiveDateTime)}</td>
+                      <td className="px-3 py-2">
+                        {obs.code?.coding?.[0]?.display ||
+                          obs.code?.text ||
+                          obs.code?.coding?.[0]?.code ||
+                          '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        {obs.category?.[0]?.coding?.[0]?.display ||
+                          obs.category?.[0]?.coding?.[0]?.code ||
+                          '—'}
+                      </td>
+                      <td className="px-3 py-2">{getObservationSummaryValue(obs)}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={obs.status} />
+                      </td>
+                      <td className="px-3 py-2">{fmt(obs.meta?.lastUpdated)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {otherReferenceTypes.map((resourceType) => (
+        <div key={resourceType}>
+          <p className="font-medium mb-2">Included {resourceType}s:</p>
+          <div className="overflow-auto border border-gray-200 rounded bg-white">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">
+                    Reference
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">
+                    Display
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(groupedReferences.get(resourceType) ?? []).map((r, i) => (
+                  <tr key={`${resourceType}-${r.resourceId || i}`}>
+                    <td className="px-3 py-2">
+                      {r.ref.reference || `${resourceType}/${r.resourceId}` || '—'}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.resource?.code?.text ||
+                        r.resource?.code?.coding?.[0]?.display ||
+                        r.ref.display ||
+                        '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 // ─── Sort & Filter UI components ─────────────────────────────────────────────
 
@@ -2492,46 +2676,7 @@ const PatientRecordsPage: React.FC = () => {
                           </div>
                           {dr.result?.length ? (
                             <div className="mb-3">
-                              <p className="font-medium mb-2">Results:</p>
-                              <ul className="list-disc list-inside text-xs space-y-1">
-                                {dr.result.map((ref: any, i: number) => {
-                                  const refId = ref.reference?.split('/')?.[1];
-                                  const contained = (dr.contained ?? []).find(
-                                    (c: any) => c.id === refId,
-                                  );
-                                  if (contained) {
-                                    const label =
-                                      contained.code?.coding?.[0]?.display ||
-                                      contained.code?.text ||
-                                      ref.display ||
-                                      ref.reference;
-                                    const val = contained.component?.length
-                                      ? contained.component
-                                          .map(
-                                            (c: any) =>
-                                              `${c.code?.coding?.[0]?.display || '?'}: ${
-                                                c.valueQuantity
-                                                  ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
-                                                  : c.valueString || '—'
-                                              }`,
-                                          )
-                                          .join(', ')
-                                      : contained.valueQuantity
-                                        ? `${contained.valueQuantity.value} ${contained.valueQuantity.unit ?? ''}`.trim()
-                                        : '—';
-                                    return (
-                                      <li key={i}>
-                                        {label}: {val}
-                                      </li>
-                                    );
-                                  }
-                                  return (
-                                    <li key={i}>
-                                      {ref.display || ref.reference}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
+                              <DiagnosticReportReferencedResources report={dr} />
                             </div>
                           ) : null}
                           <div>
