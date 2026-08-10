@@ -355,20 +355,19 @@ const AI_BASE_URL = (
 
 const AGENT_API_BASE_URL =
   import.meta.env.VITE_AGENT_API_BASE_URL || AI_BASE_URL;
+const HARMONIZER_PERSONA_ID = 'clinical-docs-harmonizer';
 const HARMONIZER_IMPORT_URL =
   import.meta.env.VITE_HARMONIZER_IMPORT_URL ||
-  `${AGENT_API_BASE_URL}/api/personas/clinical-docs-harmonizer/import`;
-const HARMONIZER_JOB_URL_BASE =
-  import.meta.env.VITE_HARMONIZER_JOB_URL_BASE ||
-  `${AGENT_API_BASE_URL}/api/personas/import-jobs`;
-const HARMONIZER_SUMMARY_URL_BASE =
-  import.meta.env.VITE_HARMONIZER_SUMMARY_URL_BASE || HARMONIZER_JOB_URL_BASE;
+  `${AGENT_API_BASE_URL}/api/persona/DataPipelinePersona/${HARMONIZER_PERSONA_ID}/$execute`;
+const HARMONIZER_STATUS_URL_BASE =
+  import.meta.env.VITE_HARMONIZER_STATUS_URL_BASE ||
+  `${AGENT_API_BASE_URL}/api/persona/DataPipelinePersona/${HARMONIZER_PERSONA_ID}/$status`;
 
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
 
 const PAGE_SIZE = 5;
-const HARMONIZER_POLL_INTERVAL_MS = 1200;
+const HARMONIZER_POLL_INTERVAL_MS = 3000;
 const HARMONIZER_POLL_TIMEOUT_MS = 120000;
 
 const getResourceTypesFromQuery = (query: string): string[] => {
@@ -453,7 +452,9 @@ const Empty = () => (
   <div className="text-center py-12 text-gray-400">No records found.</div>
 );
 
-const parseReference = (reference?: string): { type: string; id: string } | null => {
+const parseReference = (
+  reference?: string,
+): { type: string; id: string } | null => {
   if (!reference) return null;
   const normalized = reference.split('?')[0].replace(/\/$/, '');
   const parts = normalized.split('/');
@@ -551,28 +552,37 @@ const DiagnosticReportReferencedResources: React.FC<{ report: any }> = ({
         <div>
           <p className="font-medium mb-2">Included Observations:</p>
           {!resolvedObservationResources.length ? (
-            <div className="text-xs text-gray-500">No observation details found.</div>
+            <div className="text-xs text-gray-500">
+              No observation details found.
+            </div>
           ) : (
             <div className="overflow-auto border border-gray-200 rounded bg-white">
               <table className="min-w-full divide-y divide-gray-200 text-xs">
                 <thead className="bg-gray-50">
                   <tr>
-                    {['Date', 'Code', 'Category', 'Value', 'Status', 'Last Updated'].map(
-                      (h) => (
-                        <th
-                          key={h}
-                          className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          {h}
-                        </th>
-                      ),
-                    )}
+                    {[
+                      'Date',
+                      'Code',
+                      'Category',
+                      'Value',
+                      'Status',
+                      'Last Updated',
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {resolvedObservationResources.map((obs: any) => (
                     <tr key={obs.id}>
-                      <td className="px-3 py-2">{fmt(obs.effectiveDateTime)}</td>
+                      <td className="px-3 py-2">
+                        {fmt(obs.effectiveDateTime)}
+                      </td>
                       <td className="px-3 py-2">
                         {obs.code?.coding?.[0]?.display ||
                           obs.code?.text ||
@@ -584,11 +594,15 @@ const DiagnosticReportReferencedResources: React.FC<{ report: any }> = ({
                           obs.category?.[0]?.coding?.[0]?.code ||
                           '—'}
                       </td>
-                      <td className="px-3 py-2">{getObservationSummaryValue(obs)}</td>
+                      <td className="px-3 py-2">
+                        {getObservationSummaryValue(obs)}
+                      </td>
                       <td className="px-3 py-2">
                         <StatusBadge status={obs.status} />
                       </td>
-                      <td className="px-3 py-2">{fmt(obs.meta?.lastUpdated)}</td>
+                      <td className="px-3 py-2">
+                        {fmt(obs.meta?.lastUpdated)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -617,7 +631,9 @@ const DiagnosticReportReferencedResources: React.FC<{ report: any }> = ({
                 {(groupedReferences.get(resourceType) ?? []).map((r, i) => (
                   <tr key={`${resourceType}-${r.resourceId || i}`}>
                     <td className="px-3 py-2">
-                      {r.ref.reference || `${resourceType}/${r.resourceId}` || '—'}
+                      {r.ref.reference ||
+                        `${resourceType}/${r.resourceId}` ||
+                        '—'}
                     </td>
                     <td className="px-3 py-2">
                       {r.resource?.code?.text ||
@@ -1138,42 +1154,34 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const getHarmonizerPollUrl = (jobId: string, pollUrl?: string): string => {
+    // If a poll URL was provided in the response, use it (may be in old or new format)
     if (pollUrl) {
-      const normalizePollPath = (path: string): string => {
-        if (path.includes('/api/personas/import-jobs/')) {
-          if (path.endsWith('/status')) return path;
-          return `${path.replace(/\/+$/, '')}/status`;
-        }
-
-        if (
-          path.includes('/api/personas/clinical-notes-harmonizer/jobs/') ||
-          path.includes('/api/personas/clinical-pathreport-harmonizer/jobs/')
-        ) {
-          return `/api/personas/import-jobs/${encodeURIComponent(jobId)}/status`;
-        }
-
-        return path;
-      };
-
       if (/^https?:\/\//i.test(pollUrl)) {
+        // For absolute URLs, check if already in new format
+        if (pollUrl.includes('/$status?job=')) {
+          return pollUrl; // Already in new format
+        }
+        // Otherwise normalize old format to new format
         try {
-          const parsed = new URL(pollUrl);
-          const normalizedPath = normalizePollPath(parsed.pathname);
-          if (normalizedPath !== parsed.pathname) {
-            return `${parsed.origin}${normalizedPath}`;
+          const url = new URL(pollUrl);
+          if (url.pathname.includes('/api/personas/')) {
+            return `${url.origin}${HARMONIZER_STATUS_URL_BASE.replace(AGENT_API_BASE_URL, '')}?job=${encodeURIComponent(jobId)}`;
           }
-          return `${parsed.origin}${normalizedPath}`;
+          return pollUrl;
         } catch {
-          return `${HARMONIZER_JOB_URL_BASE}/${encodeURIComponent(jobId)}/status`;
+          return `${HARMONIZER_STATUS_URL_BASE}?job=${encodeURIComponent(jobId)}`;
         }
       }
 
       if (pollUrl.startsWith('/')) {
-        const normalizedPath = normalizePollPath(pollUrl);
-        return `${AGENT_API_BASE_URL}${normalizedPath}`;
+        // For relative paths, check format and build full URL
+        if (pollUrl.includes('/$status?job=')) {
+          return `${AGENT_API_BASE_URL}${pollUrl}`;
+        }
       }
     }
-    return `${HARMONIZER_JOB_URL_BASE}/${encodeURIComponent(jobId)}/status`;
+    // Default to new status endpoint format
+    return `${HARMONIZER_STATUS_URL_BASE}?job=${encodeURIComponent(jobId)}`;
   };
 
   const normalizeHarmonizerStatus = (status?: string): string =>
@@ -1232,16 +1240,17 @@ const PatientRecordsPage: React.FC = () => {
   ) => {
     if (runId !== uploadPollRunIdRef.current) return;
 
-    const summaryUrl = `${HARMONIZER_SUMMARY_URL_BASE}/${encodeURIComponent(jobId)}/summary`;
+    // Use status endpoint to fetch the complete job result
+    const statusUrl = `${HARMONIZER_STATUS_URL_BASE}?job=${encodeURIComponent(jobId)}`;
     setIsLoadingNoteUploadSummary(true);
 
     try {
-      const response = await fetch(summaryUrl, { headers });
+      const response = await fetch(statusUrl, { headers });
       if (runId !== uploadPollRunIdRef.current) return;
 
-      let payload: HarmonizerJobSummaryResponse = {};
+      let payload: HarmonizerJobStatusResponse = {};
       try {
-        payload = (await response.json()) as HarmonizerJobSummaryResponse;
+        payload = (await response.json()) as HarmonizerJobStatusResponse;
       } catch {
         payload = {};
       }
@@ -1250,7 +1259,15 @@ const PatientRecordsPage: React.FC = () => {
         throw new Error(`Unable to fetch import summary (${response.status}).`);
       }
 
-      setNoteUploadSummary(payload);
+      // Map the status response to the summary format
+      const summary: HarmonizerJobSummaryResponse = {
+        personaId: payload.personaId,
+        status: payload.status,
+        stepResults: payload.stepResults,
+        summary: (payload as any).outputs,
+        riskFlags: (payload as any).riskFlags,
+      };
+      setNoteUploadSummary(summary);
     } catch (err: any) {
       if (runId === uploadPollRunIdRef.current) {
         setNoteUploadError(
@@ -1443,18 +1460,21 @@ const PatientRecordsPage: React.FC = () => {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          patientId,
-          executionMode: 'background',
-          documentContent: base64,
-          documentType,
-          metadata: {
-            source: 'PORTAL_UPLOAD',
-            channel,
-            mode: 'background',
-            filename: selectedNoteFile.name,
-            mimeType: selectedNoteFile.type || 'application/octet-stream',
-            date: new Date().toISOString().slice(0, 10),
-            priority: 'NORMAL',
+          inputs: {
+            patientId,
+            documentContent: base64,
+            documentType,
+            metadata: {
+              source:
+                channel === 'patient-portal' ? 'PORTAL_UPLOAD' : 'EHR_EPIC',
+              date: new Date().toISOString().slice(0, 10),
+              priority: 'NORMAL',
+            },
+          },
+          execution: {
+            mode: 'async',
+            timeout: '600s',
+            maxTokens: 100000,
           },
         }),
       });
@@ -1474,13 +1494,13 @@ const PatientRecordsPage: React.FC = () => {
         throw new Error(serverMessage);
       }
 
-      const executionId = payload.executionId || payload.jobId;
-      const status = normalizeHarmonizerStatus(payload.status) || 'ACCEPTED';
+      const executionId = payload.jobId?.split(':')[0] || null; // New endpoint returns 'jobId', strip run suffix if present
+      const status = normalizeHarmonizerStatus(payload.status) || 'QUEUED';
 
       setNoteUploadMessage(
         executionId
-          ? `Submitted to Harmonizer in background (${executionId}, ${status}).`
-          : `Submitted to Harmonizer in background (${status}).`,
+          ? `Submitted to Harmonizer (${executionId}, ${status}).`
+          : `Submitted to Harmonizer (${status}).`,
       );
 
       if (executionId) {
@@ -1739,54 +1759,59 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const encExtraParams = {
-    ...buildExtraParams(ENC_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(ENC_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
   const condExtraParams = {
-    ...buildExtraParams(COND_FILTERS, filterValues, 'onset-date', sortDir),
+    ...buildExtraParams(COND_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
   const obsExtraParams = {
-    ...buildExtraParams(OBS_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(OBS_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
   const srExtraParams = {
-    ...buildExtraParams(SR_FILTERS, filterValues, 'authored', sortDir),
+    ...buildExtraParams(SR_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
   const labDrExtraParams = {
-    ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(DR_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
     category: 'LAB,PAT',
   };
   const radDrExtraParams = {
-    ...buildExtraParams(DR_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(DR_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
     category: 'RAD',
   };
   const medReqExtraParams = {
-    ...buildExtraParams(MED_REQ_FILTERS, filterValues, 'authoredon', sortDir),
+    ...buildExtraParams(MED_REQ_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
   const medDispExtraParams = {
     ...buildExtraParams(
       MED_DISP_FILTERS,
       filterValues,
-      'whenhandedover',
+      '_lastUpdated',
       sortDir,
     ),
     ...pageOffset,
   };
   const medStmtExtraParams = {
-    ...buildExtraParams(MED_STMT_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(
+      MED_STMT_FILTERS,
+      filterValues,
+      '_lastUpdated',
+      sortDir,
+    ),
     ...pageOffset,
   };
   const procExtraParams = {
-    ...buildExtraParams(PROC_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(PROC_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
   const cpExtraParams = {
-    ...buildExtraParams(CP_FILTERS, filterValues, 'date', sortDir),
+    ...buildExtraParams(CP_FILTERS, filterValues, '_lastUpdated', sortDir),
     ...pageOffset,
   };
 
@@ -1811,6 +1836,7 @@ const PatientRecordsPage: React.FC = () => {
       resourceType: 'Observation',
       patientId: patientId!,
       extraParams: obsExtraParams,
+      customHeaders: { 'x-api-repository': 'ALL' },
     },
     { skip: !patientId || activeTab !== 'observation' },
   );
@@ -1828,6 +1854,7 @@ const PatientRecordsPage: React.FC = () => {
         resourceType: 'DiagnosticReport',
         patientId: patientId!,
         extraParams: labDrExtraParams,
+        customHeaders: { 'x-api-repository': 'ALL' },
       },
       { skip: !patientId || activeTab !== 'lab-results' },
     );
@@ -1903,6 +1930,7 @@ const PatientRecordsPage: React.FC = () => {
     .filter(
       (c: any) => c.clinicalStatus?.coding?.[0]?.code !== 'entered-in-error',
     );
+  // Include all observations with any category or no category; only exclude entered-in-error
   const observations = (obsBundle?.entry ?? [])
     .map((e) => e.resource as any)
     .filter(Boolean)
@@ -2346,7 +2374,11 @@ const PatientRecordsPage: React.FC = () => {
                         className={`cursor-pointer transition-colors ${highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
                         onClick={() => toggle(obs.id)}
                       >
-                        <TD>{fmt(obs.effectiveDateTime)}</TD>
+                        <TD>
+                          {fmt(
+                            obs.effectiveDateTime || obs.effectivePeriod?.start,
+                          )}
+                        </TD>
                         <TD>
                           {obs.code?.coding?.[0]?.display ||
                             obs.code?.text ||
@@ -2355,8 +2387,14 @@ const PatientRecordsPage: React.FC = () => {
                         </TD>
                         <TD>
                           {obs.category?.[0]?.coding?.[0]?.display ||
-                            obs.category?.[0]?.coding?.[0]?.code ||
-                            '—'}
+                          obs.category?.[0]?.coding?.[0]?.code ? (
+                            obs.category?.[0]?.coding?.[0]?.display ||
+                            obs.category?.[0]?.coding?.[0]?.code
+                          ) : (
+                            <span className="text-gray-400 italic">
+                              (uncategorized)
+                            </span>
+                          )}
                         </TD>
                         <TD>{value}</TD>
                         <TD>
@@ -2421,6 +2459,18 @@ const PatientRecordsPage: React.FC = () => {
                                 <div>
                                   <span className="font-medium">Value:</span>{' '}
                                   {value}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Category:</span>{' '}
+                                  {obs.category?.[0]?.coding?.[0]?.display ||
+                                  obs.category?.[0]?.coding?.[0]?.code ? (
+                                    obs.category[0]?.coding?.[0]?.display ||
+                                    obs.category[0]?.coding?.[0]?.code
+                                  ) : (
+                                    <span className="text-gray-400 italic">
+                                      (not specified)
+                                    </span>
+                                  )}
                                 </div>
                                 <div>
                                   <span className="font-medium">
@@ -2676,7 +2726,9 @@ const PatientRecordsPage: React.FC = () => {
                           </div>
                           {dr.result?.length ? (
                             <div className="mb-3">
-                              <DiagnosticReportReferencedResources report={dr} />
+                              <DiagnosticReportReferencedResources
+                                report={dr}
+                              />
                             </div>
                           ) : null}
                           <div>

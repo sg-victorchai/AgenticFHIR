@@ -997,11 +997,21 @@ export const fhirApi = createApi({
         resourceType: string;
         patientId: string;
         extraParams?: Record<string, string>;
+        customHeaders?: Record<string, string>;
       }
     >({
-      queryFn: async ({ resourceType, patientId, extraParams }) => {
+      queryFn: async ({
+        resourceType,
+        patientId,
+        extraParams,
+        customHeaders,
+      }) => {
         try {
           const client = await createFHIRClient();
+          // Merge custom headers with default client headers
+          if (customHeaders) {
+            Object.assign(client.customHeaders || {}, customHeaders);
+          }
           const results = await client.search({
             resourceType,
             searchParams: {
@@ -1027,11 +1037,11 @@ export const fhirApi = createApi({
       providesTags: (
         _result,
         _error,
-        { resourceType, patientId, extraParams },
+        { resourceType, patientId, extraParams, customHeaders },
       ) => [
         {
           type: resourceType as any,
-          id: `${patientId}:${JSON.stringify(extraParams ?? {})}`,
+          id: `${patientId}:${JSON.stringify(extraParams ?? {})}:${JSON.stringify(customHeaders ?? {})}`,
         },
       ],
     }),
