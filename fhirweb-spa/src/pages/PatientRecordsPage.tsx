@@ -476,6 +476,263 @@ const getObservationSummaryValue = (obs: any): string => {
   );
 };
 
+const ObservationReferencedResources: React.FC<{ observation: any }> = ({
+  observation,
+}) => {
+  const groupedReferences = React.useMemo(() => {
+    const grouped = new Map<
+      string,
+      Array<{ ref: any; resourceId: string; resource?: any }>
+    >();
+    const containedById = new Map<string, any>(
+      (observation.contained ?? [])
+        .filter((c: any) => c?.id)
+        .map((c: any) => [String(c.id), c]),
+    );
+
+    // Process both hasMember and derivedFrom
+    const allRefs = [
+      ...(observation.hasMember ?? []).map((r: any) => ({
+        ...r,
+        refType: 'hasMember',
+      })),
+      ...(observation.derivedFrom ?? []).map((r: any) => ({
+        ...r,
+        refType: 'derivedFrom',
+      })),
+    ];
+
+    for (const ref of allRefs) {
+      const rawReference = String(ref.reference ?? '');
+      const parsed = parseReference(rawReference);
+      const containedRefId = rawReference.startsWith('#')
+        ? rawReference.slice(1)
+        : '';
+      const refId = parsed?.id ?? containedRefId;
+      const contained = refId ? containedById.get(refId) : undefined;
+      const resourceType = contained?.resourceType || parsed?.type || 'Unknown';
+      const bucket = grouped.get(resourceType) ?? [];
+      bucket.push({
+        ref,
+        resourceId: refId,
+        resource: contained,
+      });
+      grouped.set(resourceType, bucket);
+    }
+
+    return grouped;
+  }, [observation.contained, observation.hasMember, observation.derivedFrom]);
+
+  const observationRefs = groupedReferences.get('Observation') ?? [];
+  const questionnaireResponseRefs =
+    groupedReferences.get('QuestionnaireResponse') ?? [];
+  const otherReferenceTypes = Array.from(groupedReferences.keys()).filter(
+    (type) => type !== 'Observation' && type !== 'QuestionnaireResponse',
+  );
+
+  // Fetch external observation references
+  const observationIdsToFetch = React.useMemo(
+    () =>
+      observationRefs
+        .filter((r) => !r.resource && r.resourceId)
+        .map((r) => r.resourceId),
+    [observationRefs],
+  );
+
+  const { data: referencedObservationsBundle } = useGetObservationsByIdsQuery(
+    observationIdsToFetch,
+    { skip: observationIdsToFetch.length === 0 },
+  );
+
+  const referencedObservationsById = React.useMemo(
+    () =>
+      new Map<string, any>(
+        (referencedObservationsBundle?.entry ?? [])
+          .map((e: any) => e.resource)
+          .filter((r: any) => r?.resourceType === 'Observation' && r?.id)
+          .map((r: any) => [String(r.id), r]),
+      ),
+    [referencedObservationsBundle],
+  );
+
+  const resolvedObservationResources = observationRefs
+    .map((r) => r.resource || referencedObservationsById.get(r.resourceId))
+    .filter(Boolean);
+
+  if (
+    !resolvedObservationResources.length &&
+    !questionnaireResponseRefs.length &&
+    !otherReferenceTypes.length
+  )
+    return null;
+
+  return (
+    <div className="space-y-3">
+      {resolvedObservationResources.length ? (
+        <div>
+          <p className="font-medium mb-2">Referenced Observations:</p>
+          <div className="overflow-auto border border-gray-200 rounded bg-white">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  {[
+                    'Date',
+                    'Code',
+                    'Category',
+                    'Value',
+                    'Status',
+                    'Last Updated',
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {resolvedObservationResources.map((r: any) => (
+                  <tr key={r.id}>
+                    <td className="px-3 py-2">
+                      {fmt(r.effectiveDateTime || r.effectivePeriod?.start)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.code?.coding?.[0]?.display ||
+                        r.code?.text ||
+                        r.code?.coding?.[0]?.code ||
+                        '—'}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.category?.[0]?.coding?.[0]?.display ||
+                        r.category?.[0]?.coding?.[0]?.code ||
+                        '—'}
+                    </td>
+                    <td className="px-3 py-2">
+                      {getObservationSummaryValue(r)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td className="px-3 py-2">{fmt(r.meta?.lastUpdated)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {questionnaireResponseRefs.length ? (
+        <div>
+          <p className="font-medium mb-2">
+            Referenced Questionnaire Responses:
+          </p>
+          <div className="space-y-2">
+            {questionnaireResponseRefs.map((r: any) =>
+              r.resource ? (
+                <div
+                  key={r.resource.id}
+                  className="border border-gray-200 rounded bg-white p-3"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <span className="font-medium">
+                        {r.resource.questionnaire?.split('/')[1] || '—'}
+                      </span>
+                      <span className="text-gray-500 ml-2">
+                        ({r.resource.id})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <div>
+                        <StatusBadge status={r.resource.status} />
+                      </div>
+                      <div className="text-gray-500">
+                        {fmt(r.resource.meta?.lastUpdated)}
+                      </div>
+                    </div>
+                  </div>
+                  {r.resource.item?.length ? (
+                    <div className="mt-2 space-y-1 text-xs">
+                      {r.resource.item.map((item: any, idx: number) => {
+                        const answer = item.answer?.[0];
+                        const answerValue = answer
+                          ? answer.valueBoolean !== undefined
+                            ? String(answer.valueBoolean)
+                            : answer.valueInteger !== undefined
+                              ? String(answer.valueInteger)
+                              : answer.valueString ||
+                                answer.valueDate ||
+                                answer.valueDecimal ||
+                                answer.valueCoding?.display ||
+                                answer.valueCoding?.code ||
+                                '—'
+                          : '(no answer)';
+                        return (
+                          <div key={idx} className="text-gray-700">
+                            <span className="font-medium">
+                              {item.text || item.linkId || `Item ${idx + 1}`}
+                            </span>
+                            :{' '}
+                            <span className="text-gray-600">{answerValue}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500 mt-2">
+                      No items found.
+                    </div>
+                  )}
+                </div>
+              ) : null,
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {otherReferenceTypes.map((resourceType) => (
+        <div key={resourceType}>
+          <p className="font-medium mb-2">Referenced {resourceType}s:</p>
+          <div className="overflow-auto border border-gray-200 rounded bg-white">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">
+                    Reference
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">
+                    Display
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(groupedReferences.get(resourceType) ?? []).map((r, i) => (
+                  <tr key={`${resourceType}-${r.resourceId || i}`}>
+                    <td className="px-3 py-2">
+                      {r.ref.reference ||
+                        `${resourceType}/${r.resourceId}` ||
+                        '—'}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.resource?.code?.text ||
+                        r.resource?.code?.coding?.[0]?.display ||
+                        r.ref.display ||
+                        '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const DiagnosticReportReferencedResources: React.FC<{ report: any }> = ({
   report,
 }) => {
@@ -2371,7 +2628,7 @@ const PatientRecordsPage: React.FC = () => {
                     <React.Fragment key={obs.id}>
                       <tr
                         id={`record-${obs.id}`}
-                        className={`cursor-pointer transition-colors ${highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        className={`cursor-pointer transition-colors ${expandedId === obs.id ? 'bg-blue-50 border-l-4 border-blue-400' : highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
                         onClick={() => toggle(obs.id)}
                       >
                         <TD>
@@ -2409,7 +2666,7 @@ const PatientRecordsPage: React.FC = () => {
                         <tr>
                           <td
                             colSpan={7}
-                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                            className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
                           >
                             {obs.component?.length ? (
                               <div>
@@ -2489,6 +2746,14 @@ const PatientRecordsPage: React.FC = () => {
                                   <span className="font-medium">Note:</span>{' '}
                                   {obs.note?.[0]?.text || '—'}
                                 </div>
+                                {obs.hasMember?.length ||
+                                obs.derivedFrom?.length ? (
+                                  <div className="col-span-2">
+                                    <ObservationReferencedResources
+                                      observation={obs}
+                                    />
+                                  </div>
+                                ) : null}
                               </div>
                             )}
                           </td>
@@ -2681,7 +2946,7 @@ const PatientRecordsPage: React.FC = () => {
                   <React.Fragment key={dr.id}>
                     <tr
                       id={`record-${dr.id}`}
-                      className={`cursor-pointer transition-colors ${highlightId === dr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      className={`cursor-pointer transition-colors ${expandedId === dr.id ? 'bg-blue-50 border-l-4 border-blue-400' : highlightId === dr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
                       onClick={() => toggle(dr.id)}
                     >
                       <TD>{fmt(dr.effectiveDateTime || dr.issued)}</TD>
@@ -2701,7 +2966,7 @@ const PatientRecordsPage: React.FC = () => {
                       <tr>
                         <td
                           colSpan={6}
-                          className="bg-gray-50 px-6 py-4 text-sm"
+                          className="bg-blue-50 px-6 py-4 text-sm border-l-4 border-blue-400 border-b border-b-blue-200"
                         >
                           <div className="grid grid-cols-2 gap-2 text-gray-700 mb-3">
                             <div>
