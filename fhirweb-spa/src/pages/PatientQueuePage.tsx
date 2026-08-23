@@ -612,6 +612,8 @@ const QueueSection: React.FC<QueueSectionProps> = ({
 
 const PatientQueuePage: React.FC = () => {
   const role = useSelector((state: RootState) => state.ui.role);
+  const queueRole: 'psa' | 'clinician' | 'patient' =
+    role === 'clinician' || role === 'patient' ? role : 'psa';
   const todayISO = new Date().toISOString().split('T')[0];
   const currentYearMonth = todayISO.slice(0, 7);
 
@@ -917,7 +919,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="awaiting-triage"
             encounters={awaitingTriage}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -926,7 +928,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="awaiting-clinician"
             encounters={awaitingClinician}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -935,7 +937,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="waiting-patient"
             encounters={waitingPatient}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -944,7 +946,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="in-consultation"
             encounters={inConsultation}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -953,7 +955,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="awaiting-medication"
             encounters={awaitingMedication}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -962,7 +964,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="awaiting-billing"
             encounters={awaitingBilling}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -971,7 +973,7 @@ const PatientQueuePage: React.FC = () => {
           <QueueSection
             stage="completed"
             encounters={completed}
-            role={role ?? 'psa'}
+            role={queueRole}
             onEncounterAction={handleEncounterAction}
             isUpdating={isUpdating}
             showDate={showDate}
@@ -981,7 +983,7 @@ const PatientQueuePage: React.FC = () => {
             <QueueSection
               stage="cancelled"
               encounters={cancelled}
-              role={role ?? 'psa'}
+              role={queueRole}
               onEncounterAction={handleEncounterAction}
               isUpdating={isUpdating}
               showDate={showDate}

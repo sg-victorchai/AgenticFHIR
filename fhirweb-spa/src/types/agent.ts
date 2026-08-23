@@ -107,7 +107,12 @@ export interface AgentEndpointConfig {
  */
 export interface MissionExecutionResult {
   missionId: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status:
+    | 'PENDING'
+    | 'RUNNING'
+    | 'AWAITING_INTERVENTION'
+    | 'COMPLETED'
+    | 'FAILED';
   goal: string;
   outputs?: {
     response?: string;
@@ -126,5 +131,42 @@ export interface MissionExecutionResult {
     missionCompleted?: string;
     toolCalls?: number;
     tokensUsed?: number;
+  };
+}
+
+/**
+ * A single step of a propose_plan-triggered intervention's proposed plan
+ */
+export interface ProposedPlanStep {
+  description: string;
+  riskClass: 'LOW' | 'MEDIUM' | 'HIGH' | string;
+}
+
+/**
+ * AgentInterventionRequest — a human-in-the-loop request raised by a mission
+ * (via propose_plan or request_intervention) that a care coordinator must
+ * act on. GET /api/agent/AgentInterventionRequest?status=PENDING is the
+ * authoritative source; SSE only carries a lightweight change notification,
+ * never this content, so it must be (re)fetched via that endpoint.
+ */
+export interface AgentInterventionRequest {
+  id: string;
+  missionId: string;
+  type: string; // e.g. 'approval'
+  status: 'PENDING' | 'RESOLVED' | 'EXPIRED' | string;
+  question: string;
+  assignee?: string | null;
+  options: string[];
+  timeoutAction?: string;
+  timeoutMinutes?: number;
+  createdAt: string;
+  expiresAt?: string;
+  context?: {
+    hitlTriggerReason?: string;
+    missionSignal?: string;
+    proposedPlan?: {
+      steps: ProposedPlanStep[];
+    };
+    [key: string]: unknown;
   };
 }

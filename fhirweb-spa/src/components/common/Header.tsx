@@ -56,7 +56,9 @@ const Header: React.FC = () => {
                     ? 'PSA'
                     : role === 'clinician'
                       ? 'Clinician'
-                      : 'Patient'}
+                      : role === 'CARE_COORDINATOR'
+                        ? 'Care Coordinator'
+                        : 'Patient'}
                 </li>
               )}
               {isAuthenticated ? (

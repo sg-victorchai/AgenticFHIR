@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-export type UserRole = 'psa' | 'clinician' | 'patient';
+export type UserRole = 'psa' | 'clinician' | 'patient' | 'CARE_COORDINATOR';
 
 interface UiState {
   sidebarOpen: boolean;

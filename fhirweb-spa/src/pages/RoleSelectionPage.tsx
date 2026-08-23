@@ -58,6 +58,7 @@ const RoleSelectionPage: React.FC = () => {
     psa: 'Patient Service Assistant',
     clinician: 'Clinician',
     patient: 'Patient',
+    CARE_COORDINATOR: 'Care Coordinator',
   } as const;
 
   // Handle SMART on FHIR OAuth callback
@@ -85,7 +86,7 @@ const RoleSelectionPage: React.FC = () => {
   }, [navigate, reinitializeClient]);
 
   const handleSelectRole = async (
-    selected: 'psa' | 'clinician' | 'patient',
+    selected: 'psa' | 'clinician' | 'patient' | 'CARE_COORDINATOR',
   ) => {
     if (selected === 'psa') {
       dispatch(setRole('psa'));
@@ -103,6 +104,13 @@ const RoleSelectionPage: React.FC = () => {
 
     if (selected === 'patient') {
       setShowPatientSelector(true);
+      return;
+    }
+
+    if (selected === 'CARE_COORDINATOR') {
+      dispatch(setRole('CARE_COORDINATOR'));
+      setShowPatientSelector(false);
+      navigate('/care-coordinator');
       return;
     }
   };
@@ -139,7 +147,7 @@ const RoleSelectionPage: React.FC = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-5xl">
         {/* Patient Service Assistant */}
         <button
           onClick={() => handleSelectRole('psa')}
@@ -226,6 +234,38 @@ const RoleSelectionPage: React.FC = () => {
             View your queue status and follow your consultation progress
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-600 group-hover:text-violet-800">
+            Continue →
+          </span>
+        </button>
+
+        {/* Care Coordinator */}
+        <button
+          onClick={() => handleSelectRole('CARE_COORDINATOR')}
+          className="group flex flex-col items-center p-8 bg-white border-2 border-amber-200 rounded-2xl shadow-sm hover:shadow-md hover:border-amber-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
+        >
+          <div className="w-16 h-16 bg-amber-100 group-hover:bg-amber-200 rounded-full flex items-center justify-center mb-4 transition-colors">
+            <svg
+              className="w-8 h-8 text-amber-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Care Coordinator
+          </h2>
+          <p className="text-sm text-gray-500 text-center">
+            Run care-gap agents, track mission status, and review generated
+            care plans
+          </p>
+          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-amber-600 group-hover:text-amber-800">
             Continue →
           </span>
         </button>
