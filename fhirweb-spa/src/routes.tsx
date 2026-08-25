@@ -16,6 +16,7 @@ import ClinicalConsultPage from './pages/clinical/ClinicalConsultPage';
 import ConsultNoteDetailPage from './pages/clinical/ConsultNoteDetailPage';
 import PatientRecordsPage from './pages/PatientRecordsPage';
 import CareCoordinatorPage from './pages/CareCoordinatorPage';
+import MissionHistoryPage from './pages/MissionHistoryPage';
 // CRUD components
 import CarePlanCrudPage from './pages/crud/CarePlanCrudPage';
 import ObservationCrudPage from './pages/crud/ObservationCrudPage';
@@ -39,6 +40,14 @@ const AppRoutes: React.FC = () => {
       <Route path="/events" element={<EventMonitorPage />} />
 
       {/* Care Coordinator-only routes */}
+      <Route
+        path="/care-coordinator/history"
+        element={
+          <RoleGuard allowed={['CARE_COORDINATOR']}>
+            <MissionHistoryPage />
+          </RoleGuard>
+        }
+      />
       <Route
         path="/care-coordinator"
         element={

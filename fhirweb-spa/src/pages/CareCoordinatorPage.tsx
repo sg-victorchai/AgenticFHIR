@@ -1,141 +1,72 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  useSSESubscription,
-  FHIREventNotification,
-} from '../hooks/useSSESubscription';
+import { useSSESubscription } from '../hooks/useSSESubscription';
 import { NotificationContainer } from '../components/common/NotificationToast';
 import { agentMissionService } from '../services/agentMissionService';
-import { useGetResourceByIdQuery } from '../services/fhir/client';
 import { AgentInterventionRequest, MissionExecutionResult } from '../types/agent';
-import { CarePlan } from 'fhir/r5';
+import {
+  CarePlanReviewRow,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconClipboardList,
+  IconClockHistory,
+  IconInbox,
+  IconRefresh,
+  IconSend,
+  IconSpinner,
+  MissionStatusBadge,
+  formatRelativeTime,
+  isCancellableStatus,
+  riskClassColor,
+} from '../components/care-coordinator/missionUi';
 
 const PERSONA_ID = 'diabetic-care-assessment-manager';
 const DEFAULT_GOAL =
   'Find every diabetic patient age 45+ missing an HbA1c in the last 6 months, draft care-gap notes and recommendations, and get sign-off.';
 const DELEGATED_BY_STORAGE_KEY = 'careCoordinatorDelegatedBy';
+const ACTIVE_MISSION_STORAGE_KEY = 'careCoordinatorActiveMissionId';
 
-const isCancellableStatus = (status: MissionExecutionResult['status']) =>
-  status === 'PENDING' ||
-  status === 'RUNNING' ||
-  status === 'AWAITING_INTERVENTION';
-
-const statusColor = (status: MissionExecutionResult['status']) => {
-  switch (status) {
-    case 'COMPLETED':
-      return 'text-green-700 bg-green-50 border-green-200';
-    case 'FAILED':
-      return 'text-red-700 bg-red-50 border-red-200';
-    case 'RUNNING':
-      return 'text-blue-700 bg-blue-50 border-blue-200';
-    case 'AWAITING_INTERVENTION':
-      return 'text-amber-700 bg-amber-50 border-amber-200';
-    default:
-      return 'text-gray-700 bg-gray-50 border-gray-200';
-  }
-};
-
-// Resolves a generated CarePlan's owning patient so we can deep-link into the
-// existing patient-scoped CarePlan CRUD page for review/update.
-const CarePlanReviewRow: React.FC<{ carePlanId: string; label?: string }> = ({
-  carePlanId,
-  label,
-}) => {
-  const { data: carePlanResource, isLoading } = useGetResourceByIdQuery(
-    { resourceType: 'CarePlan', id: carePlanId },
-    { skip: !carePlanId },
-  );
-  const carePlan = carePlanResource as CarePlan | undefined;
-
-  const patientId = carePlan?.subject?.reference?.split('/').pop();
-
-  return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-b-0">
-      <div>
-        <p className="text-sm font-medium text-gray-800">
-          {label || carePlan?.title || `CarePlan/${carePlanId}`}
-        </p>
-        <p className="text-xs text-gray-400 font-mono">{carePlanId}</p>
-      </div>
-      {isLoading ? (
-        <span className="text-xs text-gray-400">Resolving…</span>
-      ) : patientId ? (
-        <Link
-          to={`/patient/${patientId}/careplan/crud/${carePlanId}`}
-          className="text-sm font-semibold text-amber-600 hover:text-amber-800"
-        >
-          Review / Update →
-        </Link>
-      ) : (
-        <span className="text-xs text-red-500">Unable to resolve patient</span>
-      )}
-    </div>
-  );
-};
-
-const riskClassColor = (riskClass: string) => {
-  switch (riskClass) {
-    case 'HIGH':
-      return 'text-red-700 bg-red-50 border-red-200';
-    case 'MEDIUM':
-      return 'text-amber-700 bg-amber-50 border-amber-200';
-    default:
-      return 'text-gray-600 bg-gray-50 border-gray-200';
-  }
-};
-
-// Full detail view of an AgentInterventionRequest (per the documented
-// GET /api/agent/AgentInterventionRequest?status=PENDING contract) with
-// inline approve/reject/etc. actions that PATCH a decision to resolve it.
-const InterventionRequestRow: React.FC<{
+// Inline review card for an AgentInterventionRequest blocking the active
+// mission — the plan detail and approve/reject/etc. actions live directly
+// inside the Current Mission card rather than a separate global queue.
+const InterventionReviewPanel: React.FC<{
   intervention: AgentInterventionRequest;
   onResolve: (intervention: AgentInterventionRequest, decision: string) => void;
   resolving: boolean;
-}> = ({ intervention, onResolve, resolving }) => {
+  error: string | null;
+}> = ({ intervention, onResolve, resolving, error }) => {
   const steps = intervention.context?.proposedPlan?.steps;
 
   return (
-    <div className="px-4 py-4 border-b border-amber-100 last:border-b-0">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-800">
+    <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+      <div className="flex items-start gap-2.5">
+        <IconAlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900">
             {intervention.question}
           </p>
-          <p className="text-xs text-gray-400 font-mono mt-1">
-            {intervention.id} · mission {intervention.missionId}
-          </p>
           {intervention.context?.hitlTriggerReason && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-amber-700/80 mt-1">
               {intervention.context.hitlTriggerReason}
             </p>
           )}
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="px-2 py-1 text-xs font-semibold rounded-full border text-amber-700 bg-amber-50 border-amber-200">
-            {intervention.type}
-          </span>
-          {intervention.assignee && (
-            <span className="text-xs text-gray-500">
-              Assigned to {intervention.assignee}
-            </span>
-          )}
           {intervention.expiresAt && (
-            <span className="text-xs text-gray-400">
-              Expires {new Date(intervention.expiresAt).toLocaleString()}
+            <p className="text-xs text-amber-700/60 mt-1">
+              Expires {formatRelativeTime(intervention.expiresAt)}
               {intervention.timeoutAction &&
-                ` (${intervention.timeoutAction} on timeout)`}
-            </span>
+                ` · ${intervention.timeoutAction} on timeout`}
+            </p>
           )}
         </div>
       </div>
 
       {steps && steps.length > 0 && (
-        <ol className="mt-3 space-y-1.5 list-decimal list-inside">
+        <ol className="mt-3 ml-7 space-y-1.5 list-decimal">
           {steps.map((step, idx) => (
             <li key={idx} className="text-sm text-gray-700">
               {step.description}{' '}
               <span
-                className={`ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full border ${riskClassColor(
+                className={`ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full border align-middle ${riskClassColor(
                   step.riskClass,
                 )}`}
               >
@@ -146,15 +77,17 @@ const InterventionRequestRow: React.FC<{
         </ol>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
+
+      <div className="mt-4 ml-7 flex flex-wrap gap-2">
         {intervention.options.map((option) => (
           <button
             key={option}
             onClick={() => onResolve(intervention, option)}
             disabled={resolving}
-            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50 transition-colors"
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-md border border-amber-300 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50 transition-colors capitalize"
           >
-            {resolving ? 'Submitting…' : option}
+            {resolving ? 'Submitting…' : option.replace(/-/g, ' ')}
           </button>
         ))}
       </div>
@@ -167,18 +100,13 @@ const CareCoordinatorPage: React.FC = () => {
   const [delegatedBy, setDelegatedBy] = useState(
     () => sessionStorage.getItem(DELEGATED_BY_STORAGE_KEY) || '',
   );
-  const [missions, setMissions] = useState<MissionExecutionResult[]>([]);
-  const [selectedMissionId, setSelectedMissionId] = useState<string | null>(
-    null,
-  );
+  const [activeMission, setActiveMission] =
+    useState<MissionExecutionResult | null>(null);
+  const [activeMissionLoading, setActiveMissionLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [refreshingMissionId, setRefreshingMissionId] = useState<
-    string | null
-  >(null);
-  const [cancellingMissionId, setCancellingMissionId] = useState<
-    string | null
-  >(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [interventions, setInterventions] = useState<
     AgentInterventionRequest[]
   >([]);
@@ -186,14 +114,11 @@ const CareCoordinatorPage: React.FC = () => {
     string | null
   >(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
-  const [carePlanEvents, setCarePlanEvents] = useState<
-    FHIREventNotification[]
-  >([]);
 
-  const upsertEvent = (
-    prev: FHIREventNotification[],
-    event: FHIREventNotification,
-  ) => [event, ...prev.filter((e) => e.resourceId !== event.resourceId)];
+  const persistActiveMission = (mission: MissionExecutionResult) => {
+    setActiveMission(mission);
+    sessionStorage.setItem(ACTIVE_MISSION_STORAGE_KEY, mission.missionId);
+  };
 
   // SSE only carries a lightweight change notification for
   // AgentInterventionRequest, never its content — the pending list is
@@ -207,11 +132,6 @@ const CareCoordinatorPage: React.FC = () => {
       });
   };
 
-  const upsertMission = (
-    prev: MissionExecutionResult[],
-    mission: MissionExecutionResult,
-  ) => [mission, ...prev.filter((m) => m.missionId !== mission.missionId)];
-
   // Resolving an intervention doesn't unblock the mission synchronously —
   // the backend keeps returning AWAITING_INTERVENTION for ~10-15s while it
   // resumes execution in the background, and there's no SSE event for it —
@@ -222,7 +142,9 @@ const CareCoordinatorPage: React.FC = () => {
       await new Promise((resolve) => setTimeout(resolve, 3000));
       try {
         const mission = await agentMissionService.getMissionStatus(missionId);
-        setMissions((prev) => upsertMission(prev, mission));
+        setActiveMission((prev) =>
+          prev?.missionId === missionId ? mission : prev,
+        );
         if (mission.status !== 'AWAITING_INTERVENTION') return;
       } catch {
         // Transient failure — keep trying until the attempt budget runs out.
@@ -249,22 +171,18 @@ const CareCoordinatorPage: React.FC = () => {
     }
   };
 
-  // Load missions already known to the backend for this persona (e.g. ones
-  // kicked off via the background/curl flow) and any interventions already
-  // pending sign-off, so a fresh page load isn't starting from empty state.
+  // Restore whichever mission this browser tab last submitted/tracked, so a
+  // reload doesn't lose sight of an in-flight assessment.
   useEffect(() => {
-    agentMissionService
-      .getMissionsByPersona(PERSONA_ID)
-      .then((loaded) =>
-        setMissions((prev) => {
-          let next = prev;
-          for (const mission of loaded) next = upsertMission(next, mission);
-          return next;
-        }),
-      )
-      .catch(() => {
-        // Non-fatal — the coordinator can still submit new missions.
-      });
+    const persistedId = sessionStorage.getItem(ACTIVE_MISSION_STORAGE_KEY);
+    if (persistedId) {
+      setActiveMissionLoading(true);
+      agentMissionService
+        .getMissionStatus(persistedId)
+        .then(setActiveMission)
+        .catch(() => sessionStorage.removeItem(ACTIVE_MISSION_STORAGE_KEY))
+        .finally(() => setActiveMissionLoading(false));
+    }
 
     refreshInterventions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,29 +190,57 @@ const CareCoordinatorPage: React.FC = () => {
 
   // Backend does not yet emit an SSE event when an AgentInterventionRequest
   // is created (confirmed live — the SSE topic connects fine but no event
-  // arrives), so a care coordinator with the page already open would
-  // otherwise never see a new pending intervention without reloading. Poll
-  // as a fallback until that's fixed server-side; the SSE listener above
-  // stays wired too and will take over instantly once it starts firing.
+  // arrives), so poll as a fallback until that's fixed server-side; the SSE
+  // listener below stays wired too and will take over instantly once it
+  // starts firing.
   useEffect(() => {
     const intervalId = setInterval(refreshInterventions, 20000);
     return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { isConnected, events, error, connect, disconnect } =
-    useSSESubscription({
-      topics: ['AgentInterventionRequest', 'CarePlan'],
-      actions: ['create', 'update'],
-      autoConnect: true,
-      onEvent: (event) => {
-        if (event.resourceType === 'AgentInterventionRequest') {
-          refreshInterventions();
-        } else if (event.resourceType === 'CarePlan') {
-          setCarePlanEvents((prev) => upsertEvent(prev, event));
-        }
-      },
-    });
+  // Not every mission passes through a HITL review — a trivial empty-cohort
+  // run can go straight from PENDING to COMPLETED on its own. There's no SSE
+  // signal for mission status either, so poll the active mission directly
+  // while it's still in flight; this stops itself the moment it leaves
+  // PENDING/RUNNING (AWAITING_INTERVENTION is handled by the resolve-time
+  // poll instead, since that transition is tied to a user action here).
+  useEffect(() => {
+    if (
+      !activeMission ||
+      (activeMission.status !== 'PENDING' && activeMission.status !== 'RUNNING')
+    ) {
+      return;
+    }
+    const missionId = activeMission.missionId;
+    const intervalId = setInterval(async () => {
+      try {
+        const mission = await agentMissionService.getMissionStatus(missionId);
+        setActiveMission((prev) =>
+          prev?.missionId === missionId ? mission : prev,
+        );
+      } catch {
+        // Transient failure — try again next tick.
+      }
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, [activeMission?.missionId, activeMission?.status]);
+
+  const { isConnected, events, disconnect } = useSSESubscription({
+    topics: ['AgentInterventionRequest'],
+    actions: ['create', 'update'],
+    autoConnect: true,
+    onEvent: (event) => {
+      if (event.resourceType === 'AgentInterventionRequest') {
+        refreshInterventions();
+      }
+    },
+  });
+
+  useEffect(() => {
+    return () => disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmitMission = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -317,8 +263,7 @@ const CareCoordinatorPage: React.FC = () => {
         goal.trim() || DEFAULT_GOAL,
         trimmedDelegatedBy,
       );
-      setMissions((prev) => upsertMission(prev, mission));
-      setSelectedMissionId(mission.missionId);
+      persistActiveMission(mission);
     } catch (err: any) {
       setSubmitError(err?.message || 'Failed to submit mission.');
     } finally {
@@ -326,295 +271,307 @@ const CareCoordinatorPage: React.FC = () => {
     }
   };
 
-  const handleRefreshMission = async (missionId: string) => {
-    setRefreshingMissionId(missionId);
+  const handleRefreshMission = async () => {
+    if (!activeMission) return;
+    setRefreshing(true);
     try {
-      const mission = await agentMissionService.getMissionStatus(missionId);
-      setMissions((prev) => upsertMission(prev, mission));
+      const mission = await agentMissionService.getMissionStatus(
+        activeMission.missionId,
+      );
+      setActiveMission(mission);
     } catch {
       // Leave the last-known status in place on failure.
     } finally {
-      setRefreshingMissionId(null);
+      setRefreshing(false);
     }
   };
 
-  const handleCancelMission = async (missionId: string) => {
-    setCancellingMissionId(missionId);
+  const handleCancelMission = async () => {
+    if (!activeMission) return;
+    setCancelling(true);
     try {
-      await agentMissionService.cancelMission(missionId);
-      await handleRefreshMission(missionId);
+      await agentMissionService.cancelMission(activeMission.missionId);
+      await handleRefreshMission();
     } catch {
       // Leave the last-known status in place on failure.
     } finally {
-      setCancellingMissionId(null);
+      setCancelling(false);
     }
   };
 
-  const selectedMission = missions.find(
-    (m) => m.missionId === selectedMissionId,
+  const activeIntervention = interventions.find(
+    (i) => i.missionId === activeMission?.missionId,
   );
   const generatedCarePlans =
-    selectedMission?.outputs?.sources?.filter(
+    activeMission?.outputs?.sources?.filter(
       (s) => s.resourceType === 'CarePlan',
     ) || [];
 
-  useEffect(() => {
-    return () => disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <NotificationContainer events={events} />
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-10 max-w-4xl">
+        <NotificationContainer events={events} />
 
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Care Coordinator
-        </h1>
-        <p className="text-gray-600">
-          Submit diabetic care assessment missions, track progress, and
-          review generated care plans.
-        </p>
-      </div>
-
-      {/* SSE connection status */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div
-            className={`h-3 w-3 rounded-full ${
-              isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-            }`}
-          />
-          <span className="text-sm font-medium">
-            {isConnected ? 'Live notifications connected' : 'Disconnected'}
-          </span>
-          {error && <span className="text-xs text-red-600">({error})</span>}
-        </div>
-        {isConnected ? (
-          <button
-            onClick={disconnect}
-            className="px-3 py-1 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 transition"
-          >
-            Disconnect
-          </button>
-        ) : (
-          <button
-            onClick={connect}
-            className="px-3 py-1 text-sm bg-green-500 text-white rounded-md hover:bg-green-600 transition"
-          >
-            Connect
-          </button>
-        )}
-      </div>
-
-      {/* Pending interventions — AgentInterventionRequest awaiting human review */}
-      {interventions.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-amber-300 mb-6">
-          <div className="px-6 py-4 border-b border-amber-100">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Pending Interventions
-            </h2>
-            <p className="text-xs text-gray-500">
-              The agent is asking a care coordinator to review or act before
-              continuing.
-            </p>
-            {resolveError && (
-              <p className="text-xs text-red-600 mt-1">{resolveError}</p>
-            )}
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-8">
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+              <IconClipboardList className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Care Coordinator
+              </h1>
+              <p className="text-sm text-gray-500 mt-1 max-w-md">
+                Submit a diabetic care-gap assessment and track it through to
+                sign-off.
+              </p>
+            </div>
           </div>
-          <div className="divide-y divide-amber-100">
-            {interventions.map((intervention) => (
-              <InterventionRequestRow
-                key={intervention.id}
-                intervention={intervention}
-                onResolve={handleResolveIntervention}
-                resolving={resolvingInterventionId === intervention.id}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Submit mission */}
-      <form
-        onSubmit={handleSubmitMission}
-        className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
-      >
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">
-          Run Diabetic Care Assessment
-        </h2>
-        <textarea
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500 text-sm mb-3"
-        />
-        <label className="block text-xs font-medium text-gray-600 mb-1">
-          Delegated by <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          value={delegatedBy}
-          onChange={(e) => setDelegatedBy(e.target.value)}
-          placeholder="Practitioner or system delegating this mission"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500 text-sm mb-3"
-        />
-        {submitError && (
-          <p className="text-sm text-red-600 mb-3">{submitError}</p>
-        )}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 font-medium text-sm transition-colors"
-        >
-          {submitting ? 'Submitting…' : 'Submit Mission'}
-        </button>
-      </form>
-
-      {/* Mission history */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Missions</h2>
-        </div>
-        {missions.length === 0 ? (
-          <div className="px-6 py-8 text-center text-gray-500 text-sm">
-            No missions submitted yet.
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {missions.map((mission) => (
-              <div
-                key={mission.missionId}
-                className={`flex items-center justify-between px-6 py-3 hover:bg-gray-50 transition-colors ${
-                  selectedMissionId === mission.missionId ? 'bg-amber-50' : ''
-                }`}
-              >
-                <button
-                  onClick={() => setSelectedMissionId(mission.missionId)}
-                  className="flex-1 text-left"
-                >
-                  <p className="text-sm font-medium text-gray-800 font-mono">
-                    {mission.missionId}
-                  </p>
-                  <p className="text-xs text-gray-500">{mission.goal}</p>
-                </button>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-1 text-xs font-semibold rounded-full border ${statusColor(
-                      mission.status,
-                    )}`}
-                  >
-                    {mission.status}
-                  </span>
-                  {isCancellableStatus(mission.status) && (
-                    <button
-                      onClick={() => handleCancelMission(mission.missionId)}
-                      disabled={cancellingMissionId === mission.missionId}
-                      className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
-                    >
-                      {cancellingMissionId === mission.missionId
-                        ? 'Cancelling…'
-                        : 'Cancel'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Generated care plans — live, driven by CarePlan SSE events */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Generated Care Plans
-          </h2>
-        </div>
-        {carePlanEvents.length === 0 ? (
-          <div className="px-6 py-8 text-center text-gray-500 text-sm">
-            No care plans generated yet.
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {carePlanEvents.map((event) => (
-              <CarePlanReviewRow
-                key={event.resourceId}
-                carePlanId={event.resourceId}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Selected mission detail */}
-      {selectedMission && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Mission Detail
-            </h2>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => handleRefreshMission(selectedMission.missionId)}
-                disabled={refreshingMissionId === selectedMission.missionId}
-                className="text-xs font-semibold text-amber-600 hover:text-amber-800 disabled:opacity-50"
-              >
-                {refreshingMissionId === selectedMission.missionId
-                  ? 'Refreshing…'
-                  : 'Refresh'}
-              </button>
+          <div className="flex items-center gap-3">
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border ${
+                isConnected
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                  : 'text-gray-500 bg-gray-50 border-gray-200'
+              }`}
+              title={isConnected ? 'Live updates connected' : 'Reconnecting…'}
+            >
               <span
-                className={`px-2 py-1 text-xs font-semibold rounded-full border ${statusColor(
-                  selectedMission.status,
-                )}`}
-              >
-                {selectedMission.status}
-              </span>
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'
+                }`}
+              />
+              {isConnected ? 'Live' : 'Offline'}
+            </span>
+            <Link
+              to="/care-coordinator/history"
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <IconClockHistory className="h-4 w-4" />
+              Mission History
+            </Link>
+          </div>
+        </div>
+
+        {/* Submit mission */}
+        <form
+          onSubmit={handleSubmitMission}
+          className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6"
+        >
+          <h2 className="text-base font-semibold text-gray-900">
+            Run a Diabetic Care Assessment
+          </h2>
+          <p className="text-sm text-gray-500 mt-1 mb-4">
+            The agent finds care gaps, drafts recommendations, and asks you
+            to sign off before anything is written back.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Goal
+              </label>
+              <textarea
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                rows={3}
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800 resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Delegated by <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={delegatedBy}
+                onChange={(e) => setDelegatedBy(e.target.value)}
+                placeholder="Practitioner or system delegating this mission"
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800"
+              />
             </div>
           </div>
 
-          <div className="px-6 py-4 space-y-4">
-            {selectedMission.outputs?.response && (
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                {selectedMission.outputs.response}
-              </p>
-            )}
-            {selectedMission.failureReason && (
-              <p className="text-sm text-red-600">
-                {selectedMission.failureReason}
-              </p>
-            )}
+          {submitError && (
+            <div className="mt-4 flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3.5 py-2.5">
+              <IconAlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
 
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                Generated Care Plans
-              </h3>
-              {generatedCarePlans.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  {selectedMission.status === 'COMPLETED'
-                    ? 'No care plans were generated by this mission.'
-                    : 'Care plans will appear here once the mission completes.'}
-                </p>
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-lg font-semibold text-sm hover:bg-amber-700 disabled:opacity-50 shadow-sm transition-colors"
+            >
+              {submitting ? (
+                <IconSpinner className="h-4 w-4" />
               ) : (
-                <div className="border border-gray-100 rounded-lg overflow-hidden">
-                  {generatedCarePlans.map((source, idx) => {
-                    const carePlanId =
-                      source.id || source.reference?.split('/').pop() || '';
-                    return (
-                      <CarePlanReviewRow
-                        key={carePlanId || idx}
-                        carePlanId={carePlanId}
-                        label={source.display}
-                      />
-                    );
-                  })}
+                <IconSend className="h-4 w-4" />
+              )}
+              {submitting ? 'Submitting…' : 'Submit Mission'}
+            </button>
+            {activeMission && (
+              <span className="text-xs text-gray-400">
+                Submitting will replace the mission shown below.
+              </span>
+            )}
+          </div>
+        </form>
+
+        {/* Active mission */}
+        {activeMissionLoading ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 py-14 flex items-center justify-center gap-2 text-sm text-gray-400">
+            <IconSpinner className="h-4 w-4" />
+            Loading your last mission…
+          </div>
+        ) : !activeMission ? (
+          <div className="bg-white rounded-xl border border-dashed border-gray-300 py-14 px-6 flex flex-col items-center text-center">
+            <div className="h-12 w-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mb-3">
+              <IconInbox className="h-6 w-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">
+              No active mission
+            </h3>
+            <p className="text-sm text-gray-500 max-w-sm">
+              Submit an assessment above and its live status will appear
+              here.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <h2 className="text-base font-semibold text-gray-900">
+                    Current Mission
+                  </h2>
+                  <MissionStatusBadge status={activeMission.status} />
+                </div>
+                <p className="text-sm text-gray-600">{activeMission.goal}</p>
+                <p className="text-xs text-gray-400 mt-1.5 font-mono">
+                  {activeMission.missionId}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Started {formatRelativeTime(activeMission.startedAt)}
+                  {activeMission.completedAt &&
+                    ` · Completed ${formatRelativeTime(activeMission.completedAt)}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleRefreshMission}
+                  disabled={refreshing}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  <IconRefresh
+                    className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                  />
+                  Refresh
+                </button>
+                {isCancellableStatus(activeMission.status) && (
+                  <button
+                    onClick={handleCancelMission}
+                    disabled={cancelling}
+                    className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-white border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    {cancelling ? 'Cancelling…' : 'Cancel'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-5">
+              {activeMission.status === 'AWAITING_INTERVENTION' &&
+                (activeIntervention ? (
+                  <InterventionReviewPanel
+                    intervention={activeIntervention}
+                    onResolve={handleResolveIntervention}
+                    resolving={
+                      resolvingInterventionId === activeIntervention.id
+                    }
+                    error={resolveError}
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+                    <IconSpinner className="h-4 w-4" />
+                    Waiting for the review request to load…
+                  </div>
+                ))}
+
+              {(activeMission.status === 'PENDING' ||
+                activeMission.status === 'RUNNING') && (
+                <div className="flex items-center gap-3 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+                  <IconSpinner className="h-4 w-4" />
+                  {activeMission.status === 'PENDING'
+                    ? 'Queued — the agent will pick this up shortly.'
+                    : 'The agent is working through this assessment…'}
+                </div>
+              )}
+
+              {activeMission.status === 'FAILED' &&
+                activeMission.failureReason && (
+                  <div className="flex items-start gap-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-4 py-3">
+                    <IconAlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{activeMission.failureReason}</span>
+                  </div>
+                )}
+
+              {activeMission.outputs?.response && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                    Outcome
+                  </h3>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-100 rounded-lg px-4 py-3.5 leading-relaxed">
+                    {activeMission.outputs.response}
+                  </div>
+                </div>
+              )}
+
+              {activeMission.status === 'COMPLETED' && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                    Generated Care Plans
+                  </h3>
+                  {generatedCarePlans.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      No care plans were generated by this mission.
+                    </p>
+                  ) : (
+                    <div className="border border-gray-100 rounded-lg overflow-hidden">
+                      {generatedCarePlans.map((source, idx) => {
+                        const carePlanId =
+                          source.id ||
+                          source.reference?.split('/').pop() ||
+                          '';
+                        return (
+                          <CarePlanReviewRow
+                            key={carePlanId || idx}
+                            carePlanId={carePlanId}
+                            label={source.display}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <Link
+                to="/care-coordinator/history"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                View all missions
+                <IconArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
