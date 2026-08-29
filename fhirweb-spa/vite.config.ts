@@ -41,12 +41,20 @@ export default defineConfig({
         target: 'http://20.212.110.174',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-azure/, ''),
-      },      // Azure SSE/Events stream proxy
+      },
+      // Azure SSE/Events stream proxy
       '/events-azure': {
         target: 'http://20.212.110.174',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^/events-azure/, '/api/events'),
-      },    },
+        rewrite: (path) => path.replace(/^\/events-azure/, '/api/events'),
+      },
+      // Azure Webhook API proxy
+      '/webhooks-azure': {
+        target: 'http://20.212.110.174',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/webhooks-azure/, ''),
+      },
+    },
   },
   build: {
     outDir: 'dist',

@@ -1,8 +1,29 @@
 // Webhook service for managing FHIR server webhooks
 
-const FHIR_BASE_URL =
+let FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
 const API_KEY = import.meta.env.VITE_API_KEY;
+
+// Helper function to use proxy URL in development mode to avoid CORS issues
+const getWebhookProxyUrl = (url: string): string => {
+  // Only use proxy in development mode
+  if (!import.meta.env.DEV) {
+    return url;
+  }
+
+  // Map external servers to their proxy paths
+  if (url.includes('20.212.110.174')) {
+    // Azure webhook server proxy
+    return '/webhooks-azure';
+  }
+
+  // For localhost or other URLs, return as-is
+  return url;
+};
+
+// Use proxy URL in development mode
+FHIR_BASE_URL = getWebhookProxyUrl(FHIR_BASE_URL);
+
 if (!API_KEY && import.meta.env.DEV) {
   console.warn(
     'VITE_API_KEY environment variable is not set. Webhook operations may fail.',

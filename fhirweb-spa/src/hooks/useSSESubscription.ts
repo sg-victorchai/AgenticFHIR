@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 // SSE server configuration (no FHIR context path)
-let SSE_BASE_URL =
-  import.meta.env.VITE_SSE_BASE_URL || 'http://localhost:8080';
+let SSE_BASE_URL = import.meta.env.VITE_SSE_BASE_URL || 'http://localhost:8080';
 const API_KEY = import.meta.env.VITE_API_KEY;
 
 // Helper function to use proxy URL in development mode to avoid CORS issues
