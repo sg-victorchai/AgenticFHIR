@@ -40,7 +40,7 @@ export default defineConfig({
       '/api-azure': {
         target: 'http://20.212.110.174',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-azure/, '/api'),
+        rewrite: (path) => path.replace(/^\/api-azure/, ''),
       },
     },
   },
