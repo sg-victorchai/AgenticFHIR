@@ -47,6 +47,21 @@ export default defineConfig({
         target: 'http://20.212.110.174',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/events-azure/, '/api/events'),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Extract apiKey from query parameters and add as x-api-key header
+            const url = new URL(req.url, 'http://localhost');
+            const apiKey = url.searchParams.get('apiKey');
+            if (apiKey) {
+              proxyReq.setHeader('x-api-key', apiKey);
+              // Remove apiKey from query string before sending to backend
+              url.searchParams.delete('apiKey');
+              // Update the path without apiKey
+              const newPath = url.pathname + url.search;
+              proxyReq.path = newPath;
+            }
+          });
+        },
       },
       // Azure Webhook API proxy
       '/webhooks-azure': {
