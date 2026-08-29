@@ -14,15 +14,17 @@ The Vite development server includes proxy configuration to route external API c
 
 The dev server includes these proxy routes:
 
-| Proxy Path    | Target Server               | Purpose            |
-| ------------- | --------------------------- | ------------------ |
-| `/fhir-azure` | http://20.212.110.174/fhir  | Azure FHIR server  |
-| `/fhir-proxy` | http://hapi.fhir.org/baseR5 | HAPI FHIR (public) |
+| Proxy Path    | Target Server               | Purpose                                              |
+| ------------- | --------------------------- | ---------------------------------------------------- |
+| `/fhir-azure` | http://20.212.110.174/fhir  | Azure FHIR server (Patient, Observation, etc.)      |
+| `/api-azure`  | http://20.212.110.174/api   | Azure Agent/AI APIs (digital-twin, hybrid-search)   |
+| `/fhir-proxy` | http://hapi.fhir.org/baseR5 | HAPI FHIR (public)                                   |
 
-### Automatic URL Routing (client.ts)
+### Automatic URL Routing (client.ts & services)
 
-The FHIR client automatically detects the server and uses the appropriate proxy:
+The FHIR client and agent services automatically detect the server and use the appropriate proxy:
 
+**FHIR Requests (src/services/fhir/client.ts):**
 ```
 FHIR_BASE_URL (config)  →  getProxyUrl()  →  Actual request URL
 ─────────────────────      ──────────────     ─────────────────
@@ -30,19 +32,30 @@ http://20.212.110.174/fhir     (in dev)    /fhir-azure
 http://localhost:8080/fhir     (no change)  http://localhost:8080/fhir
 ```
 
-For Agent APIs (global search, clinical docs import, digital twin), use `VITE_AGENT_API_BASE_URL`:
-
-- No proxy routing needed for Agent APIs in dev (they go directly or through localhost)
-- Configured in `.env` files for each profile
+**Agent API Requests (src/services/agentMissionService.ts & src/pages/PatientRecordsPage.tsx):**
+```
+AGENT_API_BASE_URL (config)  →  getApiProxyUrl()  →  Actual request URL
+───────────────────────────      ──────────────────     ─────────────────
+http://20.212.110.174             (in dev)              /api-azure
+http://localhost:8080             (no change)           http://localhost:8080
+```
 
 ### Example Flow
 
-**Request:** `http://20.212.110.174/fhir/Patient?name:contains=DEMO`
+**FHIR Request:** `http://20.212.110.174/fhir/Patient?name:contains=DEMO`
 
 1. Browser makes request to proxy: `http://localhost:3000/fhir-azure/Patient?name:contains=DEMO`
 2. Vite dev server intercepts `/fhir-azure` requests
 3. Rewrites path to: `/fhir/Patient?name:contains=DEMO`
 4. Routes to: `http://20.212.110.174/fhir/Patient?name:contains=DEMO`
+5. Response is proxied back through localhost (no CORS issue!)
+
+**Agent API Request:** `http://20.212.110.174/api/agent/AgentPersona/digital-twin/AgentMission`
+
+1. Browser makes request to proxy: `http://localhost:3000/api-azure/agent/AgentPersona/digital-twin/AgentMission`
+2. Vite dev server intercepts `/api-azure` requests
+3. Rewrites path to: `/api/agent/AgentPersona/digital-twin/AgentMission`
+4. Routes to: `http://20.212.110.174/api/agent/AgentPersona/digital-twin/AgentMission`
 5. Response is proxied back through localhost (no CORS issue!)
 
 ## Using Different FHIR Servers

@@ -350,8 +350,28 @@ const DEFAULT_RESOURCE_TYPES = [
 ];
 
 // Agent/AI API base URL (separate from FHIR server URL)
-const AGENT_API_BASE_URL =
+let AGENT_API_BASE_URL =
   import.meta.env.VITE_AGENT_API_BASE_URL || 'http://localhost:8080';
+
+// Helper function to use proxy URL in development mode to avoid CORS issues
+const getApiProxyUrl = (url: string): string => {
+  // Only use proxy in development mode
+  if (!import.meta.env.DEV) {
+    return url;
+  }
+
+  // Map external servers to their proxy paths
+  if (url.includes('20.212.110.174')) {
+    // Azure API server proxy
+    return '/api-azure';
+  }
+
+  // For localhost or other URLs, return as-is
+  return url;
+};
+
+// Use proxy URL in development mode
+AGENT_API_BASE_URL = getApiProxyUrl(AGENT_API_BASE_URL);
 const HARMONIZER_PERSONA_ID = 'clinical-docs-harmonizer';
 const HARMONIZER_IMPORT_URL =
   import.meta.env.VITE_HARMONIZER_IMPORT_URL ||

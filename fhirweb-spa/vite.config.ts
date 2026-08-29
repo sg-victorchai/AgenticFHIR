@@ -36,6 +36,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/fhir-azure/, '/fhir'),
       },
+      // Azure Agent/API proxy (for digital-twin, hybrid-search, etc.)
+      '/api-azure': {
+        target: 'http://20.212.110.174',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-azure/, '/api'),
+      },
     },
   },
   build: {
