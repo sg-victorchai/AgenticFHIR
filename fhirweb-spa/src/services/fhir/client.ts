@@ -16,7 +16,9 @@ let FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
 const API_KEY = import.meta.env.VITE_API_KEY;
 if (!API_KEY && import.meta.env.DEV) {
-  console.warn('VITE_API_KEY environment variable is not set. Some FHIR operations may fail.');
+  console.warn(
+    'VITE_API_KEY environment variable is not set. Some FHIR operations may fail.',
+  );
 }
 
 // Helper function to use proxy URL in development mode to avoid CORS issues

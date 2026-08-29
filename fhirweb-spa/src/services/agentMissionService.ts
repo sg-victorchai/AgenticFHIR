@@ -15,7 +15,9 @@ const AGENT_API_BASE_URL =
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 if (!API_KEY && import.meta.env.DEV) {
-  console.warn('VITE_API_KEY environment variable is not set. Some operations may fail.');
+  console.warn(
+    'VITE_API_KEY environment variable is not set. Some operations may fail.',
+  );
 }
 
 const resolveTenantId = (): string | null => {

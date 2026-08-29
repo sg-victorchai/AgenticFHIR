@@ -4,7 +4,9 @@ const FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
 const API_KEY = import.meta.env.VITE_API_KEY;
 if (!API_KEY && import.meta.env.DEV) {
-  console.warn('VITE_API_KEY environment variable is not set. Webhook operations may fail.');
+  console.warn(
+    'VITE_API_KEY environment variable is not set. Webhook operations may fail.',
+  );
 }
 
 // Get base URL without /fhir context for webhook API

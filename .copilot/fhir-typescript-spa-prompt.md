@@ -173,8 +173,7 @@ import { Patient, Bundle, CarePlan, Resource } from 'fhir/r5';
 // FHIR server configuration from environment variables
 const FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
-const API_KEY =
-  import.meta.env.VITE_API_KEY || 'your_api_key_here';
+const API_KEY = import.meta.env.VITE_API_KEY || 'your_api_key_here';
 
 // Initialize the FHIR client with API key authentication
 export const createFHIRClient = () => {

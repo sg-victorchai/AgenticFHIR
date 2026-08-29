@@ -362,7 +362,9 @@ const HARMONIZER_STATUS_URL_BASE =
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 if (!API_KEY && import.meta.env.DEV) {
-  console.warn('VITE_API_KEY environment variable is not set. Some operations may fail.');
+  console.warn(
+    'VITE_API_KEY environment variable is not set. Some operations may fail.',
+  );
 }
 
 const PAGE_SIZE = 5;
