@@ -69,8 +69,17 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
     }
 
     try {
+      // Convert relative proxy paths to absolute URLs for new URL() constructor
+      let fullBaseUrl = SSE_BASE_URL;
+      if (!fullBaseUrl.startsWith('http://') && !fullBaseUrl.startsWith('https://')) {
+        // Relative path (e.g., /events-azure) - make it absolute using current window location
+        const protocol = window.location.protocol;
+        const host = window.location.host;
+        fullBaseUrl = `${protocol}//${host}${fullBaseUrl}`;
+      }
+
       // Build SSE URL with query parameters
-      const url = new URL(`${SSE_BASE_URL}/api/events/stream`);
+      const url = new URL(`${fullBaseUrl}/api/events/stream`);
       if (topics.length > 0) {
         url.searchParams.set('topics', topics.join(','));
       }
