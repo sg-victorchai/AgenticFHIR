@@ -14,11 +14,11 @@ The Vite development server includes proxy configuration to route external API c
 
 The dev server includes these proxy routes:
 
-| Proxy Path    | Target Server               | Rewrite Rule             | Purpose                                           |
-| ------------- | --------------------------- | ------------------------ | ------------------------------------------------- |
-| `/fhir-azure` | http://20.212.110.174       | `/fhir-azure` → `/fhir`  | Azure FHIR server (Patient, Observation, etc.)    |
-| `/api-azure`  | http://20.212.110.174       | `/api-azure` → ``        | Azure Agent/AI APIs (digital-twin, hybrid-search) |
-| `/fhir-proxy` | http://hapi.fhir.org        | `/fhir-proxy` → `/baseR5` | HAPI FHIR (public)                                |
+| Proxy Path    | Target Server         | Rewrite Rule              | Purpose                                           |
+| ------------- | --------------------- | ------------------------- | ------------------------------------------------- |
+| `/fhir-azure` | http://20.212.110.174 | `/fhir-azure` → `/fhir`   | Azure FHIR server (Patient, Observation, etc.)    |
+| `/api-azure`  | http://20.212.110.174 | `/api-azure` → ``         | Azure Agent/AI APIs (digital-twin, hybrid-search) |
+| `/fhir-proxy` | http://hapi.fhir.org  | `/fhir-proxy` → `/baseR5` | HAPI FHIR (public)                                |
 
 ### Automatic URL Routing (client.ts & services)
 

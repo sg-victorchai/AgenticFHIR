@@ -298,12 +298,19 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     let statusUrl = missionStatusPath;
 
     if (/^https?:\/\//i.test(endpoint)) {
+      // Full HTTP URL - extract origin and use it
       try {
         const parsed = new URL(endpoint);
         statusUrl = `${parsed.origin}${missionStatusPath}`;
       } catch {
         statusUrl = missionStatusPath;
       }
+    } else if (endpoint.startsWith('/')) {
+      // Relative path like /api-azure/api/agent/AgentPersona/...
+      // Extract proxy prefix (e.g., /api-azure) from endpoint
+      const match = endpoint.match(/^(\/[^/]+)/);
+      const proxyPrefix = match ? match[1] : '';
+      statusUrl = `${proxyPrefix}${missionStatusPath}`;
     }
 
     const response = await fetch(statusUrl, { headers });
