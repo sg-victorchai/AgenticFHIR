@@ -12,11 +12,41 @@ import {
 } from 'fhir/r5';
 
 // FHIR server configuration from environment variables
-const FHIR_BASE_URL =
+let FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL ||
   'https://api.healthx.sg/fhir/r5/2807f247634c4f3c941568d460835a71';
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+
+// Helper function to use proxy URL in development mode to avoid CORS issues
+const getProxyUrl = (url: string): string => {
+  // Only use proxy in development mode
+  if (!import.meta.env.DEV) {
+    return url;
+  }
+
+  // Map external FHIR servers to their proxy paths
+  if (url.includes('20.212.110.174')) {
+    // Azure FHIR server proxy
+    return '/fhir-azure';
+  }
+  if (url.includes('api.healthx.sg')) {
+    // HealthX FHIR server proxy
+    return '/fhir-healthx';
+  }
+
+  // For localhost or other URLs, return as-is
+  return url;
+};
+
+// Use proxy URL in development mode
+FHIR_BASE_URL = getProxyUrl(FHIR_BASE_URL);
+console.log(
+  'FHIR Base URL:',
+  import.meta.env.VITE_FHIR_BASE_URL,
+  '→',
+  FHIR_BASE_URL,
+);
 
 // Create FHIR client
 export const createFHIRClient = async (): Promise<Client> => {

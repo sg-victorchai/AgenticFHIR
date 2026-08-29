@@ -30,6 +30,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/fhir-proxy/, '/baseR5'),
       },
+      // Azure FHIR server proxy
+      '/fhir-azure': {
+        target: 'http://20.212.110.174',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/fhir-azure/, '/fhir'),
+      },
     },
   },
   build: {
