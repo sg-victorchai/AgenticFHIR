@@ -46,7 +46,7 @@ export default defineConfig({
       '/events-azure': {
         target: 'http://20.212.110.174',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/events-azure/, '/api/events'),
+        rewrite: (path) => path.replace(/^\/events-azure/, ''),
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             // Extract apiKey from query parameters and add as x-api-key header

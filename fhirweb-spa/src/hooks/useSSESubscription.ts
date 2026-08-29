@@ -71,7 +71,10 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
     try {
       // Convert relative proxy paths to absolute URLs for new URL() constructor
       let fullBaseUrl = SSE_BASE_URL;
-      if (!fullBaseUrl.startsWith('http://') && !fullBaseUrl.startsWith('https://')) {
+      if (
+        !fullBaseUrl.startsWith('http://') &&
+        !fullBaseUrl.startsWith('https://')
+      ) {
         // Relative path (e.g., /events-azure) - make it absolute using current window location
         const protocol = window.location.protocol;
         const host = window.location.host;
