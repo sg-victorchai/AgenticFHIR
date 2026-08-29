@@ -9,12 +9,9 @@ import {
   MissionExecutionResult,
 } from '../types/agent';
 
-const AI_BASE_URL = (
-  import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir'
-).replace(/\/fhir\/?$/, '');
-
+// Agent/AI API base URL (separate from FHIR server URL)
 const AGENT_API_BASE_URL =
-  import.meta.env.VITE_AGENT_API_BASE_URL || AI_BASE_URL;
+  import.meta.env.VITE_AGENT_API_BASE_URL || 'http://localhost:8080';
 
 const API_KEY =
   import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';

@@ -24,13 +24,17 @@ The dev server includes these proxy routes:
 
 The FHIR client automatically detects the server and uses the appropriate proxy:
 
-```typescript
+```
 FHIR_BASE_URL (config)  →  getProxyUrl()  →  Actual request URL
 ─────────────────────      ──────────────     ─────────────────
 http://20.212.110.174/fhir     (in dev)    /fhir-azure
 https://api.healthx.sg/...     (in dev)    /fhir-healthx
 http://localhost:8080/fhir     (no change)  http://localhost:8080/fhir
 ```
+
+For Agent APIs (global search, clinical docs import, digital twin), use `VITE_AGENT_API_BASE_URL`:
+- No proxy routing needed for Agent APIs in dev (they go directly or through localhost)
+- Configured in `.env` files for each profile
 
 ### Example Flow
 

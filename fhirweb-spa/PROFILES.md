@@ -70,7 +70,10 @@ npm run build            # Build for production (default)
 
 All profiles use these environment variables:
 
-- **`VITE_FHIR_BASE_URL`**: Base URL of the FHIR server
+- **`VITE_FHIR_BASE_URL`**: Base URL of the FHIR server (includes /fhir path)
+- **`VITE_AGENT_API_BASE_URL`**: Base URL for Agent/AI APIs (for global search, clinical docs import, digital twin)
+  - Used by: `/api/ai/hybrid-search`, `/api/persona/DataPipelinePersona/...`, `/api/agent/AgentPersona/...`
+  - Usually same base as FHIR server but without /fhir path
 - **`VITE_API_KEY`**: API key for authentication (sent as `x-api-key` header)
 - **`VITE_SSE_BASE_URL`**: Base URL for Server-Sent Events (real-time notifications)
 

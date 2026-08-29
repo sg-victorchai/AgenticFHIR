@@ -349,12 +349,9 @@ const DEFAULT_RESOURCE_TYPES = [
   'CarePlan',
 ];
 
-const AI_BASE_URL = (
-  import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir'
-).replace(/\/fhir\/?$/, '');
-
+// Agent/AI API base URL (separate from FHIR server URL)
 const AGENT_API_BASE_URL =
-  import.meta.env.VITE_AGENT_API_BASE_URL || AI_BASE_URL;
+  import.meta.env.VITE_AGENT_API_BASE_URL || 'http://localhost:8080';
 const HARMONIZER_PERSONA_ID = 'clinical-docs-harmonizer';
 const HARMONIZER_IMPORT_URL =
   import.meta.env.VITE_HARMONIZER_IMPORT_URL ||
@@ -1939,7 +1936,7 @@ const PatientRecordsPage: React.FC = () => {
     setSearchError(null);
     try {
       const resourceTypes = getResourceTypesFromQuery(query);
-      const res = await fetch(`${AI_BASE_URL}/api/ai/hybrid-search`, {
+      const res = await fetch(`${AGENT_API_BASE_URL}/api/ai/hybrid-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
         body: JSON.stringify({
