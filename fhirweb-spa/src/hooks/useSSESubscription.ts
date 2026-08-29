@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 // SSE server configuration (no FHIR context path)
 const SSE_BASE_URL =
   import.meta.env.VITE_SSE_BASE_URL || 'http://localhost:8080';
-const API_KEY =
-  import.meta.env.VITE_API_KEY || 'your_api_key_here';
+const API_KEY = import.meta.env.VITE_API_KEY;
+if (!API_KEY && import.meta.env.DEV) {
+  console.warn('VITE_API_KEY environment variable is not set. SSE stream may fail without authentication.');
+}
 
 export interface FHIREventNotification {
   timestamp: string;

@@ -13,8 +13,10 @@ import {
 const AGENT_API_BASE_URL =
   import.meta.env.VITE_AGENT_API_BASE_URL || 'http://localhost:8080';
 
-const API_KEY =
-  import.meta.env.VITE_API_KEY || 'your_api_key_here';
+const API_KEY = import.meta.env.VITE_API_KEY;
+if (!API_KEY && import.meta.env.DEV) {
+  console.warn('VITE_API_KEY environment variable is not set. Some operations may fail.');
+}
 
 const resolveTenantId = (): string | null => {
   const direct =

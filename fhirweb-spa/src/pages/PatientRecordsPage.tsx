@@ -360,8 +360,10 @@ const HARMONIZER_STATUS_URL_BASE =
   import.meta.env.VITE_HARMONIZER_STATUS_URL_BASE ||
   `${AGENT_API_BASE_URL}/api/persona/DataPipelinePersona/${HARMONIZER_PERSONA_ID}/$status`;
 
-const API_KEY =
-  import.meta.env.VITE_API_KEY || 'your_api_key_here';
+const API_KEY = import.meta.env.VITE_API_KEY;
+if (!API_KEY && import.meta.env.DEV) {
+  console.warn('VITE_API_KEY environment variable is not set. Some operations may fail.');
+}
 
 const PAGE_SIZE = 5;
 const HARMONIZER_POLL_INTERVAL_MS = 3000;
