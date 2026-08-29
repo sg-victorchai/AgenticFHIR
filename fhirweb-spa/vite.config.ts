@@ -41,8 +41,12 @@ export default defineConfig({
         target: 'http://20.212.110.174',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-azure/, ''),
-      },
-    },
+      },      // Azure SSE/Events stream proxy
+      '/events-azure': {
+        target: 'http://20.212.110.174',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^/events-azure/, '/api/events'),
+      },    },
   },
   build: {
     outDir: 'dist',

@@ -1,9 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 
 // SSE server configuration (no FHIR context path)
-const SSE_BASE_URL =
+let SSE_BASE_URL =
   import.meta.env.VITE_SSE_BASE_URL || 'http://localhost:8080';
 const API_KEY = import.meta.env.VITE_API_KEY;
+
+// Helper function to use proxy URL in development mode to avoid CORS issues
+const getSseProxyUrl = (url: string): string => {
+  // Only use proxy in development mode
+  if (!import.meta.env.DEV) {
+    return url;
+  }
+
+  // Map external servers to their proxy paths
+  if (url.includes('20.212.110.174')) {
+    // Azure SSE server proxy
+    return '/events-azure';
+  }
+
+  // For localhost or other URLs, return as-is
+  return url;
+};
+
+// Use proxy URL in development mode
+SSE_BASE_URL = getSseProxyUrl(SSE_BASE_URL);
+
 if (!API_KEY && import.meta.env.DEV) {
   console.warn(
     'VITE_API_KEY environment variable is not set. SSE stream may fail without authentication.',
