@@ -172,10 +172,9 @@ import { Patient, Bundle, CarePlan, Resource } from 'fhir/r5';
 
 // FHIR server configuration from environment variables
 const FHIR_BASE_URL =
-  import.meta.env.VITE_FHIR_BASE_URL ||
-  'https://api.healthx.sg/fhir/r5/2807f247634c4f3c941568d460835a71';
+  import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
 const API_KEY =
-  import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+  import.meta.env.VITE_API_KEY || 'your_api_key_here';
 
 // Initialize the FHIR client with API key authentication
 export const createFHIRClient = () => {

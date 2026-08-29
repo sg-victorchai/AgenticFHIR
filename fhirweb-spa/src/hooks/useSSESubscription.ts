@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 const SSE_BASE_URL =
   import.meta.env.VITE_SSE_BASE_URL || 'http://localhost:8080';
 const API_KEY =
-  import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+  import.meta.env.VITE_API_KEY || 'your_api_key_here';
 
 export interface FHIREventNotification {
   timestamp: string;

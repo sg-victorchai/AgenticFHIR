@@ -14,7 +14,7 @@ const AGENT_API_BASE_URL =
   import.meta.env.VITE_AGENT_API_BASE_URL || 'http://localhost:8080';
 
 const API_KEY =
-  import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+  import.meta.env.VITE_API_KEY || 'your_api_key_here';
 
 const resolveTenantId = (): string | null => {
   const direct =
@@ -33,7 +33,11 @@ const resolveTenantId = (): string | null => {
         tenantId?: string;
         tenant_id?: string;
         tenant?: string;
-        tokenResponse?: { tenantId?: string; tenant_id?: string; tenant?: string };
+        tokenResponse?: {
+          tenantId?: string;
+          tenant_id?: string;
+          tenant?: string;
+        };
       };
       const tenant =
         parsed.tenantId ||
@@ -109,8 +113,12 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
   }
 
   const outputs = {
-    ...(result.outputs && typeof result.outputs === 'object' ? result.outputs : {}),
-    ...(asObject.outputs && typeof asObject.outputs === 'object' ? asObject.outputs : {}),
+    ...(result.outputs && typeof result.outputs === 'object'
+      ? result.outputs
+      : {}),
+    ...(asObject.outputs && typeof asObject.outputs === 'object'
+      ? asObject.outputs
+      : {}),
   } as Record<string, any>;
 
   return {
@@ -127,7 +135,10 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
       costBreakdown: outputs.costBreakdown as CostBreakdown | undefined,
     },
     failureReason:
-      asObject.failureReason || asObject.error || result.failureReason || undefined,
+      asObject.failureReason ||
+      asObject.error ||
+      result.failureReason ||
+      undefined,
     startedAt: asObject.startedAt || asObject.createdAt,
     completedAt: asObject.completedAt,
     auditTrail: asObject.auditTrail,

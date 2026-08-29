@@ -361,7 +361,7 @@ const HARMONIZER_STATUS_URL_BASE =
   `${AGENT_API_BASE_URL}/api/persona/DataPipelinePersona/${HARMONIZER_PERSONA_ID}/$status`;
 
 const API_KEY =
-  import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+  import.meta.env.VITE_API_KEY || 'your_api_key_here';
 
 const PAGE_SIZE = 5;
 const HARMONIZER_POLL_INTERVAL_MS = 3000;

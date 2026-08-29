@@ -14,11 +14,10 @@ The Vite development server includes proxy configuration to route external API c
 
 The dev server includes these proxy routes:
 
-| Proxy Path      | Target Server                      | Purpose             |
-| --------------- | ---------------------------------- | ------------------- |
-| `/fhir-azure`   | http://20.212.110.174/fhir         | Azure FHIR server   |
-| `/fhir-healthx` | https://api.healthx.sg/fhir/r5/... | HealthX FHIR server |
-| `/fhir-proxy`   | http://hapi.fhir.org/baseR5        | HAPI FHIR (public)  |
+| Proxy Path    | Target Server               | Purpose            |
+| ------------- | --------------------------- | ------------------ |
+| `/fhir-azure` | http://20.212.110.174/fhir  | Azure FHIR server  |
+| `/fhir-proxy` | http://hapi.fhir.org/baseR5 | HAPI FHIR (public) |
 
 ### Automatic URL Routing (client.ts)
 
@@ -28,11 +27,11 @@ The FHIR client automatically detects the server and uses the appropriate proxy:
 FHIR_BASE_URL (config)  →  getProxyUrl()  →  Actual request URL
 ─────────────────────      ──────────────     ─────────────────
 http://20.212.110.174/fhir     (in dev)    /fhir-azure
-https://api.healthx.sg/...     (in dev)    /fhir-healthx
 http://localhost:8080/fhir     (no change)  http://localhost:8080/fhir
 ```
 
 For Agent APIs (global search, clinical docs import, digital twin), use `VITE_AGENT_API_BASE_URL`:
+
 - No proxy routing needed for Agent APIs in dev (they go directly or through localhost)
 - Configured in `.env` files for each profile
 
@@ -55,15 +54,6 @@ npm run dev:azure
 ```
 
 - Uses proxy: `/fhir-azure`
-- No CORS issues during development
-
-### HealthX FHIR
-
-```bash
-npm run dev:healthx
-```
-
-- Uses proxy: `/fhir-healthx`
 - No CORS issues during development
 
 ### Local Development

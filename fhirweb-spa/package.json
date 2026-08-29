@@ -6,10 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:azure": "vite --mode azure",
-    "dev:healthx": "vite --mode healthx",
     "build": "tsc && vite build",
     "build:azure": "tsc && vite build --mode azure",
-    "build:healthx": "tsc && vite build --mode healthx",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "vitest run",

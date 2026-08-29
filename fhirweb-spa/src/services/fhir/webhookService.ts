@@ -3,7 +3,7 @@
 const FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
 const API_KEY =
-  import.meta.env.VITE_API_KEY || 'QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP';
+  import.meta.env.VITE_API_KEY || 'your_api_key_here';
 
 // Get base URL without /fhir context for webhook API
 const getWebhookBaseUrl = () => {

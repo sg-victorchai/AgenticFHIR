@@ -18,25 +18,9 @@ npm run build:azure      # Build for Azure
 **Configuration:**
 
 - Base URL: `http://20.212.110.174/fhir`
-- API Key: `2552c5fa-865b-4db8-8f2c-87580dbe5f0d`
+- API Key: `your_api_key_here` (customize as needed)
 
-### 2. **HealthX** (`.env.healthx`)
-
-HealthX FHIR server hosted at `https://api.healthx.sg/fhir/r5/...`
-
-**Usage:**
-
-```bash
-npm run dev:healthx      # Start development server
-npm run build:healthx    # Build for HealthX
-```
-
-**Configuration:**
-
-- Base URL: `https://api.healthx.sg/fhir/r5/2807f247634c4f3c941568d460835a71`
-- API Key: `QcNaPYYwp57Ib3T2p1uxL3GazNNoF5pt513T1JCP`
-
-### 3. **Development** (`.env.development`)
+### 2. **Development** (`.env.development`)
 
 Local development configuration with localhost
 
@@ -51,7 +35,7 @@ npm run dev              # Start development server (default)
 - Base URL: `http://localhost:8080/fhir`
 - API Key: `your_api_key_here` (customize as needed)
 
-### 4. **Production** (`.env.production`)
+### 3. **Production** (`.env.production`)
 
 Production configuration (template)
 
@@ -85,7 +69,6 @@ Start the development server with a specific profile:
 
 ```bash
 npm run dev:azure        # Use Azure FHIR server
-npm run dev:healthx      # Use HealthX FHIR server
 npm run dev              # Use local development server
 ```
 
@@ -95,7 +78,6 @@ Build for a specific profile:
 
 ```bash
 npm run build:azure      # Build targeting Azure FHIR server
-npm run build:healthx    # Build targeting HealthX FHIR server
 npm run build            # Build for production (default)
 ```
 
@@ -132,4 +114,3 @@ const API_KEY = import.meta.env.VITE_API_KEY || '...';
 - **Security**: Do not commit actual API keys to version control. Use `.gitignore` to exclude `.env.*` files
 - **Default Fallbacks**: The code has fallback values in case environment variables are not set
 - **CORS**: Some servers may require proxy configuration in `vite.config.ts` if running from the browser
-- **HTTP vs HTTPS**: Azure FHIR uses HTTP, HealthX uses HTTPS - ensure your network configuration allows both
