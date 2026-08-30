@@ -79,6 +79,12 @@ function cleanAgentResponseText(text: string): string {
     '',
   );
 
+  // Remove markdown-wrapped JSON blocks (```json { ... } ```)
+  cleaned = cleaned.replace(
+    /```json\s*\{[\s\S]*?"tool"\s*:\s*"mission_complete"[\s\S]*?\}\s*```\s*/g,
+    '',
+  );
+
   // Remove horizontal separator and "mission_complete" text at the end
   cleaned = cleaned.replace(/\s*---\s*mission_complete\s*$/g, '');
   cleaned = cleaned.replace(/\s*---\s*$/g, ''); // Remove trailing --- if present
