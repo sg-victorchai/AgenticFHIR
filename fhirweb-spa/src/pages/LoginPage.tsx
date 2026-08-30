@@ -15,12 +15,12 @@ const LoginPage: React.FC = () => {
     setError('');
 
     // Simple credential validation
-    if (username === 'clinician' && password === 'Savi2000') {
+    if (username === 'superagent' && password === 'Savi2000') {
       // Simulate successful login
       dispatch(
         loginSuccess({
           token: 'mock-token-' + Date.now(),
-          user: { id: '1', name: 'Clinician' },
+          user: { id: '1', name: 'SuperAgent' },
         }),
       );
       navigate('/');
@@ -88,16 +88,6 @@ const LoginPage: React.FC = () => {
             Sign In
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-600 text-center">
-            Demo Credentials:
-            <br />
-            Username: <span className="font-mono">clinician</span>
-            <br />
-            Password: <span className="font-mono">Savi2000</span>
-          </p>
-        </div>
       </div>
     </div>
   );
