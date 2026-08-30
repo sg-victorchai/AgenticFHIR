@@ -13,20 +13,9 @@ import {
 let AGENT_API_BASE_URL =
   import.meta.env.VITE_AGENT_API_BASE_URL || 'http://localhost:8080';
 
-// Helper function to use proxy URL in development mode to avoid CORS issues
+// Helper function - CORS now enabled on Azure server, so no proxy needed
 const getApiProxyUrl = (url: string): string => {
-  // Only use proxy in development mode
-  if (!import.meta.env.DEV) {
-    return url;
-  }
-
-  // Map external servers to their proxy paths
-  if (url.includes('20.212.110.174')) {
-    // Azure API server proxy
-    return '/api-azure';
-  }
-
-  // For localhost or other URLs, return as-is
+  // Return URL as-is since CORS is now enabled on the Azure server
   return url;
 };
 

@@ -21,20 +21,9 @@ if (!API_KEY && import.meta.env.DEV) {
   );
 }
 
-// Helper function to use proxy URL in development mode to avoid CORS issues
+// Helper function - CORS now enabled on Azure server, so no proxy needed
 const getProxyUrl = (url: string): string => {
-  // Only use proxy in development mode
-  if (!import.meta.env.DEV) {
-    return url;
-  }
-
-  // Map external FHIR servers to their proxy paths
-  if (url.includes('20.212.110.174')) {
-    // Azure FHIR server proxy
-    return '/fhir-azure';
-  }
-
-  // For localhost or other URLs, return as-is
+  // Return URL as-is since CORS is now enabled on the Azure server
   return url;
 };
 

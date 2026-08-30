@@ -24,50 +24,11 @@ export default defineConfig({
     port: 3000,
     open: '/smartapp',
     proxy: {
-      // Proxy FHIR API requests to avoid CORS issues
+      // Proxy FHIR API requests for public APIs without CORS headers
       '/fhir-proxy': {
         target: 'http://hapi.fhir.org',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/fhir-proxy/, '/baseR5'),
-      },
-      // Azure FHIR server proxy
-      '/fhir-azure': {
-        target: 'http://20.212.110.174',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/fhir-azure/, '/fhir'),
-      },
-      // Azure Agent/API proxy (for digital-twin, hybrid-search, etc.)
-      '/api-azure': {
-        target: 'http://20.212.110.174',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-azure/, ''),
-      },
-      // Azure SSE/Events stream proxy
-      '/events-azure': {
-        target: 'http://20.212.110.174',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/events-azure/, ''),
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
-            // Extract apiKey from query parameters and add as x-api-key header
-            const url = new URL(req.url, 'http://localhost');
-            const apiKey = url.searchParams.get('apiKey');
-            if (apiKey) {
-              proxyReq.setHeader('x-api-key', apiKey);
-              // Remove apiKey from query string before sending to backend
-              url.searchParams.delete('apiKey');
-              // Update the path without apiKey
-              const newPath = url.pathname + url.search;
-              proxyReq.path = newPath;
-            }
-          });
-        },
-      },
-      // Azure Webhook API proxy
-      '/webhooks-azure': {
-        target: 'http://20.212.110.174',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/webhooks-azure/, ''),
       },
     },
   },
