@@ -46,11 +46,13 @@ export const createFHIRClient = async (): Promise<Client> => {
   }
 
   console.log('Creating non-SMART FHIR client');
+  const headers: { 'x-api-key'?: string } = {};
+  if (API_KEY) {
+    headers['x-api-key'] = API_KEY;
+  }
   return new Client({
     baseUrl: FHIR_BASE_URL,
-    customHeaders: {
-      'x-api-key': API_KEY,
-    },
+    customHeaders: headers as any,
   });
 };
 

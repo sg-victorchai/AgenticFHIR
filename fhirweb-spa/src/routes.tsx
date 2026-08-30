@@ -30,18 +30,6 @@ import NotFound from './pages/NotFound';
 import LaunchPage from './pages/LaunchPage';
 import RoleGuard from './components/common/RoleGuard';
 
-// Protected route wrapper
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-}
-
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const isAuthenticated = useSelector(
-    (state: RootState) => state.auth.isAuthenticated,
-  );
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
-};
-
 const AppRoutes: React.FC = () => {
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated,
@@ -63,132 +51,138 @@ const AppRoutes: React.FC = () => {
           {/* Landing — role selection */}
           <Route path="/" element={<RoleSelectionPage />} />
 
-      {/* Shared */}
-      <Route path="/launch" element={<LaunchPage />} />
-      <Route path="/queue" element={<PatientQueuePage />} />
-      <Route path="/webhooks" element={<WebhookManagementPage />} />
-      <Route path="/events" element={<EventMonitorPage />} />
+          {/* Shared */}
+          <Route path="/launch" element={<LaunchPage />} />
+          <Route path="/queue" element={<PatientQueuePage />} />
+          <Route path="/webhooks" element={<WebhookManagementPage />} />
+          <Route path="/events" element={<EventMonitorPage />} />
 
-      {/* Care Coordinator-only routes */}
-      <Route
-        path="/care-coordinator/history"
-        element={
-          <RoleGuard allowed={['CARE_COORDINATOR']}>
-            <MissionHistoryPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/care-coordinator"
-        element={
-          <RoleGuard allowed={['CARE_COORDINATOR']}>
-            <CareCoordinatorPage />
-          </RoleGuard>
-        }
-      />
+          {/* Care Coordinator-only routes */}
+          <Route
+            path="/care-coordinator/history"
+            element={
+              <RoleGuard allowed={['CARE_COORDINATOR']}>
+                <MissionHistoryPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/care-coordinator"
+            element={
+              <RoleGuard allowed={['CARE_COORDINATOR']}>
+                <CareCoordinatorPage />
+              </RoleGuard>
+            }
+          />
 
-      {/* PSA-only routes */}
-      <Route
-        path="/patients"
-        element={
-          <RoleGuard allowed={['psa']}>
-            <PatientSearchPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/patient/new"
-        element={
-          <RoleGuard allowed={['psa']}>
-            <PatientCrudPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/patient/:id/details"
-        element={
-          <RoleGuard allowed={['psa']}>
-            <PatientCrudPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/patient/:id/visit/new"
-        element={
-          <RoleGuard allowed={['psa']}>
-            <VisitRegistrationPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/patient/:id/encounter/:encounterId/triage"
-        element={
-          <RoleGuard allowed={['psa']}>
-            <PsaTriagePage />
-          </RoleGuard>
-        }
-      />
+          {/* PSA-only routes */}
+          <Route
+            path="/patients"
+            element={
+              <RoleGuard allowed={['psa']}>
+                <PatientSearchPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/patient/new"
+            element={
+              <RoleGuard allowed={['psa']}>
+                <PatientCrudPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/patient/:id/details"
+            element={
+              <RoleGuard allowed={['psa']}>
+                <PatientCrudPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/patient/:id/visit/new"
+            element={
+              <RoleGuard allowed={['psa']}>
+                <VisitRegistrationPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/patient/:id/encounter/:encounterId/triage"
+            element={
+              <RoleGuard allowed={['psa']}>
+                <PsaTriagePage />
+              </RoleGuard>
+            }
+          />
 
-      {/* Clinician-only routes */}
-      <Route
-        path="/patient/:id/records"
-        element={
-          <RoleGuard allowed={['clinician', 'patient']}>
-            <PatientRecordsPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/patient/:id/encounter/:encounterId/consult"
-        element={
-          <RoleGuard allowed={['clinician']}>
-            <ClinicalConsultPage />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/patient/:id/encounter/:encounterId/notes"
-        element={
-          <RoleGuard allowed={['clinician']}>
-            <ConsultNoteDetailPage />
-          </RoleGuard>
-        }
-      />
+          {/* Clinician-only routes */}
+          <Route
+            path="/patient/:id/records"
+            element={
+              <RoleGuard allowed={['clinician', 'patient']}>
+                <PatientRecordsPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/patient/:id/encounter/:encounterId/consult"
+            element={
+              <RoleGuard allowed={['clinician']}>
+                <ClinicalConsultPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/patient/:id/encounter/:encounterId/notes"
+            element={
+              <RoleGuard allowed={['clinician']}>
+                <ConsultNoteDetailPage />
+              </RoleGuard>
+            }
+          />
 
-      {/* Patient detail (nested) — accessible to both roles */}
-      <Route path="/patient/:id" element={<PatientPage />}>
-        <Route path="careplan" element={<CarePlanPage />} />
-        <Route path="careplan/new" element={<CarePlanCrudPage />} />
-        <Route path="observation" element={<ObservationPage />} />
-        <Route path="observation/new" element={<ObservationCrudPage />} />
-        <Route path="medication" element={<MedicationRequestPage />} />
-        <Route path="medication/new" element={<MedicationRequestCrudPage />} />
-        <Route path="encounter" element={<EncounterPage />} />
-        <Route path="encounter/new" element={<EncounterCrudPage />} />
-        <Route path="careplan/crud" element={<CarePlanCrudPage />} />
-        <Route
-          path="careplan/crud/:resourceId"
-          element={<CarePlanCrudPage />}
-        />
-        <Route path="observation/crud" element={<ObservationCrudPage />} />
-        <Route
-          path="observation/crud/:resourceId"
-          element={<ObservationCrudPage />}
-        />
-        <Route path="medication/crud" element={<MedicationRequestCrudPage />} />
-        <Route
-          path="medication/crud/:resourceId"
-          element={<MedicationRequestCrudPage />}
-        />
-        <Route path="encounter/crud" element={<EncounterCrudPage />} />
-        <Route
-          path="encounter/crud/:resourceId"
-          element={<EncounterCrudPage />}
-        />
-      </Route>
+          {/* Patient detail (nested) — accessible to both roles */}
+          <Route path="/patient/:id" element={<PatientPage />}>
+            <Route path="careplan" element={<CarePlanPage />} />
+            <Route path="careplan/new" element={<CarePlanCrudPage />} />
+            <Route path="observation" element={<ObservationPage />} />
+            <Route path="observation/new" element={<ObservationCrudPage />} />
+            <Route path="medication" element={<MedicationRequestPage />} />
+            <Route
+              path="medication/new"
+              element={<MedicationRequestCrudPage />}
+            />
+            <Route path="encounter" element={<EncounterPage />} />
+            <Route path="encounter/new" element={<EncounterCrudPage />} />
+            <Route path="careplan/crud" element={<CarePlanCrudPage />} />
+            <Route
+              path="careplan/crud/:resourceId"
+              element={<CarePlanCrudPage />}
+            />
+            <Route path="observation/crud" element={<ObservationCrudPage />} />
+            <Route
+              path="observation/crud/:resourceId"
+              element={<ObservationCrudPage />}
+            />
+            <Route
+              path="medication/crud"
+              element={<MedicationRequestCrudPage />}
+            />
+            <Route
+              path="medication/crud/:resourceId"
+              element={<MedicationRequestCrudPage />}
+            />
+            <Route path="encounter/crud" element={<EncounterCrudPage />} />
+            <Route
+              path="encounter/crud/:resourceId"
+              element={<EncounterCrudPage />}
+            />
+          </Route>
 
-      {/* 404 — only show if authenticated */}
-      <Route path="*" element={<NotFound />} />
+          {/* 404 — only show if authenticated */}
+          <Route path="*" element={<NotFound />} />
         </>
       )}
     </Routes>

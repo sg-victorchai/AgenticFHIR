@@ -1985,9 +1985,13 @@ const PatientRecordsPage: React.FC = () => {
     setSearchError(null);
     try {
       const resourceTypes = getResourceTypesFromQuery(query);
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (API_KEY) {
+        headers['x-api-key'] = API_KEY;
+      }
       const res = await fetch(`${AGENT_API_BASE_URL}/api/ai/hybrid-search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+        headers,
         body: JSON.stringify({
           query,
           scope: 'PATIENT',

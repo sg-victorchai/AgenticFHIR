@@ -200,7 +200,8 @@ function extractSources(raw: RawAgentResponse): AgentSource[] {
  * Extract medical/legal disclaimer
  */
 function extractDisclaimer(raw: RawAgentResponse): string | undefined {
-  return raw.metadata?.disclaimer || raw.headers?.['x-disclaimer'] || undefined;
+  const disclaimer = raw.metadata?.disclaimer || raw.headers?.['x-disclaimer'];
+  return typeof disclaimer === 'string' ? disclaimer : undefined;
 }
 
 /**
@@ -248,14 +249,17 @@ function extractTokensUsed(raw: RawAgentResponse): number | undefined {
  */
 function extractCostBreakdown(raw: RawAgentResponse): any | undefined {
   const meta = raw.metadata;
-  if (!meta?.costBreakdown) return undefined;
+  if (!meta) return undefined;
+
+  const costBreakdown = meta.costBreakdown as any;
+  if (!costBreakdown || typeof costBreakdown !== 'object') return undefined;
 
   return {
-    provider: meta.costBreakdown.provider || 'unknown',
-    model: meta.costBreakdown.model || 'unknown',
-    inputTokens: meta.costBreakdown.inputTokens,
-    outputTokens: meta.costBreakdown.outputTokens,
-    costUsd: meta.costBreakdown.costUsd,
+    provider: costBreakdown.provider || 'unknown',
+    model: costBreakdown.model || 'unknown',
+    inputTokens: costBreakdown.inputTokens,
+    outputTokens: costBreakdown.outputTokens,
+    costUsd: costBreakdown.costUsd,
   };
 }
 

@@ -67,7 +67,9 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
         url.searchParams.set('actions', actions.join(','));
       }
       // Add API key as query parameter since EventSource doesn't support custom headers
-      url.searchParams.set('apiKey', API_KEY);
+      if (API_KEY) {
+        url.searchParams.set('apiKey', API_KEY);
+      }
 
       console.log('Connecting to SSE stream:', url.toString());
 

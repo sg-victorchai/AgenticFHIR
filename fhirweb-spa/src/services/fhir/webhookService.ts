@@ -49,10 +49,15 @@ export interface WebhookEvent {
   resourceId: string;
 }
 
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  'x-api-key': API_KEY,
-});
+const getHeaders = (): HeadersInit => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (API_KEY) {
+    headers['x-api-key'] = API_KEY;
+  }
+  return headers;
+};
 
 export const webhookService = {
   // List all webhooks
