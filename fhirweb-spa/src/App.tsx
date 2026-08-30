@@ -1,4 +1,6 @@
 import React, { Suspense } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from './store';
 import AppRoutes from './routes';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
@@ -35,16 +37,20 @@ class ErrorBoundaryComponent extends React.Component<
 }
 
 const App: React.FC = () => {
+  const isAuthenticated = useSelector(
+    (state: RootState) => state.auth.isAuthenticated,
+  );
+
   return (
     <div className="flex flex-col min-h-screen">
       <ErrorBoundaryComponent>
-        <Header />
+        {isAuthenticated && <Header />}
         <main className="flex-grow container mx-auto px-4 py-8">
           <Suspense fallback={<div>Loading...</div>}>
             <AppRoutes />
           </Suspense>
         </main>
-        <Footer />
+        {isAuthenticated && <Footer />}
       </ErrorBoundaryComponent>
     </div>
   );

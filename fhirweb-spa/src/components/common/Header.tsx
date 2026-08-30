@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { logout } from '../../store/slices/authSlice';
@@ -7,6 +7,7 @@ import { clearRole } from '../../store/slices/uiSlice';
 
 const Header: React.FC = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { isAuthenticated, user } = useSelector(
     (state: RootState) => state.auth,
   );
@@ -15,6 +16,7 @@ const Header: React.FC = () => {
   const handleLogout = () => {
     dispatch(logout());
     dispatch(clearRole());
+    navigate('/login');
   };
 
   return (

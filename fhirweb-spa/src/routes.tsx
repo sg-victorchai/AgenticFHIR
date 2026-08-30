@@ -1,5 +1,8 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from './store';
+import LoginPage from './pages/LoginPage';
 import RoleSelectionPage from './pages/RoleSelectionPage';
 import PatientQueuePage from './pages/PatientQueuePage';
 import PatientPage from './pages/PatientPage';
@@ -27,11 +30,38 @@ import NotFound from './pages/NotFound';
 import LaunchPage from './pages/LaunchPage';
 import RoleGuard from './components/common/RoleGuard';
 
+// Protected route wrapper
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const isAuthenticated = useSelector(
+    (state: RootState) => state.auth.isAuthenticated,
+  );
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
 const AppRoutes: React.FC = () => {
+  const isAuthenticated = useSelector(
+    (state: RootState) => state.auth.isAuthenticated,
+  );
+
   return (
     <Routes>
-      {/* Landing — role selection */}
-      <Route path="/" element={<RoleSelectionPage />} />
+      {/* Login page — public */}
+      <Route path="/login" element={<LoginPage />} />
+
+      {/* Redirect to login if not authenticated */}
+      {!isAuthenticated && (
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      )}
+
+      {/* Protected routes */}
+      {isAuthenticated && (
+        <>
+          {/* Landing — role selection */}
+          <Route path="/" element={<RoleSelectionPage />} />
 
       {/* Shared */}
       <Route path="/launch" element={<LaunchPage />} />
@@ -157,7 +187,10 @@ const AppRoutes: React.FC = () => {
         />
       </Route>
 
+      {/* 404 — only show if authenticated */}
       <Route path="*" element={<NotFound />} />
+        </>
+      )}
     </Routes>
   );
 };
