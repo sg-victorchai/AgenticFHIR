@@ -18,6 +18,7 @@ interface AgentConversationModalProps {
   tenantId?: string;
   accessToken?: string;
   title?: string;
+  mode?: 'modal' | 'panel';
 }
 
 export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
@@ -28,6 +29,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   tenantId = 'default',
   accessToken,
   title = 'Ask About Your Health',
+  mode = 'modal',
 }) => {
   const [conversations, setConversations] = useState<ConversationMessage[]>([]);
   const [input, setInput] = useState('');
@@ -436,12 +438,16 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-40 flex items-end sm:items-start justify-center">
-      <div
-        ref={modalRef}
-        className="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full sm:absolute sm:w-[46.2rem] sm:min-w-[36rem] sm:max-w-[95vw] sm:resize sm:overflow-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col"
-      >
+  const content = (
+    <div
+      ref={modalRef}
+      className={
+        mode === 'panel'
+          ? 'h-full flex flex-col'
+          : 'bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full sm:absolute sm:w-[46.2rem] sm:min-w-[36rem] sm:max-w-[95vw] sm:resize sm:overflow-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col'
+      }
+    >
+      {mode === 'modal' && (
         <div
           className={`flex items-center justify-between px-6 py-4 border-b border-gray-200 sm:cursor-move ${isDragging ? 'select-none' : ''}`}
           onMouseDown={handleHeaderMouseDown}
@@ -467,101 +473,111 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
             </svg>
           </button>
         </div>
+      )}
 
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-          {conversations.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p className="text-sm">
-                Ask a question about your health. I&apos;ll help explain your
-                medical information.
-              </p>
-            </div>
-          ) : (
-            conversations.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={
-                    msg.role === 'user'
-                      ? 'max-w-xs md:max-w-md lg:max-w-lg rounded-lg px-4 py-2 bg-blue-600 text-white'
-                      : 'w-full max-w-[90%]'
-                  }
-                >
-                  {msg.role === 'agent' ? (
-                    <AgentResponseFormatter
-                      response={{
-                        text: msg.content,
-                        confidence: msg.metadata?.confidence || 0.5,
-                        sources: msg.metadata?.sources || [],
-                        disclaimer: msg.metadata?.disclaimer,
-                        executionTimeMs: msg.metadata?.executionTimeMs,
-                        tokensUsed: msg.metadata?.tokensUsed,
-                        costBreakdown: msg.metadata?.costBreakdown,
-                      }}
-                      compact={true}
-                    />
-                  ) : (
-                    <p className="text-sm">{msg.content}</p>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-2">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce animation-delay-100" />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce animation-delay-200" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          {currentMissionId && (
-            <p className="text-xs text-gray-400">
-              Mission ID: {currentMissionId}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+        {conversations.length === 0 && mode === 'modal' ? (
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-sm">
+              Ask a question about your health. I&apos;ll help explain your
+              medical information.
             </p>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
-          <form onSubmit={handleSendMessage} className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your question..."
-              disabled={loading}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors"
+          </div>
+        ) : (
+          conversations.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              {loading ? 'Thinking...' : 'Send'}
-            </button>
-          </form>
+              <div
+                className={
+                  msg.role === 'user'
+                    ? 'max-w-xs md:max-w-md lg:max-w-lg rounded-lg px-4 py-2 bg-blue-600 text-white'
+                    : 'w-full max-w-[90%]'
+                }
+              >
+                {msg.role === 'agent' ? (
+                  <AgentResponseFormatter
+                    response={{
+                      text: msg.content,
+                      confidence: msg.metadata?.confidence || 0.5,
+                      sources: msg.metadata?.sources || [],
+                      disclaimer: msg.metadata?.disclaimer,
+                      executionTimeMs: msg.metadata?.executionTimeMs,
+                      tokensUsed: msg.metadata?.tokensUsed,
+                      costBreakdown: msg.metadata?.costBreakdown,
+                    }}
+                    compact={true}
+                  />
+                ) : (
+                  <p className="text-sm">{msg.content}</p>
+                )}
+              </div>
+            </div>
+          ))
+        )}
 
-          <p className="text-xs text-gray-500 mt-2">
-            This AI assistant can help explain your health information. Always
-            discuss important health decisions with your doctor.
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 rounded-lg px-4 py-2">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce animation-delay-100" />
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce animation-delay-200" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        {currentMissionId && (
+          <p className="text-xs text-gray-400">
+            Mission ID: {currentMissionId}
           </p>
-        </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
+
+      <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
+        <form onSubmit={handleSendMessage} className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your question..."
+            disabled={loading}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors"
+          >
+            {loading ? 'Thinking...' : 'Send'}
+          </button>
+        </form>
+
+        <p className="text-xs text-gray-500 mt-2">
+          This AI assistant can help explain your health information. Always
+          discuss important health decisions with your doctor.
+        </p>
+      </div>
+    </div>
+  );
+
+  if (mode === 'panel') {
+    return content;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-end sm:items-start justify-center">
+      {content}
     </div>
   );
 };

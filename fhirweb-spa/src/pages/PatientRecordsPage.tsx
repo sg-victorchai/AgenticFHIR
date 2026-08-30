@@ -1361,10 +1361,7 @@ const PatientRecordsPage: React.FC = () => {
   const [noteUploadJobStatus, setNoteUploadJobStatus] = useState<string | null>(
     null,
   );
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [noteUploadCurrentStep, setNoteUploadCurrentStep] = useState<
-    string | null
-  >(null);
+  const [, setNoteUploadCurrentStep] = useState<string | null>(null);
   const [noteUploadPercent, setNoteUploadPercent] = useState<number | null>(
     null,
   );
@@ -3942,19 +3939,40 @@ const PatientRecordsPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 {role === 'patient' && (
                   <button
-                    onClick={openAgentConversationModal}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-colors bg-gradient-to-r from-indigo-50 to-fuchsia-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-fuchsia-100 hover:border-indigo-300"
+                    onClick={() => {
+                      if (!showAgentModal) {
+                        openAgentConversationModal();
+                        setShowClinicianUpload(false);
+                      } else {
+                        setShowAgentModal(false);
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                      showAgentModal
+                        ? 'bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white border-indigo-600'
+                        : 'bg-gradient-to-r from-indigo-50 to-fuchsia-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-fuchsia-100 hover:border-indigo-300'
+                    }`}
                   >
-                    <span className="relative inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 via-blue-500 to-fuchsia-500 shadow-[0_0_0_2px_rgba(99,102,241,0.15)]">
+                    <span
+                      className={`relative inline-flex h-6 w-6 items-center justify-center rounded-full ${
+                        showAgentModal
+                          ? 'bg-white shadow-[0_0_0_2px_rgba(99,102,241,0.3)]'
+                          : 'bg-gradient-to-br from-indigo-500 via-blue-500 to-fuchsia-500 shadow-[0_0_0_2px_rgba(99,102,241,0.15)]'
+                      }`}
+                    >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         fill="currentColor"
                         viewBox="0 0 24 24"
-                        className="w-3.5 h-3.5 text-white"
+                        className={`w-3.5 h-3.5 ${
+                          showAgentModal ? 'text-indigo-600' : 'text-white'
+                        }`}
                       >
                         <path d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z" />
                       </svg>
-                      <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-300 ring-1 ring-white" />
+                      {showAgentModal && (
+                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-300 ring-1 ring-white" />
+                      )}
                     </span>
                     Ask AI
                   </button>
@@ -3962,7 +3980,12 @@ const PatientRecordsPage: React.FC = () => {
 
                 {role === 'clinician' && (
                   <button
-                    onClick={() => setShowClinicianUpload((s) => !s)}
+                    onClick={() => {
+                      setShowClinicianUpload((s) => !s);
+                      if (!showClinicianUpload) {
+                        setShowAgentModal(false);
+                      }
+                    }}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                       showClinicianUpload
                         ? 'bg-emerald-600 text-white border-emerald-600'
@@ -4120,18 +4143,6 @@ const PatientRecordsPage: React.FC = () => {
         </div>
       )}
 
-      {role === 'patient' && patientId && (
-        <AgentConversationModal
-          isOpen={showAgentModal}
-          onClose={() => setShowAgentModal(false)}
-          agentConfig={patientAgentConfig}
-          patientId={patientId}
-          tenantId={agentTenantId}
-          accessToken={agentAccessToken}
-          title="Ask About My Health Conditions"
-        />
-      )}
-
       {/* Tab bar and Content — Split Pane Layout */}
       <div
         ref={containerRef}
@@ -4185,9 +4196,17 @@ const PatientRecordsPage: React.FC = () => {
               {activeTab === 'observation' && renderObservationTab()}
               {activeTab === 'orders' && renderOrdersTab()}
               {activeTab === 'lab-results' &&
-                renderDiagnosticReportTable(labResults, labDrLoading, labDrBundle)}
+                renderDiagnosticReportTable(
+                  labResults,
+                  labDrLoading,
+                  labDrBundle,
+                )}
               {activeTab === 'rad-report' &&
-                renderDiagnosticReportTable(radReports, radDrLoading, radDrBundle)}
+                renderDiagnosticReportTable(
+                  radReports,
+                  radDrLoading,
+                  radDrBundle,
+                )}
               {activeTab === 'medication' && renderMedicationTab()}
               {activeTab === 'procedure' && renderProcedureTab()}
               {activeTab === 'careplan' && renderCarePlanTab()}
@@ -4196,14 +4215,15 @@ const PatientRecordsPage: React.FC = () => {
         </div>
 
         {/* Resize handle */}
-        {role === 'clinician' && showClinicianUpload && (
+        {(role === 'clinician' && showClinicianUpload) ||
+        (role === 'patient' && showAgentModal) ? (
           <div
             onMouseDown={handleMouseDown}
             className={`w-1 bg-gray-200 hover:bg-blue-400 transition-colors cursor-col-resize shrink-0 ${
               isResizing ? 'bg-blue-500' : ''
             }`}
           />
-        )}
+        ) : null}
 
         {/* Right side: Upload panel */}
         {role === 'clinician' && showClinicianUpload && (
@@ -4217,7 +4237,8 @@ const PatientRecordsPage: React.FC = () => {
                   Upload Scanned Clinical Notes
                 </h2>
                 <p className="text-xs text-emerald-800 mt-1">
-                  Select a scanned file (PDF/image) to attach as a patient clinical note.
+                  Select a scanned file (PDF/image) to attach as a patient
+                  clinical note.
                 </p>
               </div>
               <button
@@ -4308,17 +4329,22 @@ const PatientRecordsPage: React.FC = () => {
                       );
                     })}
                   </div>
-                  {mapHarmonizerStatusToStep(noteUploadJobStatus) === 'FAILED' && (
+                  {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
+                    'FAILED' && (
                     <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
                       FAILED
                     </p>
                   )}
                   {noteUploadStepResults.length > 0 && (
                     <div className="mt-1">
-                      <p className="text-gray-700 font-medium text-xs">Completed</p>
+                      <p className="text-gray-700 font-medium text-xs">
+                        Completed
+                      </p>
                       <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
                         {noteUploadStepResults.map((step, idx) => (
-                          <li key={`${step.stepName || step.step || 'step'}-${idx}`}>
+                          <li
+                            key={`${step.stepName || step.step || 'step'}-${idx}`}
+                          >
                             • {step.stepName || step.step || step.name}
                           </li>
                         ))}
@@ -4341,7 +4367,9 @@ const PatientRecordsPage: React.FC = () => {
                     <p className="mt-1 text-gray-500 text-xs">Polling...</p>
                   )}
                   {isLoadingNoteUploadSummary && (
-                    <p className="mt-1 text-gray-500 text-xs">Loading summary...</p>
+                    <p className="mt-1 text-gray-500 text-xs">
+                      Loading summary...
+                    </p>
                   )}
                 </div>
               )}
@@ -4373,6 +4401,60 @@ const PatientRecordsPage: React.FC = () => {
                     </button>
                   )}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Right side: Ask AI panel */}
+        {role === 'patient' && showAgentModal && (
+          <div
+            className="bg-indigo-50 border-l border-indigo-200 overflow-auto shrink-0"
+            style={{ width: `${uploadPanelWidth}%` }}
+          >
+            <div className="sticky top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold text-indigo-900">
+                  Ask About My Health Conditions
+                </h2>
+                <p className="text-xs text-indigo-800 mt-1">
+                  Chat with AI to get health insights based on your records.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAgentModal(false)}
+                className="shrink-0 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
+                title="Close AI panel"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4">
+              {patientId && (
+                <AgentConversationModal
+                  isOpen={true}
+                  onClose={() => setShowAgentModal(false)}
+                  agentConfig={patientAgentConfig}
+                  patientId={patientId}
+                  tenantId={agentTenantId}
+                  accessToken={agentAccessToken}
+                  title="Ask About My Health Conditions"
+                  mode="panel"
+                />
               )}
             </div>
           </div>
