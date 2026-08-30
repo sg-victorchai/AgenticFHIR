@@ -89,6 +89,9 @@ function cleanAgentResponseText(text: string): string {
   cleaned = cleaned.replace(/\s*---\s*mission_complete\s*$/g, '');
   cleaned = cleaned.replace(/\s*---\s*$/g, ''); // Remove trailing --- if present
 
+  // Remove plain text "mission_complete" at the end
+  cleaned = cleaned.replace(/\s*mission_complete\s*$/g, '');
+
   // Clean up excessive whitespace and newlines
   cleaned = cleaned.trim();
   cleaned = cleaned.replace(/\n\n\n+/g, '\n\n'); // Replace 3+ newlines with 2
