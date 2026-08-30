@@ -4066,12 +4066,6 @@ const PatientRecordsPage: React.FC = () => {
         </div>
       </div>
 
-      {role === 'clinician' && showClinicianUpload && (
-        <div className="max-w-7xl mx-auto px-6 pt-5">
-          <p className="text-xs text-emerald-700 pb-3">Upload panel visible on the right →</p>
-        </div>
-      )}
-
       {/* Search Results — shown above tab bar */}
       {(searchResults !== null || searchError) && (
         <div className="bg-blue-50 border-y-2 border-blue-300 px-6 py-3">
