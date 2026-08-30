@@ -30,23 +30,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/fhir-proxy/, '/baseR5'),
       },
-      // Proxy SSE requests and convert apiKey query param to x-api-key header
-      '/api/events-proxy': {
-        target: 'http://20.212.110.174',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/events-proxy/, '/api/events'),
-        ws: true,
-        proxyReq: (proxyReq, req) => {
-          // Extract apiKey from query string and add as header
-          const url = new URL(req.url || '', 'http://localhost');
-          const apiKey = url.searchParams.get('apiKey');
-          if (apiKey) {
-            proxyReq.setHeader('x-api-key', apiKey);
-            // Remove apiKey from query string to avoid passing it twice
-            url.searchParams.delete('apiKey');
-          }
-        },
-      },
     },
   },
   build: {

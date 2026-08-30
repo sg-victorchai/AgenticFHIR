@@ -58,16 +58,15 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
     }
 
     try {
-      // Use proxy URL that converts apiKey query param to x-api-key header
-      const proxyUrl = '/api/events-proxy/stream';
-      const url = new URL(proxyUrl, window.location.origin);
+      // Connect directly to Azure server
+      const url = new URL(`${SSE_BASE_URL}/api/events/stream`);
       if (topics.length > 0) {
         url.searchParams.set('topics', topics.join(','));
       }
       if (actions.length > 0) {
         url.searchParams.set('actions', actions.join(','));
       }
-      // Add API key as query parameter - proxy will convert to x-api-key header
+      // Add API key as query parameter since EventSource doesn't support custom headers
       url.searchParams.set('apiKey', API_KEY);
 
       console.log('Connecting to SSE stream:', url.toString());
