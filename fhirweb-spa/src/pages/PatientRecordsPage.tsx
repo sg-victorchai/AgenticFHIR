@@ -1361,6 +1361,7 @@ const PatientRecordsPage: React.FC = () => {
   const [noteUploadJobStatus, setNoteUploadJobStatus] = useState<string | null>(
     null,
   );
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [noteUploadCurrentStep, setNoteUploadCurrentStep] = useState<
     string | null
   >(null);
@@ -1376,6 +1377,44 @@ const PatientRecordsPage: React.FC = () => {
     useState<HarmonizerJobSummaryResponse | null>(null);
   const [isLoadingNoteUploadSummary, setIsLoadingNoteUploadSummary] =
     useState(false);
+
+  // ── Upload panel resize state ──
+  const [uploadPanelWidth, setUploadPanelWidth] = useState(30); // Default 30% width
+  const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !containerRef.current) return;
+
+      const container = containerRef.current;
+      const rect = container.getBoundingClientRect();
+      const newWidth = ((rect.right - e.clientX) / rect.width) * 100;
+
+      // Constrain width between 20% and 60%
+      if (newWidth >= 20 && newWidth <= 60) {
+        setUploadPanelWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isResizing]);
 
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -3877,7 +3916,7 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
@@ -4029,216 +4068,7 @@ const PatientRecordsPage: React.FC = () => {
 
       {role === 'clinician' && showClinicianUpload && (
         <div className="max-w-7xl mx-auto px-6 pt-5">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-emerald-900 mb-2">
-              Upload Scanned Clinical Notes
-            </h2>
-            <p className="text-xs text-emerald-800 mb-3">
-              Select a scanned file (PDF/image) to attach as a patient clinical
-              note.
-            </p>
-
-            <form
-              onSubmit={handleUploadScannedNotes}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input
-                type="file"
-                accept=".pdf,image/*"
-                onChange={(e) =>
-                  setSelectedNoteFile(e.target.files?.[0] ?? null)
-                }
-                className="text-sm text-gray-700 file:mr-3 file:px-3 file:py-1.5 file:border file:border-emerald-300 file:rounded-md file:bg-white file:text-emerald-700 file:cursor-pointer"
-              />
-              <button
-                type="submit"
-                disabled={!selectedNoteFile || isUploadingNotes}
-                className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
-              </button>
-            </form>
-
-            {selectedNoteFile && (
-              <p className="mt-2 text-xs text-emerald-700">
-                Selected file: {selectedNoteFile.name}
-              </p>
-            )}
-
-            {noteUploadMessage && (
-              <div className="mt-3 text-sm text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2">
-                {noteUploadMessage}
-              </div>
-            )}
-
-            {noteUploadJobId && noteUploadJobStatus && (
-              <div className="mt-3 text-xs text-gray-700 bg-white border border-emerald-200 rounded-lg px-3 py-2">
-                <p className="font-medium text-gray-800">
-                  Job: {noteUploadJobId}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  {HARMONIZER_STATUS_STEPS.map((step, index) => {
-                    const mappedStatus =
-                      mapHarmonizerStatusToStep(noteUploadJobStatus);
-                    const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
-                      mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
-                    );
-                    const reached =
-                      mappedStatus === 'FAILED'
-                        ? index <= 2
-                        : currentIndex >= index;
-                    const active = mappedStatus === step;
-                    return (
-                      <React.Fragment key={step}>
-                        {index > 0 && (
-                          <span
-                            className={`h-px w-6 ${reached ? 'bg-emerald-500' : 'bg-gray-300'}`}
-                          />
-                        )}
-                        <span
-                          className={`px-2 py-0.5 rounded-full border font-medium ${
-                            active || reached
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                              : 'bg-gray-100 text-gray-500 border-gray-300'
-                          }`}
-                        >
-                          {step}
-                        </span>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-                {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
-                  'FAILED' && (
-                  <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-red-700 font-medium">
-                    FAILED
-                  </p>
-                )}
-                {noteUploadStepResults.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-gray-700 font-medium">Completed Steps</p>
-                    <ul className="mt-1 space-y-1 text-gray-600">
-                      {noteUploadStepResults.map((step, idx) => (
-                        <li
-                          key={`${step.stepName || step.step || step.name || 'step'}-${idx}`}
-                        >
-                          •{' '}
-                          {step.stepName ||
-                            step.step ||
-                            step.name ||
-                            `Step ${idx + 1}`}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {(noteUploadCurrentStep || noteUploadPercent !== null) && (
-                  <div className="mt-2">
-                    <p className="text-gray-600">
-                      {noteUploadCurrentStep &&
-                        `Step: ${noteUploadCurrentStep}`}
-                      {noteUploadCurrentStep &&
-                        noteUploadPercent !== null &&
-                        ' • '}
-                      {noteUploadPercent !== null &&
-                        `Progress: ${Math.round(noteUploadPercent)}%`}
-                    </p>
-                    {noteUploadPercent !== null && (
-                      <progress
-                        className="mt-2 h-2 w-full"
-                        value={Math.max(0, Math.min(100, noteUploadPercent))}
-                        max={100}
-                      />
-                    )}
-                  </div>
-                )}
-                {isNoteUploadPolling && (
-                  <p className="mt-1 text-gray-500">Polling live status...</p>
-                )}
-                {isLoadingNoteUploadSummary && (
-                  <p className="mt-1 text-gray-500">
-                    Loading import summary...
-                  </p>
-                )}
-              </div>
-            )}
-
-            {noteUploadSummary && (
-              <div className="mt-3 text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-indigo-900">
-                <p className="font-medium">Import Summary</p>
-                <p className="mt-1">
-                  Status:{' '}
-                  {noteUploadSummary.status || noteUploadJobStatus || '—'}
-                </p>
-                <p>
-                  Persona: {noteUploadSummary.personaId || '—'} • Tenant:{' '}
-                  {noteUploadSummary.tenantId || '—'}
-                </p>
-
-                <div className="mt-2">
-                  <p className="font-medium">Extracted Entities</p>
-                  <pre className="mt-1 text-xs bg-white border border-indigo-100 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">
-                    {toDisplayJson(noteUploadSummary.summary)}
-                  </pre>
-                </div>
-
-                {noteUploadSummary.stepResults?.length ? (
-                  <div className="mt-2">
-                    <p className="font-medium">Step Results</p>
-                    <ul className="mt-1 space-y-1 text-xs">
-                      {noteUploadSummary.stepResults.map((step, idx) => (
-                        <li
-                          key={`${step.stepName || step.step || step.name || 'step'}-${idx}`}
-                        >
-                          <span className="font-medium">
-                            {step.stepName ||
-                              step.step ||
-                              step.name ||
-                              `Step ${idx + 1}`}
-                          </span>{' '}
-                          • {step.status || 'UNKNOWN'}
-                          {typeof step.durationMs === 'number' &&
-                            ` • ${Math.round(step.durationMs)} ms`}
-                          {typeof step.durationSeconds === 'number' &&
-                            typeof step.durationMs !== 'number' &&
-                            ` • ${step.durationSeconds}s`}
-                          {step.summary && ` • ${toDisplayJson(step.summary)}`}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
-                {noteUploadSummary.riskFlags?.length ? (
-                  <div className="mt-2">
-                    <p className="font-medium text-amber-800">Risk Flags</p>
-                    <ul className="mt-1 list-disc list-inside space-y-1 text-xs text-amber-900">
-                      {noteUploadSummary.riskFlags.map((flag, idx) => (
-                        <li key={`risk-flag-${idx}`}>{toDisplayJson(flag)}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {noteUploadError && (
-              <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div>{noteUploadError}</div>
-                  {noteUploadJobId && (
-                    <button
-                      onClick={handleCheckNoteUploadStatus}
-                      disabled={isNoteUploadPolling}
-                      className="shrink-0 px-3 py-1 text-xs font-medium bg-red-200 hover:bg-red-300 text-red-800 rounded transition-colors disabled:opacity-50"
-                    >
-                      {isNoteUploadPolling ? 'Checking...' : 'Check Status'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <p className="text-xs text-emerald-700 pb-3">Upload panel visible on the right →</p>
         </div>
       )}
 
@@ -4308,56 +4138,229 @@ const PatientRecordsPage: React.FC = () => {
         />
       )}
 
-      {/* Tab bar */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex overflow-x-auto flex-1">
-              {TABS.map((tab) => (
+      {/* Tab bar and Content — Split Pane Layout */}
+      <div
+        ref={containerRef}
+        className="flex flex-1 overflow-hidden"
+        style={{ userSelect: isResizing ? 'none' : 'auto' }}
+      >
+        {/* Left side: Tab bar and records */}
+        <div className="flex flex-col flex-1 overflow-auto">
+          {/* Tab bar */}
+          <div className="bg-white border-b border-gray-200 shrink-0">
+            <div className="max-w-7xl mx-auto px-6">
+              <div className="flex items-center justify-between">
+                <div className="flex overflow-x-auto flex-1">
+                  {TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setExpandedId(null);
+                        resetSortFilter();
+                      }}
+                      className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                        activeTab === tab.id
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setExpandedId(null);
-                    resetSortFilter();
-                  }}
-                  className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  onClick={() => setShowFilter((s) => !s)}
+                  className={`ml-4 shrink-0 text-xs px-3 py-1.5 rounded border font-medium transition-colors ${
+                    showFilter
+                      ? 'bg-blue-100 border-blue-300 text-blue-700'
+                      : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {tab.label}
+                  {showFilter ? '▲ Hide Filters' : '▼ Filters'}
                 </button>
-              ))}
+              </div>
             </div>
-            <button
-              onClick={() => setShowFilter((s) => !s)}
-              className={`ml-4 shrink-0 text-xs px-3 py-1.5 rounded border font-medium transition-colors ${
-                showFilter
-                  ? 'bg-blue-100 border-blue-300 text-blue-700'
-                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {showFilter ? '▲ Hide Filters' : '▼ Filters'}
-            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-auto px-6 py-6">
+            <div className="max-w-7xl">
+              {activeTab === 'encounter' && renderEncounterTab()}
+              {activeTab === 'condition' && renderConditionTab()}
+              {activeTab === 'observation' && renderObservationTab()}
+              {activeTab === 'orders' && renderOrdersTab()}
+              {activeTab === 'lab-results' &&
+                renderDiagnosticReportTable(labResults, labDrLoading, labDrBundle)}
+              {activeTab === 'rad-report' &&
+                renderDiagnosticReportTable(radReports, radDrLoading, radDrBundle)}
+              {activeTab === 'medication' && renderMedicationTab()}
+              {activeTab === 'procedure' && renderProcedureTab()}
+              {activeTab === 'careplan' && renderCarePlanTab()}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab === 'encounter' && renderEncounterTab()}
-        {activeTab === 'condition' && renderConditionTab()}
-        {activeTab === 'observation' && renderObservationTab()}
-        {activeTab === 'orders' && renderOrdersTab()}
-        {activeTab === 'lab-results' &&
-          renderDiagnosticReportTable(labResults, labDrLoading, labDrBundle)}
-        {activeTab === 'rad-report' &&
-          renderDiagnosticReportTable(radReports, radDrLoading, radDrBundle)}
-        {activeTab === 'medication' && renderMedicationTab()}
-        {activeTab === 'procedure' && renderProcedureTab()}
-        {activeTab === 'careplan' && renderCarePlanTab()}
+        {/* Resize handle */}
+        {role === 'clinician' && showClinicianUpload && (
+          <div
+            onMouseDown={handleMouseDown}
+            className={`w-1 bg-gray-200 hover:bg-blue-400 transition-colors cursor-col-resize shrink-0 ${
+              isResizing ? 'bg-blue-500' : ''
+            }`}
+          />
+        )}
+
+        {/* Right side: Upload panel */}
+        {role === 'clinician' && showClinicianUpload && (
+          <div
+            className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0"
+            style={{ width: `${uploadPanelWidth}%` }}
+          >
+            <div className="sticky top-0 bg-emerald-50 border-b border-emerald-200 p-4 z-10">
+              <h2 className="text-sm font-semibold text-emerald-900">
+                Upload Scanned Clinical Notes
+              </h2>
+              <p className="text-xs text-emerald-800 mt-1">
+                Select a scanned file (PDF/image) to attach as a patient clinical note.
+              </p>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <form
+                onSubmit={handleUploadScannedNotes}
+                className="flex flex-col gap-2"
+              >
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={(e) =>
+                    setSelectedNoteFile(e.target.files?.[0] ?? null)
+                  }
+                  className="text-xs text-gray-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
+                />
+                <button
+                  type="submit"
+                  disabled={!selectedNoteFile || isUploadingNotes}
+                  className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
+                </button>
+              </form>
+
+              {selectedNoteFile && (
+                <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
+                  {selectedNoteFile.name}
+                </p>
+              )}
+
+              {noteUploadMessage && (
+                <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
+                  {noteUploadMessage}
+                </div>
+              )}
+
+              {noteUploadJobId && noteUploadJobStatus && (
+                <div className="text-xs text-gray-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
+                  <p className="font-medium text-gray-800 mb-1">
+                    Job: {noteUploadJobId.substring(0, 12)}...
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {HARMONIZER_STATUS_STEPS.map((step, index) => {
+                      const mappedStatus =
+                        mapHarmonizerStatusToStep(noteUploadJobStatus);
+                      const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
+                        mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
+                      );
+                      const reached =
+                        mappedStatus === 'FAILED'
+                          ? index <= 2
+                          : currentIndex >= index;
+                      const active = mappedStatus === step;
+                      return (
+                        <React.Fragment key={step}>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
+                              active || reached
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                : 'bg-gray-100 text-gray-500 border-gray-300'
+                            }`}
+                          >
+                            {step}
+                          </span>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                  {mapHarmonizerStatusToStep(noteUploadJobStatus) === 'FAILED' && (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
+                      FAILED
+                    </p>
+                  )}
+                  {noteUploadStepResults.length > 0 && (
+                    <div className="mt-1">
+                      <p className="text-gray-700 font-medium text-xs">Completed</p>
+                      <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
+                        {noteUploadStepResults.map((step, idx) => (
+                          <li key={`${step.stepName || step.step || 'step'}-${idx}`}>
+                            • {step.stepName || step.step || step.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {noteUploadPercent !== null && (
+                    <div className="mt-1">
+                      <progress
+                        className="mt-0.5 h-1 w-full"
+                        value={Math.max(0, Math.min(100, noteUploadPercent))}
+                        max={100}
+                      />
+                      <p className="text-gray-500 text-xs mt-0.5">
+                        {Math.round(noteUploadPercent)}%
+                      </p>
+                    </div>
+                  )}
+                  {isNoteUploadPolling && (
+                    <p className="mt-1 text-gray-500 text-xs">Polling...</p>
+                  )}
+                  {isLoadingNoteUploadSummary && (
+                    <p className="mt-1 text-gray-500 text-xs">Loading summary...</p>
+                  )}
+                </div>
+              )}
+
+              {noteUploadSummary && (
+                <div className="text-xs bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1.5 text-indigo-900">
+                  <p className="font-medium">Summary</p>
+                  <p className="mt-0.5">
+                    Status: {noteUploadSummary.status || '—'}
+                  </p>
+                  {noteUploadSummary.summary && (
+                    <pre className="mt-0.5 text-xs bg-white border border-indigo-100 rounded p-1 overflow-auto max-h-32 whitespace-pre-wrap break-words">
+                      {toDisplayJson(noteUploadSummary.summary)}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {noteUploadError && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
+                  <div className="mb-1">{noteUploadError}</div>
+                  {noteUploadJobId && (
+                    <button
+                      onClick={handleCheckNoteUploadStatus}
+                      disabled={isNoteUploadPolling}
+                      className="text-xs font-medium bg-red-200 hover:bg-red-300 text-red-800 rounded px-2 py-0.5 transition-colors disabled:opacity-50"
+                    >
+                      {isNoteUploadPolling ? 'Checking...' : 'Retry'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
