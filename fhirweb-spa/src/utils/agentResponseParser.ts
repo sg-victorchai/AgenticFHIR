@@ -19,8 +19,8 @@ export function parseAgentResponse(raw: RawAgentResponse): AgentResponse {
     };
   }
 
-  // Extract main response text
-  const text = raw.text || '';
+  // Extract and clean main response text (remove internal tool outputs)
+  const text = cleanAgentResponseText(raw.text || '');
 
   // Extract metadata from headers or HTTP response
   const confidence = extractConfidence(raw);
@@ -41,6 +41,36 @@ export function parseAgentResponse(raw: RawAgentResponse): AgentResponse {
     costBreakdown,
     riskFlags,
   };
+}
+
+/**
+ * Remove internal tool output sections from agent response text
+ * Filters out Tool [fhir_query], Tool [mission_complete], and other internal tool outputs
+ */
+function cleanAgentResponseText(text: string): string {
+  if (!text) return '';
+
+  // Remove "Tool [fhir_query] returned: {...}" sections
+  // Handles multi-line JSON objects
+  let cleaned = text.replace(
+    /Tool \[fhir_query\]\s+returned:\s*\{[\s\S]*?\n\}\s*/g,
+    ''
+  );
+
+  // Remove "Tool [mission_complete] returned: {...}" or just "Tool [mission_complete]" sections
+  cleaned = cleaned.replace(/\s*Tool \[mission_complete\][\s\S]*?(?=\n|$)/g, '');
+
+  // Remove any other Tool [...] sections that might contain JSON or structured data
+  cleaned = cleaned.replace(/\s*Tool \[\w+\]\s+returned:[\s\S]*?\n\}\s*/g, '');
+
+  // Remove trailing JSON blocks (the final mission_complete JSON)
+  cleaned = cleaned.replace(/\s*\{\s*"tool":\s*"mission_complete"[\s\S]*?\}\s*$/g, '');
+
+  // Clean up excessive whitespace and newlines
+  cleaned = cleaned.trim();
+  cleaned = cleaned.replace(/\n\n\n+/g, '\n\n'); // Replace 3+ newlines with 2
+
+  return cleaned;
 }
 
 /**
