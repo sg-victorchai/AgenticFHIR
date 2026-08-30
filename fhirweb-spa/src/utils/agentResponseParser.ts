@@ -66,9 +66,16 @@ function cleanAgentResponseText(text: string): string {
   // Remove any other Tool [...] sections that might contain JSON or structured data
   cleaned = cleaned.replace(/\s*Tool \[\w+\]\s+returned:[\s\S]*?\n\}\s*/g, '');
 
-  // Remove trailing JSON blocks (the final mission_complete JSON)
+  // Remove trailing JSON blocks (the final mission_complete JSON with parameters)
+  // Matches: { "tool": "mission_complete", "parameters": {...} }
   cleaned = cleaned.replace(
-    /\s*\{\s*"tool":\s*"mission_complete"[\s\S]*?\}\s*$/g,
+    /\s*\{\s*"tool"\s*:\s*"mission_complete"[\s\S]*?"parameters"\s*:\s*\{[\s\S]*?\}\s*\}\s*$/g,
+    '',
+  );
+
+  // Also handle if the mission_complete JSON appears earlier in text
+  cleaned = cleaned.replace(
+    /\s*\{\s*"tool"\s*:\s*"mission_complete"[\s\S]*?\}\s*$/g,
     '',
   );
 
