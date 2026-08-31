@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "1561056666993693883"
+    }
+  },
+  "parameters": {
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "fhirwebspa",
+      "metadata": {
+        "description": "Storage account name (3-24 chars, lowercase letters and numbers, globally unique)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastasia",
+      "metadata": {
+        "description": "Azure region"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[parameters('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "supportsHttpsTrafficOnly": false,
+        "allowBlobPublicAccess": true,
+        "minimumTlsVersion": "TLS1_0"
+      }
+    }
+  ],
+  "outputs": {
+    "storageAccountName": {
+      "type": "string",
+      "value": "[parameters('storageAccountName')]"
+    },
+    "webEndpointHttps": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.web]"
+    },
+    "webEndpointHttp": {
+      "type": "string",
+      "value": "[replace(reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.web, 'https://', 'http://')]"
+    }
+  }
+}
