@@ -353,13 +353,18 @@ const QueueRow: React.FC<QueueRowProps> = ({
       <tr
         className={`transition-colors ${expanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
       >
-        <td className="px-4 py-3 text-xs text-gray-500 font-mono">
+        <td className="px-4 py-3 text-xs text-gray-500 font-mono hidden md:table-cell">
           {patientIdentifier}
         </td>
         <td className="px-4 py-3 text-sm font-medium text-gray-800">
-          {patientName}
+          <div className="flex flex-col">
+            <span>{patientName}</span>
+            <span className="text-xs text-gray-500 md:hidden">
+              {patientIdentifier}
+            </span>
+          </div>
         </td>
-        <td className="px-4 py-3 text-sm text-gray-600">
+        <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">
           {getChiefComplaint(encounter)}
         </td>
         <td className="px-4 py-3 text-sm text-gray-500">
@@ -580,7 +585,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                   ].map((h) => (
                     <th
                       key={h}
-                      className={`px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
+                      className={`px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'ID' ? 'hidden md:table-cell' : ''} ${h === 'Chief Complaint' ? 'hidden lg:table-cell' : ''} ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
                     >
                       {h}
                     </th>
@@ -800,26 +805,28 @@ const PatientQueuePage: React.FC = () => {
         </div>
 
         {/* Today / Date Range toggle */}
-        <div className="flex items-center gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-          <div className="flex rounded-md overflow-hidden border border-gray-200 text-sm font-medium shrink-0">
+        <div className="flex flex-col gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <div className="flex rounded-md overflow-hidden border border-gray-200 text-sm font-medium w-full md:w-auto">
             <button
               onClick={() => setModeAndSave('today')}
-              className={`px-4 py-1.5 transition-colors ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`flex-1 md:flex-none px-4 py-1.5 transition-colors ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
               Today
             </button>
             <button
               onClick={() => setModeAndSave('range')}
-              className={`px-4 py-1.5 transition-colors ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`flex-1 md:flex-none px-4 py-1.5 transition-colors ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
               Date Range
             </button>
           </div>
 
           {mode === 'range' && (
-            <>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">From</label>
+            <div className="flex flex-col md:flex-row gap-3 md:items-center">
+              <div className="flex flex-col md:flex-row md:items-center gap-2">
+                <label className="text-xs font-medium text-gray-500">
+                  From:
+                </label>
                 <input
                   type="month"
                   value={fromMonth}
@@ -829,27 +836,27 @@ const PatientQueuePage: React.FC = () => {
                     if (e.target.value > toMonth)
                       setToMonthAndSave(e.target.value);
                   }}
-                  className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full md:w-auto px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">To</label>
+              <div className="flex flex-col md:flex-row md:items-center gap-2">
+                <label className="text-xs font-medium text-gray-500">To:</label>
                 <input
                   type="month"
                   value={toMonth}
                   min={fromMonth}
                   max={currentYearMonth}
                   onChange={(e) => setToMonthAndSave(e.target.value)}
-                  className="px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full md:w-auto px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
 
       {/* Summary chips */}
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {[
           {
             label: 'Awaiting Triage',
@@ -894,9 +901,11 @@ const PatientQueuePage: React.FC = () => {
         ].map((s) => (
           <span
             key={s.label}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${s.cls}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs md:text-sm font-semibold ${s.cls}`}
           >
-            {s.label} <span className="font-bold">{s.count}</span>
+            <span className="hidden md:inline">{s.label}</span>
+            <span className="md:hidden truncate">{s.label.split(' ')[0]}</span>
+            <span className="font-bold">{s.count}</span>
           </span>
         ))}
       </div>

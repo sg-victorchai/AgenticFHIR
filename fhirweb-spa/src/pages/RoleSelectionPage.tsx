@@ -103,6 +103,7 @@ const RoleSelectionPage: React.FC = () => {
     }
 
     if (selected === 'patient') {
+      dispatch(setRole('patient'));
       setShowPatientSelector(true);
       return;
     }
@@ -262,8 +263,8 @@ const RoleSelectionPage: React.FC = () => {
             Care Coordinator
           </h2>
           <p className="text-sm text-gray-500 text-center">
-            Run care-gap agents, track mission status, and review generated
-            care plans
+            Run care-gap agents, track mission status, and review generated care
+            plans
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-amber-600 group-hover:text-amber-800">
             Continue →

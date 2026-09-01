@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
@@ -12,6 +12,7 @@ const Header: React.FC = () => {
     (state: RootState) => state.auth,
   );
   const role = useSelector((state: RootState) => state.ui.role);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -19,17 +20,41 @@ const Header: React.FC = () => {
     navigate('/login');
   };
 
+  const getRoleLabel = () => {
+    if (!role) return '';
+    return role === 'psa'
+      ? 'PSA'
+      : role === 'clinician'
+        ? 'Clinician'
+        : role === 'CARE_COORDINATOR'
+          ? 'Care Coordinator'
+          : 'Patient';
+  };
+
   return (
     <header className="bg-blue-600 shadow-md">
       <div className="container mx-auto px-4 py-3">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center">
-            <Link to="/" className="text-white text-xl font-bold">
+        <div className="flex justify-between items-center gap-3">
+          {/* Left: Logo + Current User */}
+          <div className="flex items-center gap-3">
+            <Link
+              to="/"
+              className="text-white text-lg md:text-xl font-bold whitespace-nowrap"
+            >
               HealthConnect
             </Link>
+            {isAuthenticated && (
+              <span className="text-white text-xs md:text-sm font-medium truncate">
+                {user?.name || 'User'}
+                {role && (
+                  <span className="text-blue-200"> [{getRoleLabel()}]</span>
+                )}
+              </span>
+            )}
           </div>
 
-          <nav className="flex">
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex">
             <ul className="flex space-x-4 text-white items-center">
               <li>
                 <Link to="/" className="hover:text-blue-200 transition-colors">
@@ -52,17 +77,6 @@ const Header: React.FC = () => {
                   Webhooks
                 </Link>
               </li>
-              {role && (
-                <li className="text-blue-200 text-xs border border-blue-400 rounded px-2 py-0.5 capitalize">
-                  {role === 'psa'
-                    ? 'PSA'
-                    : role === 'clinician'
-                      ? 'Clinician'
-                      : role === 'CARE_COORDINATOR'
-                        ? 'Care Coordinator'
-                        : 'Patient'}
-                </li>
-              )}
               {isAuthenticated ? (
                 <>
                   <li>
@@ -81,7 +95,6 @@ const Header: React.FC = () => {
                       Logout
                     </button>
                   </li>
-                  <li className="ml-2 font-semibold">{user?.name || 'User'}</li>
                 </>
               ) : (
                 <li>
@@ -95,6 +108,80 @@ const Header: React.FC = () => {
               )}
             </ul>
           </nav>
+
+          {/* Mobile: Menu Dropdown */}
+          <div className="md:hidden flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="text-white hover:text-blue-200 p-2 rounded transition-colors"
+                title="Menu"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-6 h-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+                  />
+                </svg>
+              </button>
+
+              {/* Dropdown Menu */}
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-blue-700 rounded-lg shadow-lg z-50">
+                  <nav className="flex flex-col">
+                    <Link
+                      to="/"
+                      onClick={() => setMenuOpen(false)}
+                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors rounded-t-lg"
+                    >
+                      Home
+                    </Link>
+                    <Link
+                      to="/events"
+                      onClick={() => setMenuOpen(false)}
+                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                    >
+                      Events
+                    </Link>
+                    <Link
+                      to="/webhooks"
+                      onClick={() => setMenuOpen(false)}
+                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                    >
+                      Webhooks
+                    </Link>
+                    {isAuthenticated && (
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setMenuOpen(false)}
+                        className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
+                      >
+                        Dashboard
+                      </Link>
+                    )}
+                  </nav>
+                </div>
+              )}
+            </div>
+
+            {/* Logout Button */}
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="text-white hover:text-blue-200 px-3 py-2 text-sm font-medium transition-colors"
+              >
+                Logout
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>
