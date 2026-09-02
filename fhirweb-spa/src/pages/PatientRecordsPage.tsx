@@ -2338,23 +2338,14 @@ const PatientRecordsPage: React.FC = () => {
     { skip: !patientId || activeTab !== 'careplan' },
   );
 
-  // Refetch data when filters or sort changes
-  useEffect(() => {
-    if (patientId && (filterValues || sortDir)) {
-      refetchLabDr();
-      refetchRadDr();
-      refetchObs();
-    }
-  }, [filterValues, sortDir, patientId, refetchLabDr, refetchRadDr, refetchObs]);
-
   // Refetch data when note upload completes successfully (instead of full page reload)
   useEffect(() => {
     if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
       const timer = setTimeout(() => {
-        // Refetch the relevant data - lab, rad, and obs are most likely to receive new data from uploads
-        refetchLabDr();
-        refetchRadDr();
-        refetchObs();
+        // Only refetch if queries have been started (have data or error)
+        if (labDrBundle || labDrLoading) refetchLabDr().catch(() => {});
+        if (radDrBundle || radDrLoading) refetchRadDr().catch(() => {});
+        if (obsBundle || obsLoading) refetchObs().catch(() => {});
       }, 1500); // Wait 1.5 seconds before refetching to show the success message
 
       return () => clearTimeout(timer);
