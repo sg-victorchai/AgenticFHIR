@@ -18,6 +18,7 @@ import PsaTriagePage from './pages/clinical/PsaTriagePage';
 import ClinicalConsultPage from './pages/clinical/ClinicalConsultPage';
 import ConsultNoteDetailPage from './pages/clinical/ConsultNoteDetailPage';
 import PatientRecordsPage from './pages/PatientRecordsPage';
+import PatientPortalPage from './pages/PatientPortalPage';
 import CareCoordinatorPage from './pages/CareCoordinatorPage';
 import MissionHistoryPage from './pages/MissionHistoryPage';
 // CRUD components
@@ -56,6 +57,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/queue" element={<PatientQueuePage />} />
           <Route path="/webhooks" element={<WebhookManagementPage />} />
           <Route path="/events" element={<EventMonitorPage />} />
+          <Route path="/patient-portal" element={<PatientPortalPage />} />
 
           {/* Care Coordinator-only routes */}
           <Route

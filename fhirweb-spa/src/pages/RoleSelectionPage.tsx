@@ -5,8 +5,6 @@ import FHIR from 'fhirclient';
 import { setRole } from '../store/slices/uiSlice';
 import { useFHIR } from '../contexts/FHIRContext';
 import { RootState } from '../store';
-import { useSearchPatientsQuery } from '../services/fhir/client';
-import { Bundle, Patient as FHIRPatient } from 'fhir/r5';
 
 const SMART_PATIENT_ID_KEY = 'smartPatientId';
 
@@ -16,48 +14,11 @@ const RoleSelectionPage: React.FC = () => {
   const { isLoading: clientLoading, reinitializeClient } = useFHIR();
   const currentRole = useSelector((state: RootState) => state.ui.role);
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const [showPatientSelector, setShowPatientSelector] = useState(false);
-  const [patientSearchTerm, setPatientSearchTerm] = useState('');
-
-  const patientSearchParams: Record<string, string> = {
-    _count: '20',
-    _offset: '0',
-    ...(patientSearchTerm.trim()
-      ? { 'name:contains': patientSearchTerm.trim() }
-      : {}),
-  };
-
-  const { data: patientBundle, isLoading: patientListLoading } =
-    useSearchPatientsQuery(patientSearchParams, {
-      skip: !showPatientSelector,
-    });
-
-  const patientOptions = (
-    (patientBundle as Bundle<FHIRPatient> | undefined)?.entry ?? []
-  )
-    .filter((entry) => entry.resource?.resourceType === 'Patient')
-    .map((entry) => {
-      const patient = entry.resource as FHIRPatient;
-      const nameObj = patient.name?.[0];
-      const name =
-        nameObj?.text ||
-        [nameObj?.prefix?.join(' '), nameObj?.given?.join(' '), nameObj?.family]
-          .filter(Boolean)
-          .join(' ') ||
-        'Unknown Name';
-
-      return {
-        id: patient.id || '',
-        name,
-        identifier: patient.identifier?.[0]?.value || 'N/A',
-      };
-    })
-    .filter((p) => p.id);
 
   const roleLabelMap = {
     psa: 'Patient Service Assistant',
     clinician: 'Clinician',
-    patient: 'Patient',
+    patient: 'Patient Portal',
     CARE_COORDINATOR: 'Care Coordinator',
   } as const;
 
@@ -90,36 +51,27 @@ const RoleSelectionPage: React.FC = () => {
   ) => {
     if (selected === 'psa') {
       dispatch(setRole('psa'));
-      setShowPatientSelector(false);
       navigate('/patients');
       return;
     }
 
     if (selected === 'clinician') {
       dispatch(setRole('clinician'));
-      setShowPatientSelector(false);
       navigate('/queue');
       return;
     }
 
     if (selected === 'patient') {
       dispatch(setRole('patient'));
-      setShowPatientSelector(true);
+      navigate('/patient-portal');
       return;
     }
 
     if (selected === 'CARE_COORDINATOR') {
       dispatch(setRole('CARE_COORDINATOR'));
-      setShowPatientSelector(false);
       navigate('/care-coordinator');
       return;
     }
-  };
-
-  const handleSelectPatient = (patientId: string) => {
-    sessionStorage.setItem(SMART_PATIENT_ID_KEY, patientId);
-    dispatch(setRole('patient'));
-    navigate(`/patient/${patientId}/records`);
   };
 
   if (clientLoading || isRedirecting) {
@@ -210,35 +162,6 @@ const RoleSelectionPage: React.FC = () => {
           </span>
         </button>
 
-        {/* Patient */}
-        <button
-          onClick={() => handleSelectRole('patient')}
-          className="group flex flex-col items-center p-8 bg-white border-2 border-violet-200 rounded-2xl shadow-sm hover:shadow-md hover:border-violet-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
-        >
-          <div className="w-16 h-16 bg-violet-100 group-hover:bg-violet-200 rounded-full flex items-center justify-center mb-4 transition-colors">
-            <svg
-              className="w-8 h-8 text-violet-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-              />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Patient</h2>
-          <p className="text-sm text-gray-500 text-center">
-            View your queue status and follow your consultation progress
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-600 group-hover:text-violet-800">
-            Continue →
-          </span>
-        </button>
-
         {/* Care Coordinator */}
         <button
           onClick={() => handleSelectRole('CARE_COORDINATOR')}
@@ -270,56 +193,36 @@ const RoleSelectionPage: React.FC = () => {
             Continue →
           </span>
         </button>
-      </div>
 
-      {showPatientSelector && (
-        <div className="w-full max-w-4xl mt-8 bg-white border border-violet-200 rounded-2xl shadow-sm p-6">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">
-              Select Patient Account
-            </h3>
-            <button
-              onClick={() => setShowPatientSelector(false)}
-              className="text-sm text-gray-500 hover:text-gray-700"
+        {/* Patient Portal */}
+        <button
+          onClick={() => handleSelectRole('patient')}
+          className="group flex flex-col items-center p-8 bg-white border-2 border-violet-200 rounded-2xl shadow-sm hover:shadow-md hover:border-violet-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
+        >
+          <div className="w-16 h-16 bg-violet-100 group-hover:bg-violet-200 rounded-full flex items-center justify-center mb-4 transition-colors">
+            <svg
+              className="w-8 h-8 text-violet-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              Close
-            </button>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+              />
+            </svg>
           </div>
-
-          <input
-            type="text"
-            placeholder="Search patient name..."
-            value={patientSearchTerm}
-            onChange={(e) => setPatientSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-violet-300"
-          />
-
-          {patientListLoading && (
-            <p className="text-sm text-gray-500">Loading patient list...</p>
-          )}
-
-          {!patientListLoading && patientOptions.length === 0 && (
-            <p className="text-sm text-gray-500">No patients found.</p>
-          )}
-
-          {!patientListLoading && patientOptions.length > 0 && (
-            <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-lg">
-              {patientOptions.map((patient) => (
-                <button
-                  key={patient.id}
-                  onClick={() => handleSelectPatient(patient.id)}
-                  className="w-full px-4 py-3 text-left hover:bg-violet-50 transition-colors"
-                >
-                  <p className="font-medium text-gray-800">{patient.name}</p>
-                  <p className="text-xs text-gray-500">
-                    ID: {patient.identifier} • Resource ID: {patient.id}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Patient Portal</h2>
+          <p className="text-sm text-gray-500 text-center">
+            View your queue status and follow your consultation progress
+          </p>
+          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-600 group-hover:text-violet-800">
+            Continue →
+          </span>
+        </button>
+      </div>
     </div>
   );
 };
