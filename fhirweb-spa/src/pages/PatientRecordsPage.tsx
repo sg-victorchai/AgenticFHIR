@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import FHIR from 'fhirclient';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
   useGetResourceByIdQuery,
   useGetObservationsByIdsQuery,
-  fhirApi,
 } from '../services/fhir/client';
 import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
@@ -1408,7 +1407,6 @@ const SearchResultCard: React.FC<{
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
   const role = useSelector((state: RootState) => state.ui.role);
-  const dispatch = useDispatch();
   const pollRunIdRef = useRef(0);
   const uploadPollRunIdRef = useRef(0);
 
@@ -2235,7 +2233,7 @@ const PatientRecordsPage: React.FC = () => {
     ...pageOffset,
   };
 
-  const { data: encBundle, isLoading: encLoading } = useSearchByPatientQuery(
+  const { data: encBundle, isLoading: encLoading, refetch: refetchEnc } = useSearchByPatientQuery(
     {
       resourceType: 'Encounter',
       patientId: patientId!,
@@ -2243,7 +2241,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'encounter' },
   );
-  const { data: condBundle, isLoading: condLoading } = useSearchByPatientQuery(
+  const { data: condBundle, isLoading: condLoading, refetch: refetchCond } = useSearchByPatientQuery(
     {
       resourceType: 'Condition',
       patientId: patientId!,
@@ -2251,7 +2249,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'condition' },
   );
-  const { data: obsBundle, isLoading: obsLoading } = useSearchByPatientQuery(
+  const { data: obsBundle, isLoading: obsLoading, refetch: refetchObs } = useSearchByPatientQuery(
     {
       resourceType: 'Observation',
       patientId: patientId!,
@@ -2260,7 +2258,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'observation' },
   );
-  const { data: srBundle, isLoading: srLoading } = useSearchByPatientQuery(
+  const { data: srBundle, isLoading: srLoading, refetch: refetchSr } = useSearchByPatientQuery(
     {
       resourceType: 'ServiceRequest',
       patientId: patientId!,
@@ -2268,7 +2266,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'orders' },
   );
-  const { data: labDrBundle, isLoading: labDrLoading } =
+  const { data: labDrBundle, isLoading: labDrLoading, refetch: refetchLabDr } =
     useSearchByPatientQuery(
       {
         resourceType: 'DiagnosticReport',
@@ -2278,7 +2276,7 @@ const PatientRecordsPage: React.FC = () => {
       },
       { skip: !patientId || activeTab !== 'lab-results' },
     );
-  const { data: radDrBundle, isLoading: radDrLoading } =
+  const { data: radDrBundle, isLoading: radDrLoading, refetch: refetchRadDr } =
     useSearchByPatientQuery(
       {
         resourceType: 'DiagnosticReport',
@@ -2340,31 +2338,34 @@ const PatientRecordsPage: React.FC = () => {
     { skip: !patientId || activeTab !== 'careplan' },
   );
 
-  // Invalidate patient data cache when note upload completes successfully
+  // Refetch all patient data when note upload completes successfully
   useEffect(() => {
     if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
       const timer = setTimeout(() => {
-        // Invalidate all patient-related resource tags so queries refetch with fresh data
-        // This covers all resource types that might be created by harmonizer:
-        // Observation, Condition, Encounter, DiagnosticReport (via Lab/Rad tags), Medication, Procedure, CarePlan
-        dispatch(fhirApi.util.invalidateTags([
-          'Observation',
-          'Condition',
-          'Encounter',
-          { type: 'Patient', id: patientId },
-        ]));
-      }, 1500); // Wait 1.5 seconds before invalidating to show the success message
+        // Refetch all resource queries to load newly created resources
+        // These cover all resource types that harmonizer might create
+        try {
+          refetchEnc().catch(() => {});
+          refetchCond().catch(() => {});
+          refetchObs().catch(() => {});
+          refetchSr().catch(() => {});
+          refetchLabDr().catch(() => {});
+          refetchRadDr().catch(() => {});
+        } catch (error) {
+          console.error('Error refetching after upload:', error);
+        }
+      }, 1500); // Wait 1.5 seconds before refetching to show the success message
 
       return () => clearTimeout(timer);
     }
-  }, [noteUploadSummary, patientId, dispatch]);
+  }, [noteUploadSummary, refetchEnc, refetchCond, refetchObs, refetchSr, refetchLabDr, refetchRadDr]);
 
-  // Clear upload summary after showing success message (5 seconds total: 1.5s before invalidate + 3.5s after)
+  // Clear upload summary after showing success message (but keep panel open for user to manually close)
   useEffect(() => {
     if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
       const timer = setTimeout(() => {
         setNoteUploadSummary(null);
-        setSelectedNoteFile(null);
+        // Don't clear selectedNoteFile or close panel - let user do that manually
       }, 5000);
 
       return () => clearTimeout(timer);
