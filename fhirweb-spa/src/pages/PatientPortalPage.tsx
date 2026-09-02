@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Patient as FHIRPatient } from 'fhir/r5';
-import { useSearchPatientsQuery } from '../services/fhir/client';
+import { Bundle, Patient as FHIRPatient } from 'fhir/r5';
+import {
+  useSearchPatientsQuery,
+  useGetNextPageMutation,
+  useGetPreviousPageMutation,
+  useGetFirstPageMutation,
+  useGetLastPageMutation,
+} from '../services/fhir/client';
 import { setRole } from '../store/slices/uiSlice';
+import { Pagination } from '../components/common/Pagination';
 
 interface PatientOption {
   id: string;
@@ -16,19 +23,89 @@ const PatientPortalPage: React.FC = () => {
   const dispatch = useDispatch();
   const [searchTerm, setSearchTerm] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [currentBundle, setCurrentBundle] = useState<
+    Bundle<FHIRPatient> | undefined
+  >();
 
-  const searchParams: Record<string, string> = searchTerm.trim()
-    ? { 'name:contains': searchTerm.trim(), _count: '20', _offset: '0' }
-    : { _count: '20', _offset: '0' };
+  // Initial search params - load all patients
+  const initialSearchParams: Record<string, string> = {
+    _count: '10',
+    _offset: '0',
+  };
 
+  // Dynamic search params - when user searches
+  const searchParams: Record<string, string> = hasSearched && searchTerm.trim()
+    ? { 'name:contains': searchTerm.trim(), _count: '10', _offset: '0' }
+    : initialSearchParams;
+
+  // Query for patient list
   const { data: patientBundle, isLoading: patientListLoading } =
-    useSearchPatientsQuery(searchParams, {
-      skip: !hasSearched || !searchTerm.trim(),
-    });
+    useSearchPatientsQuery(searchParams);
+
+  // Update current bundle when results change
+  useEffect(() => {
+    if (patientBundle) {
+      setCurrentBundle(patientBundle);
+    }
+  }, [patientBundle]);
+
+  // Pagination hooks
+  const [triggerNextPage, { isLoading: isLoadingNext }] =
+    useGetNextPageMutation();
+  const [triggerPreviousPage, { isLoading: isLoadingPrevious }] =
+    useGetPreviousPageMutation();
+  const [triggerFirstPage, { isLoading: isLoadingFirst }] =
+    useGetFirstPageMutation();
+  const [triggerLastPage, { isLoading: isLoadingLast }] =
+    useGetLastPageMutation();
+
+  const isPaginationLoading =
+    isLoadingNext || isLoadingPrevious || isLoadingFirst || isLoadingLast;
+
+  const handleNextPage = async () => {
+    if (currentBundle) {
+      const result = await triggerNextPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRPatient>);
+      }
+    }
+  };
+
+  const handlePreviousPage = async () => {
+    if (currentBundle) {
+      const result = await triggerPreviousPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRPatient>);
+      }
+    }
+  };
+
+  const handleFirstPage = async () => {
+    if (currentBundle) {
+      const result = await triggerFirstPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRPatient>);
+      }
+    }
+  };
+
+  const handleLastPage = async () => {
+    if (currentBundle) {
+      const result = await triggerLastPage(currentBundle);
+      if ('data' in result) {
+        setCurrentBundle(result.data as Bundle<FHIRPatient>);
+      }
+    }
+  };
+
+  const handleGoToPage = async (_pageNumber: number) => {
+    // Go to page is not implemented for this simple flow
+    // The pagination component will show navigation controls
+  };
 
   const patientOptions: PatientOption[] = React.useMemo(() => {
-    if (!patientBundle?.entry) return [];
-    return patientBundle.entry
+    if (!currentBundle?.entry) return [];
+    return currentBundle.entry
       .filter((entry) => entry.resource?.resourceType === 'Patient')
       .map((entry) => {
         const patient = entry.resource as FHIRPatient;
@@ -47,13 +124,18 @@ const PatientPortalPage: React.FC = () => {
         };
       })
       .filter((p) => p.id);
-  }, [patientBundle]);
+  }, [currentBundle]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchTerm.trim()) {
       setHasSearched(true);
     }
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setHasSearched(false);
   };
 
   const handleSelectPatient = (patientId: string) => {
@@ -68,7 +150,7 @@ const PatientPortalPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 to-violet-100 px-4 py-8">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -99,45 +181,75 @@ const PatientPortalPage: React.FC = () => {
             >
               Search
             </button>
+            {hasSearched && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Clear
+              </button>
+            )}
           </form>
         </div>
 
-        {/* Results */}
-        {hasSearched && (
-          <div className="bg-white rounded-2xl shadow-md p-6">
+        {/* Results / Initial List */}
+        <div className="bg-white rounded-2xl shadow-md p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-700">
+              {hasSearched ? `Search Results (${patientOptions.length})` : 'All Patients'}
+            </h3>
             {patientListLoading && (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600" />
-              </div>
-            )}
-
-            {!patientListLoading && patientOptions.length === 0 && (
-              <p className="text-center text-gray-500 py-8">
-                {searchTerm.trim() ? 'No patient records found.' : 'Enter a name to search.'}
-              </p>
-            )}
-
-            {!patientListLoading && patientOptions.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="font-semibold text-gray-700 mb-4">
-                  Found {patientOptions.length} patient{patientOptions.length !== 1 ? 's' : ''}:
-                </h3>
-                <div className="divide-y divide-gray-200">
-                  {patientOptions.map((patient) => (
-                    <button
-                      key={patient.id}
-                      onClick={() => handleSelectPatient(patient.id)}
-                      className="w-full px-4 py-4 text-left hover:bg-violet-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-400"
-                    >
-                      <p className="font-medium text-gray-800">{patient.name}</p>
-                      <p className="text-sm text-gray-500 mt-1">ID: {patient.identifier}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-violet-600" />
             )}
           </div>
-        )}
+
+          {patientListLoading && patientOptions.length === 0 && (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600" />
+            </div>
+          )}
+
+          {!patientListLoading && patientOptions.length === 0 && (
+            <p className="text-center text-gray-500 py-8">
+              {hasSearched && searchTerm.trim()
+                ? 'No patient records found.'
+                : 'No patients available.'}
+            </p>
+          )}
+
+          {!patientListLoading && patientOptions.length > 0 && (
+            <>
+              <div className="divide-y divide-gray-200">
+                {patientOptions.map((patient) => (
+                  <button
+                    key={patient.id}
+                    onClick={() => handleSelectPatient(patient.id)}
+                    className="w-full px-4 py-4 text-left hover:bg-violet-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-400"
+                  >
+                    <p className="font-medium text-gray-800">{patient.name}</p>
+                    <p className="text-sm text-gray-500 mt-1">ID: {patient.identifier}</p>
+                  </button>
+                ))}
+              </div>
+              
+              {/* Pagination Controls */}
+              {currentBundle && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <Pagination
+                    bundle={currentBundle}
+                    onFirstPage={handleFirstPage}
+                    onPreviousPage={handlePreviousPage}
+                    onNextPage={handleNextPage}
+                    onLastPage={handleLastPage}
+                    onGoToPage={handleGoToPage}
+                    isLoading={isPaginationLoading}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
