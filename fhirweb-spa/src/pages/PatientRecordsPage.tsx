@@ -2239,7 +2239,7 @@ const PatientRecordsPage: React.FC = () => {
       patientId: patientId!,
       extraParams: encExtraParams,
     },
-    { skip: !patientId || activeTab !== 'encounter' },
+    { skip: !patientId },
   );
   const { data: condBundle, isLoading: condLoading, refetch: refetchCond } = useSearchByPatientQuery(
     {
@@ -2247,7 +2247,7 @@ const PatientRecordsPage: React.FC = () => {
       patientId: patientId!,
       extraParams: condExtraParams,
     },
-    { skip: !patientId || activeTab !== 'condition' },
+    { skip: !patientId },
   );
   const { data: obsBundle, isLoading: obsLoading, refetch: refetchObs } = useSearchByPatientQuery(
     {
@@ -2256,7 +2256,7 @@ const PatientRecordsPage: React.FC = () => {
       extraParams: obsExtraParams,
       customHeaders: { 'x-api-repository': 'ALL' },
     },
-    { skip: !patientId || activeTab !== 'observation' },
+    { skip: !patientId },
   );
   const { data: srBundle, isLoading: srLoading, refetch: refetchSr } = useSearchByPatientQuery(
     {
@@ -2264,7 +2264,7 @@ const PatientRecordsPage: React.FC = () => {
       patientId: patientId!,
       extraParams: srExtraParams,
     },
-    { skip: !patientId || activeTab !== 'orders' },
+    { skip: !patientId },
   );
   const { data: labDrBundle, isLoading: labDrLoading, refetch: refetchLabDr } =
     useSearchByPatientQuery(
@@ -2274,7 +2274,7 @@ const PatientRecordsPage: React.FC = () => {
         extraParams: labDrExtraParams,
         customHeaders: { 'x-api-repository': 'ALL' },
       },
-      { skip: !patientId || activeTab !== 'lab-results' },
+      { skip: !patientId },
     );
   const { data: radDrBundle, isLoading: radDrLoading, refetch: refetchRadDr } =
     useSearchByPatientQuery(
@@ -2283,7 +2283,7 @@ const PatientRecordsPage: React.FC = () => {
         patientId: patientId!,
         extraParams: radDrExtraParams,
       },
-      { skip: !patientId || activeTab !== 'rad-report' },
+      { skip: !patientId },
     );
   const { data: medReqBundle, isLoading: medReqLoading } =
     useSearchByPatientQuery(
@@ -2292,10 +2292,7 @@ const PatientRecordsPage: React.FC = () => {
         patientId: patientId!,
         extraParams: medReqExtraParams,
       },
-      {
-        skip:
-          !patientId || activeTab !== 'medication' || medSubTab !== 'request',
-      },
+      { skip: !patientId },
     );
   const { data: medDispBundle, isLoading: medDispLoading } =
     useSearchByPatientQuery(
@@ -2304,10 +2301,7 @@ const PatientRecordsPage: React.FC = () => {
         patientId: patientId!,
         extraParams: medDispExtraParams,
       },
-      {
-        skip:
-          !patientId || activeTab !== 'medication' || medSubTab !== 'dispense',
-      },
+      { skip: !patientId },
     );
   const { data: medStmtBundle, isLoading: medStmtLoading } =
     useSearchByPatientQuery(
@@ -2316,10 +2310,7 @@ const PatientRecordsPage: React.FC = () => {
         patientId: patientId!,
         extraParams: medStmtExtraParams,
       },
-      {
-        skip:
-          !patientId || activeTab !== 'medication' || medSubTab !== 'statement',
-      },
+      { skip: !patientId },
     );
   const { data: procBundle, isLoading: procLoading } = useSearchByPatientQuery(
     {
@@ -2327,7 +2318,7 @@ const PatientRecordsPage: React.FC = () => {
       patientId: patientId!,
       extraParams: procExtraParams,
     },
-    { skip: !patientId || activeTab !== 'procedure' },
+    { skip: !patientId },
   );
   const { data: cpBundle, isLoading: cpLoading } = useSearchByPatientQuery(
     {
@@ -2335,7 +2326,7 @@ const PatientRecordsPage: React.FC = () => {
       patientId: patientId!,
       extraParams: cpExtraParams,
     },
-    { skip: !patientId || activeTab !== 'careplan' },
+    { skip: !patientId },
   );
 
   // Refetch all patient data when note upload completes successfully
