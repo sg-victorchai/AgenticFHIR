@@ -35,6 +35,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hitlReason, setHitlReason] = useState<string | null>(null);
   const [currentMissionId, setCurrentMissionId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -172,6 +173,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     if (!isOpen) {
       setConversations([]);
       setError(null);
+      setHitlReason(null);
       setCurrentMissionId(null);
       setIsDragging(false);
       if (modalRef.current) {
@@ -383,6 +385,15 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           return;
         }
 
+        if (mission.status === 'AWAITING_INTERVENTION') {
+          clearInterval(pollIntervalRef.current);
+          // HITL (Human-In-The-Loop) triggered - assessment suspended for human review
+          const reason = mission.failureReason || 'Assessment under review';
+          setHitlReason(reason);
+          setLoading(false);
+          return;
+        }
+
         if (pollCount >= maxPolls) {
           clearInterval(pollIntervalRef.current);
           setError('Request timed out. Please try again.');
@@ -411,6 +422,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     setInput('');
     setLoading(true);
     setError(null);
+    setHitlReason(null);
 
     try {
       const mission = await submitMissionRequest(message);
@@ -533,6 +545,25 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
             <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        {hitlReason && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div className="flex gap-2">
+              <div className="text-amber-600 mt-0.5">⏳</div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-900">Assessment Under Review</p>
+                <p className="text-sm text-amber-800 mt-1">
+                  Your assessment needs a quick human review before it can be shared.
+                </p>
+                {hitlReason !== 'Assessment under review' && (
+                  <p className="text-xs text-amber-700 mt-2 italic">
+                    Reason: {hitlReason}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
