@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import FHIR from 'fhirclient';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
   useGetResourceByIdQuery,
   useGetObservationsByIdsQuery,
+  fhirApi,
 } from '../services/fhir/client';
 import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
@@ -1407,6 +1408,7 @@ const SearchResultCard: React.FC<{
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
   const role = useSelector((state: RootState) => state.ui.role);
+  const dispatch = useDispatch();
   const pollRunIdRef = useRef(0);
   const uploadPollRunIdRef = useRef(0);
 
@@ -2249,7 +2251,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'condition' },
   );
-  const { data: obsBundle, isLoading: obsLoading, refetch: refetchObs } = useSearchByPatientQuery(
+  const { data: obsBundle, isLoading: obsLoading } = useSearchByPatientQuery(
     {
       resourceType: 'Observation',
       patientId: patientId!,
@@ -2266,7 +2268,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'orders' },
   );
-  const { data: labDrBundle, isLoading: labDrLoading, refetch: refetchLabDr } =
+  const { data: labDrBundle, isLoading: labDrLoading } =
     useSearchByPatientQuery(
       {
         resourceType: 'DiagnosticReport',
@@ -2276,7 +2278,7 @@ const PatientRecordsPage: React.FC = () => {
       },
       { skip: !patientId || activeTab !== 'lab-results' },
     );
-  const { data: radDrBundle, isLoading: radDrLoading, refetch: refetchRadDr } =
+  const { data: radDrBundle, isLoading: radDrLoading } =
     useSearchByPatientQuery(
       {
         resourceType: 'DiagnosticReport',
@@ -2338,21 +2340,26 @@ const PatientRecordsPage: React.FC = () => {
     { skip: !patientId || activeTab !== 'careplan' },
   );
 
-  // Refetch data when note upload completes successfully (instead of full page reload)
+  // Invalidate patient data cache when note upload completes successfully
   useEffect(() => {
     if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
       const timer = setTimeout(() => {
-        // Only refetch if queries have been started (have data or error)
-        if (labDrBundle || labDrLoading) refetchLabDr().catch(() => {});
-        if (radDrBundle || radDrLoading) refetchRadDr().catch(() => {});
-        if (obsBundle || obsLoading) refetchObs().catch(() => {});
-      }, 1500); // Wait 1.5 seconds before refetching to show the success message
+        // Invalidate all patient-related resource tags so queries refetch with fresh data
+        // This covers all resource types that might be created by harmonizer:
+        // Observation, Condition, Encounter, DiagnosticReport (via Lab/Rad tags), Medication, Procedure, CarePlan
+        dispatch(fhirApi.util.invalidateTags([
+          'Observation',
+          'Condition',
+          'Encounter',
+          { type: 'Patient', id: patientId },
+        ]));
+      }, 1500); // Wait 1.5 seconds before invalidating to show the success message
 
       return () => clearTimeout(timer);
     }
-  }, [noteUploadSummary, refetchLabDr, refetchRadDr, refetchObs]);
+  }, [noteUploadSummary, patientId, dispatch]);
 
-  // Clear upload summary after showing success message (5 seconds total: 1.5s before refetch + 3.5s after)
+  // Clear upload summary after showing success message (5 seconds total: 1.5s before invalidate + 3.5s after)
   useEffect(() => {
     if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
       const timer = setTimeout(() => {
