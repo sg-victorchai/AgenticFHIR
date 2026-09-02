@@ -4148,7 +4148,7 @@ const PatientRecordsPage: React.FC = () => {
                   </button>
                 )}
 
-                {role === 'clinician' && (
+                {(role === 'clinician' || role === 'patient') && (
                   <button
                     onClick={() => {
                       setShowClinicianUpload((s) => !s);
@@ -4425,7 +4425,7 @@ const PatientRecordsPage: React.FC = () => {
         </div>
 
         {/* Resize handle — Desktop only */}
-        {((role === 'clinician' && showClinicianUpload) ||
+        {(((role === 'clinician' || role === 'patient') && showClinicianUpload) ||
           (role === 'patient' && showAgentModal)) && (
           <div
             onMouseDown={handleMouseDown}
@@ -4436,13 +4436,12 @@ const PatientRecordsPage: React.FC = () => {
         )}
 
         {/* Right side: Upload panel — Desktop side panel, Mobile bottom sheet */}
-        {role === 'clinician' && showClinicianUpload && (
+        {((role === 'clinician' || role === 'patient') && showClinicianUpload) && (
           <div
-            className="md:bg-emerald-50 md:border-l md:border-emerald-200 md:overflow-auto md:shrink-0
+            className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
               w-screen md:w-auto h-[60vh] md:h-auto max-h-screen z-40 md:z-auto
-              bg-white md:bg-emerald-50 border-t md:border-t-0 md:border-l border-gray-200 md:border-emerald-200
-              rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
+              border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
             style={{
               ...(!window.matchMedia('(min-width: 768px)').matches
                 ? {}
@@ -4450,23 +4449,23 @@ const PatientRecordsPage: React.FC = () => {
             }}
           >
             {/* Mobile drag handle */}
-            <div className="md:hidden flex justify-center py-2 sticky top-0 bg-white border-b border-gray-200">
-              <div className="w-12 h-1 bg-gray-300 rounded-full" />
+            <div className="md:hidden flex justify-center py-2 sticky top-0 bg-emerald-50 border-b border-emerald-200">
+              <div className="w-12 h-1 bg-emerald-300 rounded-full" />
             </div>
 
-            <div className="sticky top-0 md:top-0 bg-white md:bg-emerald-50 border-b border-gray-200 md:border-emerald-200 p-4 z-10 flex items-start justify-between gap-2">
+            <div className="sticky top-0 md:top-0 bg-emerald-50 border-b border-emerald-200 p-4 z-10 flex items-start justify-between gap-2">
               <div className="flex-1">
-                <h2 className="text-sm font-semibold text-gray-900 md:text-emerald-900">
+                <h2 className="text-sm font-semibold text-emerald-900">
                   Upload Scanned Clinical Notes
                 </h2>
-                <p className="text-xs text-gray-600 md:text-emerald-800 mt-1">
+                <p className="text-xs text-emerald-800 mt-1">
                   Select a scanned file (PDF/image) to attach as a patient
                   clinical note.
                 </p>
               </div>
               <button
                 onClick={() => setShowClinicianUpload(false)}
-                className="shrink-0 text-gray-600 md:text-emerald-600 hover:text-gray-800 md:hover:text-emerald-800 hover:bg-gray-100 md:hover:bg-emerald-100 rounded p-1 transition-colors"
+                className="shrink-0 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
                 title="Close upload panel"
               >
                 <svg
@@ -4497,32 +4496,32 @@ const PatientRecordsPage: React.FC = () => {
                   onChange={(e) =>
                     setSelectedNoteFile(e.target.files?.[0] ?? null)
                   }
-                  className="text-xs text-gray-700 file:mr-2 file:px-2 file:py-1 file:border file:border-gray-300 md:file:border-emerald-300 file:rounded file:bg-white file:text-gray-700 md:file:text-emerald-700 file:cursor-pointer file:text-xs"
+                  className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
                 />
                 <button
                   type="submit"
                   disabled={!selectedNoteFile || isUploadingNotes}
-                  className="w-full px-3 py-2 text-xs font-medium bg-blue-600 md:bg-emerald-600 text-white rounded-lg hover:bg-blue-700 md:hover:bg-emerald-700 disabled:opacity-50"
+                  className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
                 </button>
               </form>
 
               {selectedNoteFile && (
-                <p className="text-xs text-gray-700 md:text-emerald-700 bg-gray-100 md:bg-emerald-100 border border-gray-200 md:border-emerald-200 rounded px-2 py-1.5">
+                <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
                   {selectedNoteFile.name}
                 </p>
               )}
 
               {noteUploadMessage && (
-                <div className="text-xs text-gray-800 md:text-emerald-800 bg-gray-100 md:bg-emerald-100 border border-gray-200 md:border-emerald-200 rounded-lg px-2 py-1.5">
+                <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
                   {noteUploadMessage}
                 </div>
               )}
 
               {noteUploadJobId && noteUploadJobStatus && (
-                <div className="text-xs text-gray-700 bg-white border border-gray-200 md:border-emerald-200 rounded-lg px-2 py-1.5">
-                  <p className="font-medium text-gray-800 mb-1">
+                <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
+                  <p className="font-medium text-emerald-800 mb-1">
                     Job: {noteUploadJobId.substring(0, 12)}...
                   </p>
                   <div className="flex flex-wrap items-center gap-1">
@@ -4542,7 +4541,7 @@ const PatientRecordsPage: React.FC = () => {
                           <span
                             className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
                               active || reached
-                                ? 'bg-blue-100 md:bg-emerald-100 text-blue-700 md:text-emerald-700 border-blue-300 md:border-emerald-300'
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
                                 : 'bg-gray-100 text-gray-500 border-gray-300'
                             }`}
                           >
@@ -4598,13 +4597,13 @@ const PatientRecordsPage: React.FC = () => {
               )}
 
               {noteUploadSummary && (
-                <div className="text-xs bg-blue-50 md:bg-indigo-50 border border-blue-200 md:border-indigo-200 rounded-lg px-2 py-1.5 text-blue-900 md:text-indigo-900">
+                <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 text-emerald-900">
                   <p className="font-medium">Summary</p>
                   <p className="mt-0.5">
                     Status: {noteUploadSummary.status || '—'}
                   </p>
                   {noteUploadSummary.summary && (
-                    <pre className="mt-0.5 text-xs bg-white border border-blue-100 md:border-indigo-100 rounded p-1 overflow-auto max-h-32 whitespace-pre-wrap break-words">
+                    <pre className="mt-0.5 text-xs bg-white border border-emerald-100 rounded p-1 overflow-auto max-h-32 whitespace-pre-wrap break-words">
                       {toDisplayJson(noteUploadSummary.summary)}
                     </pre>
                   )}
@@ -4632,11 +4631,10 @@ const PatientRecordsPage: React.FC = () => {
         {/* Right side: Ask AI panel — Desktop side panel, Mobile bottom sheet */}
         {role === 'patient' && showAgentModal && (
           <div
-            className="md:bg-indigo-50 md:border-l md:border-indigo-200 md:overflow-auto md:shrink-0
+            className="bg-indigo-50 border-l border-indigo-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
               w-screen md:w-auto h-[60vh] md:h-auto max-h-screen z-40 md:z-auto
-              bg-white md:bg-indigo-50 border-t md:border-t-0 md:border-l border-gray-200 md:border-indigo-200
-              rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
+              border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
             style={{
               ...(!window.matchMedia('(min-width: 768px)').matches
                 ? {}
@@ -4644,22 +4642,22 @@ const PatientRecordsPage: React.FC = () => {
             }}
           >
             {/* Mobile drag handle */}
-            <div className="md:hidden flex justify-center py-2 sticky top-0 bg-white border-b border-gray-200">
-              <div className="w-12 h-1 bg-gray-300 rounded-full" />
+            <div className="md:hidden flex justify-center py-2 sticky top-0 bg-indigo-50 border-b border-indigo-200">
+              <div className="w-12 h-1 bg-indigo-300 rounded-full" />
             </div>
 
-            <div className="sticky top-0 md:top-0 bg-white md:bg-indigo-50 border-b border-gray-200 md:border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
+            <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
               <div className="flex-1">
-                <h2 className="text-sm font-semibold text-gray-900 md:text-indigo-900">
+                <h2 className="text-sm font-semibold text-indigo-900">
                   Ask About My Health Conditions
                 </h2>
-                <p className="text-xs text-gray-600 md:text-indigo-800 mt-1">
+                <p className="text-xs text-indigo-800 mt-1">
                   Chat with AI to get health insights based on your records.
                 </p>
               </div>
               <button
                 onClick={() => setShowAgentModal(false)}
-                className="shrink-0 text-gray-600 md:text-indigo-600 hover:text-gray-800 md:hover:text-indigo-800 hover:bg-gray-100 md:hover:bg-indigo-100 rounded p-1 transition-colors"
+                className="shrink-0 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
                 title="Close AI panel"
               >
                 <svg
