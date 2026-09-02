@@ -1524,19 +1524,6 @@ const PatientRecordsPage: React.FC = () => {
     }
   }, [isResizing]);
 
-  // Auto-refresh page when note upload completes successfully
-  useEffect(() => {
-    if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
-      // Save current tab before reload so it can be restored
-      sessionStorage.setItem('activeTab', activeTab);
-      const timer = setTimeout(() => {
-        window.location.reload();
-      }, 2000); // Wait 2 seconds before refreshing to show the success message
-
-      return () => clearTimeout(timer);
-    }
-  }, [noteUploadSummary, activeTab]);
-
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -2262,7 +2249,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'condition' },
   );
-  const { data: obsBundle, isLoading: obsLoading } = useSearchByPatientQuery(
+  const { data: obsBundle, isLoading: obsLoading, refetch: refetchObs } = useSearchByPatientQuery(
     {
       resourceType: 'Observation',
       patientId: patientId!,
@@ -2279,7 +2266,7 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'orders' },
   );
-  const { data: labDrBundle, isLoading: labDrLoading } =
+  const { data: labDrBundle, isLoading: labDrLoading, refetch: refetchLabDr } =
     useSearchByPatientQuery(
       {
         resourceType: 'DiagnosticReport',
@@ -2289,7 +2276,7 @@ const PatientRecordsPage: React.FC = () => {
       },
       { skip: !patientId || activeTab !== 'lab-results' },
     );
-  const { data: radDrBundle, isLoading: radDrLoading } =
+  const { data: radDrBundle, isLoading: radDrLoading, refetch: refetchRadDr } =
     useSearchByPatientQuery(
       {
         resourceType: 'DiagnosticReport',
@@ -2350,6 +2337,41 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId || activeTab !== 'careplan' },
   );
+
+  // Refetch data when filters or sort changes
+  useEffect(() => {
+    if (patientId && (filterValues || sortDir)) {
+      refetchLabDr();
+      refetchRadDr();
+      refetchObs();
+    }
+  }, [filterValues, sortDir, patientId, refetchLabDr, refetchRadDr, refetchObs]);
+
+  // Refetch data when note upload completes successfully (instead of full page reload)
+  useEffect(() => {
+    if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
+      const timer = setTimeout(() => {
+        // Refetch the relevant data - lab, rad, and obs are most likely to receive new data from uploads
+        refetchLabDr();
+        refetchRadDr();
+        refetchObs();
+      }, 1500); // Wait 1.5 seconds before refetching to show the success message
+
+      return () => clearTimeout(timer);
+    }
+  }, [noteUploadSummary, refetchLabDr, refetchRadDr, refetchObs]);
+
+  // Clear upload summary after showing success message (5 seconds total: 1.5s before refetch + 3.5s after)
+  useEffect(() => {
+    if (noteUploadSummary && noteUploadSummary.status !== 'FAILED') {
+      const timer = setTimeout(() => {
+        setNoteUploadSummary(null);
+        setSelectedNoteFile(null);
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [noteUploadSummary]);
 
   // ── Resource extraction ──
   const encounters = (encBundle?.entry ?? [])
