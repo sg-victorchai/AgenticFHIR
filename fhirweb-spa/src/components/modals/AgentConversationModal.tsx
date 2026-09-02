@@ -74,6 +74,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
     const summaryText =
       (typeof parsedResult?.summary === 'string' && parsedResult.summary) ||
+      (typeof parsedResult?.parameters?.summary === 'string' && parsedResult.parameters.summary) ||
       (typeof asObject.summary === 'string' && asObject.summary) ||
       (typeof asObject.message === 'string' && asObject.message) ||
       undefined;
