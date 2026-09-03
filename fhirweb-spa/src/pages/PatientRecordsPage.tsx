@@ -4848,7 +4848,7 @@ const PatientRecordsPage: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
                   </svg>
                 </div>
-                {/* Filters Button - Icon only */}
+                {/* Filters Button - Icon only (Azure DevOps style) */}
                 <button
                   onClick={() => setShowFilter((s) => !s)}
                   className={`shrink-0 px-2 py-1.5 rounded border transition-colors flex items-center justify-center ${
@@ -4869,7 +4869,7 @@ const PatientRecordsPage: React.FC = () => {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                      d="M4 6h16M6 12h12M9 18h6"
                     />
                   </svg>
                 </button>
@@ -4897,7 +4897,7 @@ const PatientRecordsPage: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Filters Button */}
+                {/* Filters Button (Azure DevOps style) */}
                 <button
                   onClick={() => setShowFilter((s) => !s)}
                   className={`shrink-0 text-xs px-3 py-1.5 rounded border font-medium transition-colors flex items-center gap-1 ${
@@ -4917,7 +4917,7 @@ const PatientRecordsPage: React.FC = () => {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                      d="M4 6h16M6 12h12M9 18h6"
                     />
                   </svg>
                   {showFilter ? 'Hide Filters' : 'Filters'}
