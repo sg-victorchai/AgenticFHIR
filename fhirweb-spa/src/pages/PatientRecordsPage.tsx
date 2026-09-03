@@ -2682,16 +2682,19 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-gray-500 text-xs">Category</span>
-                      <p className="text-gray-800 font-medium mt-1">
+                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
                         {cond.category?.[0]?.coding?.[0]?.display || cond.category?.[0]?.text || '—'}
                       </p>
                     </div>
                     <div>
-                      <span className="text-gray-500 text-xs">Last Updated</span>
+                      <span className="text-gray-500 text-xs">Verification</span>
                       <p className="text-gray-800 font-medium mt-1">
-                        {fmt(cond.meta?.lastUpdated)}
+                        {cond.verificationStatus?.coding?.[0]?.code || '—'}
                       </p>
                     </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-500">Last Updated: {fmt(cond.meta?.lastUpdated)}</p>
                   </div>
                 </div>
                 {expandedId === cond.id && (
@@ -2904,8 +2907,14 @@ const PatientRecordsPage: React.FC = () => {
                       </div>
                     </div>
                     <div>
+                      <span className="text-gray-500 text-xs">Type</span>
+                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
+                        {enc.type?.[0]?.text || enc.class?.[0]?.coding?.[0]?.display || '—'}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
                       <span className="text-gray-500 text-xs">Chief Complaint</span>
-                      <p className="text-gray-800 font-medium mt-1">
+                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
                         {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
                       </p>
                     </div>
@@ -3214,12 +3223,10 @@ const PatientRecordsPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-gray-500 text-xs">Value</span>
-                      <p className="text-gray-800 font-medium mt-1">
-                        {obs.valueQuantity
-                          ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
-                          : obs.valueString || obs.valueCodeableConcept?.coding?.[0]?.display || obs.valueCodeableConcept?.text || '—'}
-                      </p>
+                      <span className="text-gray-500 text-xs">Status</span>
+                      <div className="mt-1">
+                        <StatusBadge status={obs.status} />
+                      </div>
                     </div>
                     <div>
                       <span className="text-gray-500 text-xs">Interpretation</span>
@@ -3236,18 +3243,17 @@ const PatientRecordsPage: React.FC = () => {
                         })()}
                       </div>
                     </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Category</span>
-                      <p className="text-gray-800 font-medium mt-1">
-                        {obs.category?.[0]?.coding?.[0]?.display || obs.category?.[0]?.text || '—'}
+                    <div className="col-span-2">
+                      <span className="text-gray-500 text-xs">Value</span>
+                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
+                        {obs.valueQuantity
+                          ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
+                          : obs.valueString || obs.valueCodeableConcept?.coding?.[0]?.display || obs.valueCodeableConcept?.text || '—'}
                       </p>
                     </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Status</span>
-                      <div className="mt-1">
-                        <StatusBadge status={obs.status} />
-                      </div>
-                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-500">Last Updated: {fmt(obs.meta?.lastUpdated)}</p>
                   </div>
                 </div>
                 {expandedId === obs.id && (
