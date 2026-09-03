@@ -4827,6 +4827,7 @@ const PatientRecordsPage: React.FC = () => {
                       setActiveTab(e.target.value as TabId);
                       setExpandedId(null);
                       resetSortFilter();
+                      setShowFilter(false);
                     }}
                     className="w-full px-2 py-1.5 pr-7 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
                   >
