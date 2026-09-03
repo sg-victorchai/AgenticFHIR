@@ -1201,18 +1201,18 @@ const FilterPanel: React.FC<{
   const set = (key: string, val: string) => onChange({ ...values, [key]: val });
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-3">
-      <div className="flex flex-wrap gap-3 items-end justify-end">
+      <div className="flex flex-col md:flex-row md:flex-wrap gap-3 items-start md:items-end md:justify-end">
         {filters.map((f) => (
-          <div key={f.key} className="flex flex-col gap-1">
+          <div key={f.key} className="flex flex-col gap-1 w-full md:w-auto">
             <label className="text-xs font-medium text-gray-600">
               {f.label}
             </label>
             {f.type === 'date' && (
-              <div className="flex gap-1">
+              <div className="flex gap-1 w-full md:w-auto">
                 <select
                   value={values[`${f.key}_op`] || ''}
                   onChange={(e) => set(`${f.key}_op`, e.target.value)}
-                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white"
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white flex-1 md:flex-none"
                 >
                   <option value="">Any</option>
                   <option value="ge">After</option>
@@ -1223,7 +1223,7 @@ const FilterPanel: React.FC<{
                   type="date"
                   value={values[`${f.key}_val`] || ''}
                   onChange={(e) => set(`${f.key}_val`, e.target.value)}
-                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white"
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white flex-1 md:flex-none"
                 />
               </div>
             )}
@@ -1247,14 +1247,14 @@ const FilterPanel: React.FC<{
                 value={values[f.key] || ''}
                 onChange={(e) => set(f.key, e.target.value)}
                 placeholder="contains…"
-                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white w-36"
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white w-full md:w-36"
               />
             )}
           </div>
         ))}
         <button
           onClick={() => onChange({})}
-          className="text-xs px-2 py-1 border border-red-200 text-red-500 hover:text-red-700 hover:border-red-400 rounded self-end"
+          className="text-xs px-2 py-1 border border-red-200 text-red-500 hover:text-red-700 hover:border-red-400 rounded self-end w-full md:w-auto"
         >
           Clear
         </button>
@@ -1434,6 +1434,7 @@ const PatientRecordsPage: React.FC = () => {
 
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showFilter, setShowFilter] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   const resetSortFilter = () => {
@@ -4483,9 +4484,10 @@ const PatientRecordsPage: React.FC = () => {
                   </button>
                 )}
 
+                {/* Desktop: Global Search Button */}
                 <button
                   onClick={() => setShowGlobalSearch((s) => !s)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                  className={`hidden md:flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                     showGlobalSearch
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
@@ -4507,6 +4509,50 @@ const PatientRecordsPage: React.FC = () => {
                   </svg>
                   Global Search
                 </button>
+
+                {/* Mobile: More Menu Button */}
+                <div className="md:hidden relative">
+                  <button
+                    onClick={() => setShowMoreMenu((s) => !s)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                    title="More options"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4">
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="12" cy="19" r="2" />
+                    </svg>
+                  </button>
+
+                  {/* More Menu Dropdown */}
+                  {showMoreMenu && (
+                    <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+                      <button
+                        onClick={() => {
+                          setShowGlobalSearch((s) => !s);
+                          setShowMoreMenu(false);
+                        }}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-200 last:border-b-0"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.5}
+                          stroke="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                          />
+                        </svg>
+                        Global Search
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
               {showGlobalSearch && (
                 <form
@@ -4632,7 +4678,7 @@ const PatientRecordsPage: React.FC = () => {
             <div className="max-w-7xl mx-auto px-6">
               {/* Mobile: Tab Dropdown and Filters */}
               <div className="md:hidden flex flex-col gap-2 py-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {/* Hamburger Menu Icon */}
                   <svg
                     className="w-5 h-5 text-gray-600 shrink-0"
@@ -4648,33 +4694,39 @@ const PatientRecordsPage: React.FC = () => {
                       d="M4 6h16M4 12h16M4 18h16"
                     />
                   </svg>
+                  {/* Tab Label */}
+                  <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">
+                    Tab:
+                  </span>
                   {/* Tab Dropdown */}
-                  <select
-                    value={activeTab}
-                    onChange={(e) => {
-                      setActiveTab(e.target.value as TabId);
-                      setExpandedId(null);
-                      resetSortFilter();
-                    }}
-                    className="flex-1 px-3 py-2 pr-8 text-sm font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
-                  >
-                    {TABS.map((tab) => (
-                      <option key={tab.id} value={tab.id}>
-                        {tab.label}
-                      </option>
-                    ))}
-                  </select>
-                  {/* Dropdown Chevron */}
-                  <svg
-                    className="absolute right-3 w-4 h-4 text-gray-600 pointer-events-none ml-auto mr-2"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
-                  </svg>
+                  <div className="relative flex-1">
+                    <select
+                      value={activeTab}
+                      onChange={(e) => {
+                        setActiveTab(e.target.value as TabId);
+                        setExpandedId(null);
+                        resetSortFilter();
+                      }}
+                      className="w-full px-3 py-2 pr-8 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                      {TABS.map((tab) => (
+                        <option key={tab.id} value={tab.id}>
+                          {tab.label}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Dropdown Chevron */}
+                    <svg
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 pointer-events-none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
+                    </svg>
+                  </div>
                 </div>
                 {/* Filters Button on Next Line */}
                 <button
@@ -4798,7 +4850,7 @@ const PatientRecordsPage: React.FC = () => {
             <div
               className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
-              w-screen md:w-auto h-[60vh] md:h-auto max-h-screen z-40 md:z-auto
+              w-screen md:w-auto h-1/3 md:h-auto max-h-screen z-40 md:z-auto
               border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
               style={{
                 ...(!window.matchMedia('(min-width: 768px)').matches
@@ -4991,7 +5043,7 @@ const PatientRecordsPage: React.FC = () => {
           <div
             className="bg-indigo-50 border-l border-indigo-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
-              w-screen md:w-auto h-[60vh] md:h-auto max-h-screen z-40 md:z-auto
+              w-screen md:w-auto h-1/3 md:h-auto max-h-screen z-40 md:z-auto
               border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
             style={{
               ...(!window.matchMedia('(min-width: 768px)').matches
