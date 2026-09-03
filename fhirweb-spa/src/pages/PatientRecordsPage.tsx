@@ -436,14 +436,19 @@ const StatusBadge: React.FC<{ status?: string }> = ({ status }) => {
 const ExpandToggle: React.FC<{ open: boolean }> = ({ open }) => (
   <svg
     className="w-5 h-5 text-gray-400 transition-transform"
-    style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
     viewBox="0 0 24 24"
     strokeWidth={2}
     stroke="currentColor"
   >
-    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14m7-7v12" />
+    {open ? (
+      // Chevron Down - expanded
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7" />
+    ) : (
+      // Chevron Right - collapsed
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7m0 0l-7 7" />
+    )}
   </svg>
 );
 
