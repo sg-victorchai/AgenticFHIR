@@ -1170,7 +1170,8 @@ const Pagination: React.FC<{
         </button>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      {/* Hide "Go to page" input on mobile, show only on desktop */}
+      <div className="hidden md:flex items-center gap-1.5">
         <span className="text-xs text-gray-400 whitespace-nowrap">Go to</span>
         <input
           type="number"
@@ -4402,15 +4403,139 @@ const PatientRecordsPage: React.FC = () => {
               <h1 className="text-lg md:text-xl font-bold text-gray-900">
                 Patient Records
               </h1>
-              <span className="text-xs md:text-sm text-gray-600">
-                {patientName}
-              </span>
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded w-fit">
-                {mrn}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs md:text-sm text-gray-600">
+                  {patientName}
+                </span>
+                <button
+                  onClick={() => alert(`MRN: ${mrn}`)}
+                  className="text-xs text-gray-400 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                  title="Click to view MRN"
+                >
+                  {mrn}
+                </button>
+              </div>
             </div>
             <div className="flex flex-col gap-2 w-full md:w-auto">
-              <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
+              {/* Mobile: Compact button row */}
+              <div className="md:hidden flex items-center gap-1.5 w-full">
+                {role === 'patient' && (
+                  <button
+                    onClick={() => {
+                      if (!showAgentModal) {
+                        openAgentConversationModal();
+                        setShowClinicianUpload(false);
+                      } else {
+                        setShowAgentModal(false);
+                      }
+                    }}
+                    className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors flex-1 ${
+                      showAgentModal
+                        ? 'bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white border-indigo-600'
+                        : 'bg-gradient-to-r from-indigo-50 to-fuchsia-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-fuchsia-100 hover:border-indigo-300'
+                    }`}
+                  >
+                    <span
+                      className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${
+                        showAgentModal
+                          ? 'bg-white shadow-[0_0_0_2px_rgba(99,102,241,0.3)]'
+                          : 'bg-gradient-to-br from-indigo-500 via-blue-500 to-fuchsia-500 shadow-[0_0_0_2px_rgba(99,102,241,0.15)]'
+                      }`}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                        className={`w-3 h-3 ${
+                          showAgentModal ? 'text-indigo-600' : 'text-white'
+                        }`}
+                      >
+                        <path d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z" />
+                      </svg>
+                    </span>
+                    <span className="hidden sm:inline">Ask AI</span>
+                  </button>
+                )}
+
+                {(role === 'clinician' || role === 'patient') && (
+                  <button
+                    onClick={() => {
+                      setShowClinicianUpload((s) => !s);
+                      if (!showClinicianUpload) {
+                        setShowAgentModal(false);
+                      }
+                    }}
+                    className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex-1 ${
+                      showClinicianUpload
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400 hover:text-emerald-600'
+                    }`}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                      className="w-3.5 h-3.5 shrink-0"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
+                      />
+                    </svg>
+                    <span className="hidden sm:inline">Upload</span>
+                  </button>
+                )}
+
+                {/* Mobile: More Menu Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowMoreMenu((s) => !s)}
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
+                    title="More options"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4">
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="12" cy="19" r="2" />
+                    </svg>
+                  </button>
+
+                  {/* More Menu Dropdown */}
+                  {showMoreMenu && (
+                    <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+                      <button
+                        onClick={() => {
+                          setShowGlobalSearch((s) => !s);
+                          setShowMoreMenu(false);
+                        }}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-200 last:border-b-0"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.5}
+                          stroke="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                          />
+                        </svg>
+                        Global Search
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop: Full button row */}
+              <div className="hidden md:flex flex-row md:items-center gap-2 w-full md:w-auto">
                 {role === 'patient' && (
                   <button
                     onClick={() => {
@@ -4676,66 +4801,61 @@ const PatientRecordsPage: React.FC = () => {
           {/* Tab bar */}
           <div className="bg-white border-b border-gray-200 shrink-0">
             <div className="max-w-7xl mx-auto px-6">
-              {/* Mobile: Tab Dropdown and Filters */}
-              <div className="md:hidden flex flex-col gap-2 py-2">
-                <div className="flex items-center gap-1.5">
-                  {/* Hamburger Menu Icon */}
+              {/* Mobile: Tab Dropdown and Filters on same line */}
+              <div className="md:hidden flex items-center gap-1.5 py-2">
+                {/* Hamburger Menu Icon */}
+                <svg
+                  className="w-4 h-4 text-gray-600 shrink-0"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+                {/* Tab Dropdown - limited width */}
+                <div className="relative flex-1 min-w-0">
+                  <select
+                    value={activeTab}
+                    onChange={(e) => {
+                      setActiveTab(e.target.value as TabId);
+                      setExpandedId(null);
+                      resetSortFilter();
+                    }}
+                    className="w-full px-2 py-1.5 pr-7 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    {TABS.map((tab) => (
+                      <option key={tab.id} value={tab.id}>
+                        {tab.label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Dropdown Chevron */}
                   <svg
-                    className="w-5 h-5 text-gray-600 shrink-0"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600 pointer-events-none"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
                     stroke="currentColor"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
                   </svg>
-                  {/* Tab Label */}
-                  <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">
-                    Tab:
-                  </span>
-                  {/* Tab Dropdown */}
-                  <div className="relative flex-1">
-                    <select
-                      value={activeTab}
-                      onChange={(e) => {
-                        setActiveTab(e.target.value as TabId);
-                        setExpandedId(null);
-                        resetSortFilter();
-                      }}
-                      className="w-full px-3 py-2 pr-8 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      {TABS.map((tab) => (
-                        <option key={tab.id} value={tab.id}>
-                          {tab.label}
-                        </option>
-                      ))}
-                    </select>
-                    {/* Dropdown Chevron */}
-                    <svg
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 pointer-events-none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
-                    </svg>
-                  </div>
                 </div>
-                {/* Filters Button on Next Line */}
+                {/* Filters Button - Icon only */}
                 <button
                   onClick={() => setShowFilter((s) => !s)}
-                  className={`w-full text-xs px-3 py-2 rounded border font-medium transition-colors flex items-center justify-center gap-1 ${
+                  className={`shrink-0 px-2 py-1.5 rounded border transition-colors flex items-center justify-center ${
                     showFilter
                       ? 'bg-blue-100 border-blue-300 text-blue-700'
                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
+                  title={showFilter ? 'Hide Filters' : 'Show Filters'}
                 >
                   <svg
                     className="w-4 h-4"
@@ -4751,7 +4871,6 @@ const PatientRecordsPage: React.FC = () => {
                       d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
                     />
                   </svg>
-                  {showFilter ? 'Hide Filters' : 'Show Filters'}
                 </button>
               </div>
 
