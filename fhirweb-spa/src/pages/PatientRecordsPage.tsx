@@ -1436,6 +1436,7 @@ const PatientRecordsPage: React.FC = () => {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showFilter, setShowFilter] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showTabModal, setShowTabModal] = useState(false);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   const resetSortFilter = () => {
@@ -4819,24 +4820,14 @@ const PatientRecordsPage: React.FC = () => {
                     d="M4 6h16M4 12h16M4 18h16"
                   />
                 </svg>
-                {/* Tab Dropdown - limited width */}
-                <div className="relative flex-1 min-w-0">
-                  <select
-                    value={activeTab}
-                    onChange={(e) => {
-                      setActiveTab(e.target.value as TabId);
-                      setExpandedId(null);
-                      resetSortFilter();
-                      setShowFilter(false);
-                    }}
-                    className="w-full px-2 py-1.5 pr-7 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
-                  >
-                    {TABS.map((tab) => (
-                      <option key={tab.id} value={tab.id}>
-                        {tab.label}
-                      </option>
-                    ))}
-                  </select>
+                {/* Tab Dropdown - Button opens modal */}
+                <button
+                  onClick={() => setShowTabModal(true)}
+                  className="flex-1 min-w-0 px-2 py-1.5 pr-7 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 hover:bg-gray-50 transition-colors appearance-none cursor-pointer relative"
+                >
+                  <span className="truncate text-left block">
+                    {TABS.find(t => t.id === activeTab)?.label || 'Select Tab'}
+                  </span>
                   {/* Dropdown Chevron */}
                   <svg
                     className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600 pointer-events-none"
@@ -4848,7 +4839,7 @@ const PatientRecordsPage: React.FC = () => {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
                   </svg>
-                </div>
+                </button>
                 {/* Filters Button - Icon only (Azure DevOps style) */}
                 <button
                   onClick={() => setShowFilter((s) => !s)}
@@ -5221,6 +5212,66 @@ const PatientRecordsPage: React.FC = () => {
                   mode="panel"
                 />
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab Selection Modal - Mobile only */}
+        {showTabModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 md:hidden"
+            onClick={() => setShowTabModal(false)}
+          >
+            <div
+              className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:w-96 max-h-[70vh] sm:max-h-[80vh] overflow-y-auto flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-gray-900">Select Tab</h2>
+                <button
+                  onClick={() => setShowTabModal(false)}
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <svg
+                    className="w-5 h-5 text-gray-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Tab List */}
+              <div className="flex-1 overflow-y-auto">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setExpandedId(null);
+                      resetSortFilter();
+                      setShowFilter(false);
+                      setShowTabModal(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm font-medium border-b border-gray-100 transition-colors ${
+                      activeTab === tab.id
+                        ? 'bg-blue-50 text-blue-700 border-l-4 border-l-blue-600'
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
