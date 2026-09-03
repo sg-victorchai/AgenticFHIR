@@ -34,9 +34,10 @@ const PatientPortalPage: React.FC = () => {
   };
 
   // Dynamic search params - when user searches
-  const searchParams: Record<string, string> = hasSearched && searchTerm.trim()
-    ? { 'name:contains': searchTerm.trim(), _count: '10', _offset: '0' }
-    : initialSearchParams;
+  const searchParams: Record<string, string> =
+    hasSearched && searchTerm.trim()
+      ? { 'name:contains': searchTerm.trim(), _count: '10', _offset: '0' }
+      : initialSearchParams;
 
   // Query for patient list
   const { data: patientBundle, isLoading: patientListLoading } =
@@ -112,7 +113,11 @@ const PatientPortalPage: React.FC = () => {
         const nameObj = patient.name?.[0];
         const name =
           nameObj?.text ||
-          [nameObj?.prefix?.join(' '), nameObj?.given?.join(' '), nameObj?.family]
+          [
+            nameObj?.prefix?.join(' '),
+            nameObj?.given?.join(' '),
+            nameObj?.family,
+          ]
             .filter(Boolean)
             .join(' ') ||
           'Unknown Name';
@@ -159,37 +164,42 @@ const PatientPortalPage: React.FC = () => {
           >
             ← Back
           </button>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Patient Portal</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            Patient Portal
+          </h1>
           <p className="text-gray-600">
-            Search for your patient account to view your medical records and consultation progress
+            Search for your patient account to view your medical records and
+            consultation progress
           </p>
         </div>
 
         {/* Search Card */}
-        <div className="bg-white rounded-2xl shadow-md p-8 mb-6">
-          <form onSubmit={handleSearch} className="flex gap-3">
+        <div className="bg-white rounded-2xl shadow-md p-4 sm:p-8 mb-6">
+          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <input
               type="text"
               placeholder="Enter your name to search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400"
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400 w-full"
             />
-            <button
-              type="submit"
-              className="px-6 py-3 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors font-medium"
-            >
-              Search
-            </button>
-            {hasSearched && (
+            <div className="flex gap-2 w-full sm:w-auto">
               <button
-                type="button"
-                onClick={handleClearSearch}
-                className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                type="submit"
+                className="flex-1 sm:flex-none px-4 sm:px-6 py-3 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors font-medium whitespace-nowrap"
               >
-                Clear
+                Search
               </button>
-            )}
+              {hasSearched && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="flex-1 sm:flex-none px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium whitespace-nowrap"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </form>
         </div>
 
@@ -197,7 +207,9 @@ const PatientPortalPage: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-700">
-              {hasSearched ? `Search Results (${patientOptions.length})` : 'All Patients'}
+              {hasSearched
+                ? `Search Results (${patientOptions.length})`
+                : 'All Patients'}
             </h3>
             {patientListLoading && (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-violet-600" />
@@ -228,11 +240,13 @@ const PatientPortalPage: React.FC = () => {
                     className="w-full px-4 py-4 text-left hover:bg-violet-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-400"
                   >
                     <p className="font-medium text-gray-800">{patient.name}</p>
-                    <p className="text-sm text-gray-500 mt-1">ID: {patient.identifier}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      ID: {patient.identifier}
+                    </p>
                   </button>
                 ))}
               </div>
-              
+
               {/* Pagination Controls */}
               {currentBundle && (
                 <div className="mt-6 pt-6 border-t border-gray-200">

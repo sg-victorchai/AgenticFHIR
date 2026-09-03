@@ -75,7 +75,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
     const summaryText =
       (typeof parsedResult?.summary === 'string' && parsedResult.summary) ||
-      (typeof parsedResult?.parameters?.summary === 'string' && parsedResult.parameters.summary) ||
+      (typeof parsedResult?.parameters?.summary === 'string' &&
+        parsedResult.parameters.summary) ||
       (typeof asObject.summary === 'string' && asObject.summary) ||
       (typeof asObject.message === 'string' && asObject.message) ||
       undefined;
@@ -553,9 +554,12 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
             <div className="flex gap-2">
               <div className="text-amber-600 mt-0.5">⏳</div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-amber-900">Assessment Under Review</p>
+                <p className="text-sm font-medium text-amber-900">
+                  Assessment Under Review
+                </p>
                 <p className="text-sm text-amber-800 mt-1">
-                  Your assessment needs a quick human review before it can be shared.
+                  Your assessment needs a quick human review before it can be
+                  shared.
                 </p>
                 {hitlReason !== 'Assessment under review' && (
                   <p className="text-xs text-amber-700 mt-2 italic">

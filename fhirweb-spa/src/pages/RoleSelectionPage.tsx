@@ -214,7 +214,9 @@ const RoleSelectionPage: React.FC = () => {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Patient Portal</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Patient Portal
+          </h2>
           <p className="text-sm text-gray-500 text-center">
             View your queue status and follow your consultation progress
           </p>

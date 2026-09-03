@@ -434,7 +434,17 @@ const StatusBadge: React.FC<{ status?: string }> = ({ status }) => {
 };
 
 const ExpandToggle: React.FC<{ open: boolean }> = ({ open }) => (
-  <span className="text-gray-400 font-semibold">{open ? '−' : '+'}</span>
+  <svg
+    className="w-5 h-5 text-gray-400 transition-transform"
+    style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={2}
+    stroke="currentColor"
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14m7-7v12" />
+  </svg>
 );
 
 const TH: React.FC<{ children?: React.ReactNode; className?: string }> = ({
@@ -2233,7 +2243,11 @@ const PatientRecordsPage: React.FC = () => {
     ...pageOffset,
   };
 
-  const { data: encBundle, isLoading: encLoading, refetch: refetchEnc } = useSearchByPatientQuery(
+  const {
+    data: encBundle,
+    isLoading: encLoading,
+    refetch: refetchEnc,
+  } = useSearchByPatientQuery(
     {
       resourceType: 'Encounter',
       patientId: patientId!,
@@ -2241,7 +2255,11 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId },
   );
-  const { data: condBundle, isLoading: condLoading, refetch: refetchCond } = useSearchByPatientQuery(
+  const {
+    data: condBundle,
+    isLoading: condLoading,
+    refetch: refetchCond,
+  } = useSearchByPatientQuery(
     {
       resourceType: 'Condition',
       patientId: patientId!,
@@ -2249,7 +2267,11 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId },
   );
-  const { data: obsBundle, isLoading: obsLoading, refetch: refetchObs } = useSearchByPatientQuery(
+  const {
+    data: obsBundle,
+    isLoading: obsLoading,
+    refetch: refetchObs,
+  } = useSearchByPatientQuery(
     {
       resourceType: 'Observation',
       patientId: patientId!,
@@ -2258,7 +2280,11 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId },
   );
-  const { data: srBundle, isLoading: srLoading, refetch: refetchSr } = useSearchByPatientQuery(
+  const {
+    data: srBundle,
+    isLoading: srLoading,
+    refetch: refetchSr,
+  } = useSearchByPatientQuery(
     {
       resourceType: 'ServiceRequest',
       patientId: patientId!,
@@ -2266,25 +2292,31 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId },
   );
-  const { data: labDrBundle, isLoading: labDrLoading, refetch: refetchLabDr } =
-    useSearchByPatientQuery(
-      {
-        resourceType: 'DiagnosticReport',
-        patientId: patientId!,
-        extraParams: labDrExtraParams,
-        customHeaders: { 'x-api-repository': 'ALL' },
-      },
-      { skip: !patientId },
-    );
-  const { data: radDrBundle, isLoading: radDrLoading, refetch: refetchRadDr } =
-    useSearchByPatientQuery(
-      {
-        resourceType: 'DiagnosticReport',
-        patientId: patientId!,
-        extraParams: radDrExtraParams,
-      },
-      { skip: !patientId },
-    );
+  const {
+    data: labDrBundle,
+    isLoading: labDrLoading,
+    refetch: refetchLabDr,
+  } = useSearchByPatientQuery(
+    {
+      resourceType: 'DiagnosticReport',
+      patientId: patientId!,
+      extraParams: labDrExtraParams,
+      customHeaders: { 'x-api-repository': 'ALL' },
+    },
+    { skip: !patientId },
+  );
+  const {
+    data: radDrBundle,
+    isLoading: radDrLoading,
+    refetch: refetchRadDr,
+  } = useSearchByPatientQuery(
+    {
+      resourceType: 'DiagnosticReport',
+      patientId: patientId!,
+      extraParams: radDrExtraParams,
+    },
+    { skip: !patientId },
+  );
   const { data: medReqBundle, isLoading: medReqLoading } =
     useSearchByPatientQuery(
       {
@@ -2349,7 +2381,15 @@ const PatientRecordsPage: React.FC = () => {
 
       return () => clearTimeout(timer);
     }
-  }, [noteUploadSummary, refetchEnc, refetchCond, refetchObs, refetchSr, refetchLabDr, refetchRadDr]);
+  }, [
+    noteUploadSummary,
+    refetchEnc,
+    refetchCond,
+    refetchObs,
+    refetchSr,
+    refetchLabDr,
+    refetchRadDr,
+  ]);
 
   // Clear upload summary after showing success message (but keep panel open for user to manually close)
   useEffect(() => {
@@ -2459,7 +2499,9 @@ const PatientRecordsPage: React.FC = () => {
         ) : !conditions.length ? (
           <Empty />
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -2593,6 +2635,101 @@ const PatientRecordsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {conditions.map((cond: any) => (
+              <div
+                key={cond.id}
+                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div
+                  onClick={() => toggle(cond.id)}
+                  className="p-4 cursor-pointer"
+                >
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {cond.code?.coding?.[0]?.display || cond.code?.text || '—'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {fmt(cond.onsetDateTime || cond.recordedDate)}
+                      </p>
+                    </div>
+                    <ExpandToggle open={expandedId === cond.id} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500 text-xs">Status</span>
+                      <div className="mt-1">
+                        <StatusBadge
+                          status={cond.clinicalStatus?.coding?.[0]?.code}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Severity</span>
+                      <p className="text-gray-800 font-medium mt-1">
+                        {cond.severity?.coding?.[0]?.display || cond.severity?.text || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Category</span>
+                      <p className="text-gray-800 font-medium mt-1">
+                        {cond.category?.[0]?.coding?.[0]?.display || cond.category?.[0]?.text || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Last Updated</span>
+                      <p className="text-gray-800 font-medium mt-1">
+                        {fmt(cond.meta?.lastUpdated)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {expandedId === cond.id && (
+                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                    <div className="space-y-3">
+                      <div>
+                        <span className="font-medium">ID:</span> {cond.id}
+                      </div>
+                      <div>
+                        <span className="font-medium">Verification:</span> {cond.verificationStatus?.coding?.[0]?.code || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Recorded:</span> {fmt(cond.recordedDate)}
+                      </div>
+                      <div>
+                        <span className="font-medium">Recorder:</span> {cond.recorder?.display || cond.recorder?.reference || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Asserter:</span> {cond.asserter?.display || cond.asserter?.reference || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Encounter:</span> {cond.encounter?.reference || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Body Site:</span> {cond.bodySite?.map((b: any) => b.coding?.[0]?.display || b.text).filter(Boolean).join(', ') || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Note:</span> {cond.note?.map((n: any) => n.text).join('; ') || '—'}
+                      </div>
+                      {cond.abatementDateTime && (
+                        <div>
+                          <span className="font-medium">Abatement:</span> {fmt(cond.abatementDateTime)}
+                        </div>
+                      )}
+                      {cond.stage?.length && (
+                        <div>
+                          <span className="font-medium">Stage:</span> {cond.stage.map((s: any) => s.summary?.coding?.[0]?.display || s.summary?.text).filter(Boolean).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          </>
         )}
         <Pagination
           total={condBundle?.total}
@@ -2627,7 +2764,9 @@ const PatientRecordsPage: React.FC = () => {
         ) : !encounters.length ? (
           <Empty />
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto md:overflow-hidden">
+          <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -2727,6 +2866,71 @@ const PatientRecordsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {encounters.map((enc: any) => (
+              <div
+                key={enc.id}
+                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div
+                  onClick={() => toggle(enc.id)}
+                  className="p-4 cursor-pointer"
+                >
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {fmt(enc.actualPeriod?.start || enc.period?.start)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {enc.type?.[0]?.text || enc.class?.[0]?.coding?.[0]?.display || '—'}
+                      </p>
+                    </div>
+                    <ExpandToggle open={expandedId === enc.id} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500 text-xs">Status</span>
+                      <div className="mt-1">
+                        <StatusBadge status={enc.status} />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Chief Complaint</span>
+                      <p className="text-gray-800 font-medium mt-1">
+                        {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-500">Last Updated: {fmt(enc.meta?.lastUpdated)}</p>
+                  </div>
+                </div>
+                {expandedId === enc.id && (
+                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                    <div className="space-y-3">
+                      <div>
+                        <span className="font-medium">Encounter ID:</span> {enc.id}
+                      </div>
+                      <div>
+                        <span className="font-medium">Identifier:</span> {enc.identifier?.[0]?.value || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Period:</span> {fmt(enc.actualPeriod?.start || enc.period?.start)} → {fmt(enc.actualPeriod?.end || enc.period?.end)}
+                      </div>
+                      <div>
+                        <span className="font-medium">Location:</span> {enc.location?.map((l: any) => l.location?.identifier?.value || l.location?.reference || '—').join(', ') || '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Participants:</span> {enc.participant?.map((p: any) => p.actor?.display || p.actor?.reference || '—').join(', ') || '—'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          </>
         )}
         <Pagination
           total={encBundle?.total}
@@ -2783,7 +2987,9 @@ const PatientRecordsPage: React.FC = () => {
         ) : !observations.length ? (
           <Empty />
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto md:overflow-hidden">
+          <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -2976,6 +3182,98 @@ const PatientRecordsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {observations.map((obs: any) => (
+              <div
+                key={obs.id}
+                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div
+                  onClick={() => toggle(obs.id)}
+                  className="p-4 cursor-pointer"
+                >
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {obs.code?.coding?.[0]?.display || obs.code?.text || '—'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {fmt(obs.effectiveDateTime)}
+                      </p>
+                    </div>
+                    <ExpandToggle open={expandedId === obs.id} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500 text-xs">Value</span>
+                      <p className="text-gray-800 font-medium mt-1">
+                        {obs.valueQuantity
+                          ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
+                          : obs.valueString || obs.valueCodeableConcept?.coding?.[0]?.display || obs.valueCodeableConcept?.text || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Interpretation</span>
+                      <div className="mt-1">
+                        {(() => {
+                          const interpretation = getInterpretationBadge(obs);
+                          return interpretation ? (
+                            <span className={`inline-block text-xs font-medium px-2 py-1 rounded ${interpretation.bgColor}`}>
+                              {interpretation.text}
+                            </span>
+                          ) : (
+                            <p className="text-gray-800 font-medium">—</p>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Category</span>
+                      <p className="text-gray-800 font-medium mt-1">
+                        {obs.category?.[0]?.coding?.[0]?.display || obs.category?.[0]?.text || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs">Status</span>
+                      <div className="mt-1">
+                        <StatusBadge status={obs.status} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {expandedId === obs.id && (
+                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                    <div className="space-y-3">
+                      <div>
+                        <span className="font-medium">ID:</span> {obs.id}
+                      </div>
+                      <div>
+                        <span className="font-medium">Reference Range:</span> {formatReferenceRange(obs.referenceRange)}
+                      </div>
+                      {obs.component?.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <p className="font-medium mb-2">Components:</p>
+                          <div className="text-xs space-y-1">
+                            {obs.component.map((c: any, i: number) => (
+                              <div key={i} className="bg-white p-2 rounded border border-gray-200">
+                                <p className="font-medium">{c.code?.coding?.[0]?.display || c.code?.text || '—'}</p>
+                                <p>{c.valueQuantity ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim() : c.valueString || '—'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <span className="font-medium">Note:</span> {obs.note?.[0]?.text || '—'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          </>
         )}
         <Pagination
           total={obsBundle?.total}
@@ -4327,27 +4625,12 @@ const PatientRecordsPage: React.FC = () => {
           {/* Tab bar */}
           <div className="bg-white border-b border-gray-200 shrink-0">
             <div className="max-w-7xl mx-auto px-6">
-              <div className="flex items-center justify-between gap-2">
-                {/* Mobile: Tab Dropdown */}
-                <div className="md:hidden flex-1 relative">
-                  <select
-                    value={activeTab}
-                    onChange={(e) => {
-                      setActiveTab(e.target.value as TabId);
-                      setExpandedId(null);
-                      resetSortFilter();
-                    }}
-                    className="w-full px-3 py-2 pr-8 text-sm font-medium border border-gray-300 rounded bg-gray-100 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-200 transition-colors"
-                  >
-                    {TABS.map((tab) => (
-                      <option key={tab.id} value={tab.id}>
-                        {tab.label}
-                      </option>
-                    ))}
-                  </select>
-                  {/* Dropdown Icon */}
+              {/* Mobile: Tab Dropdown and Filters */}
+              <div className="md:hidden flex flex-col gap-2 py-2">
+                <div className="flex items-center gap-2">
+                  {/* Hamburger Menu Icon */}
                   <svg
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-600 pointer-events-none"
+                    className="w-5 h-5 text-gray-600 shrink-0"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -4357,13 +4640,67 @@ const PatientRecordsPage: React.FC = () => {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      d="M12 5v14m0 0l-7-7m7 7l7-7"
+                      d="M4 6h16M4 12h16M4 18h16"
                     />
                   </svg>
+                  {/* Tab Dropdown */}
+                  <select
+                    value={activeTab}
+                    onChange={(e) => {
+                      setActiveTab(e.target.value as TabId);
+                      setExpandedId(null);
+                      resetSortFilter();
+                    }}
+                    className="flex-1 px-3 py-2 pr-8 text-sm font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    {TABS.map((tab) => (
+                      <option key={tab.id} value={tab.id}>
+                        {tab.label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Dropdown Chevron */}
+                  <svg
+                    className="absolute right-3 w-4 h-4 text-gray-600 pointer-events-none ml-auto mr-2"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
+                  </svg>
                 </div>
+                {/* Filters Button on Next Line */}
+                <button
+                  onClick={() => setShowFilter((s) => !s)}
+                  className={`w-full text-xs px-3 py-2 rounded border font-medium transition-colors flex items-center justify-center gap-1 ${
+                    showFilter
+                      ? 'bg-blue-100 border-blue-300 text-blue-700'
+                      : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <svg
+                    className="w-4 h-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                    />
+                  </svg>
+                  {showFilter ? 'Hide Filters' : 'Show Filters'}
+                </button>
+              </div>
 
-                {/* Desktop: Tab Bar */}
-                <div className="hidden md:flex overflow-x-auto flex-1">
+              {/* Desktop: Tab Bar and Filters */}
+              <div className="hidden md:flex items-center justify-between gap-4">
+                <div className="flex overflow-x-auto flex-1">
                   {TABS.map((tab) => (
                     <button
                       key={tab.id}
@@ -4386,13 +4723,27 @@ const PatientRecordsPage: React.FC = () => {
                 {/* Filters Button */}
                 <button
                   onClick={() => setShowFilter((s) => !s)}
-                  className={`ml-auto md:ml-4 shrink-0 text-xs px-3 py-1.5 rounded border font-medium transition-colors ${
+                  className={`shrink-0 text-xs px-3 py-1.5 rounded border font-medium transition-colors flex items-center gap-1 ${
                     showFilter
                       ? 'bg-blue-100 border-blue-300 text-blue-700'
                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {showFilter ? '▲ Hide Filters' : '▼ Filters'}
+                  <svg
+                    className="w-4 h-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                    />
+                  </svg>
+                  {showFilter ? 'Hide Filters' : 'Filters'}
                 </button>
               </div>
             </div>
@@ -4425,7 +4776,8 @@ const PatientRecordsPage: React.FC = () => {
         </div>
 
         {/* Resize handle — Desktop only */}
-        {(((role === 'clinician' || role === 'patient') && showClinicianUpload) ||
+        {(((role === 'clinician' || role === 'patient') &&
+          showClinicianUpload) ||
           (role === 'patient' && showAgentModal)) && (
           <div
             onMouseDown={handleMouseDown}
@@ -4436,197 +4788,198 @@ const PatientRecordsPage: React.FC = () => {
         )}
 
         {/* Right side: Upload panel — Desktop side panel, Mobile bottom sheet */}
-        {((role === 'clinician' || role === 'patient') && showClinicianUpload) && (
-          <div
-            className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0
+        {(role === 'clinician' || role === 'patient') &&
+          showClinicianUpload && (
+            <div
+              className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
               w-screen md:w-auto h-[60vh] md:h-auto max-h-screen z-40 md:z-auto
               border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
-            style={{
-              ...(!window.matchMedia('(min-width: 768px)').matches
-                ? {}
-                : { width: `${uploadPanelWidth}%` }),
-            }}
-          >
-            {/* Mobile drag handle */}
-            <div className="md:hidden flex justify-center py-2 sticky top-0 bg-emerald-50 border-b border-emerald-200">
-              <div className="w-12 h-1 bg-emerald-300 rounded-full" />
-            </div>
-
-            <div className="sticky top-0 md:top-0 bg-emerald-50 border-b border-emerald-200 p-4 z-10 flex items-start justify-between gap-2">
-              <div className="flex-1">
-                <h2 className="text-sm font-semibold text-emerald-900">
-                  Upload Scanned Clinical Notes
-                </h2>
-                <p className="text-xs text-emerald-800 mt-1">
-                  Select a scanned file (PDF/image) to attach as a patient
-                  clinical note.
-                </p>
+              style={{
+                ...(!window.matchMedia('(min-width: 768px)').matches
+                  ? {}
+                  : { width: `${uploadPanelWidth}%` }),
+              }}
+            >
+              {/* Mobile drag handle */}
+              <div className="md:hidden flex justify-center py-2 sticky top-0 bg-emerald-50 border-b border-emerald-200">
+                <div className="w-12 h-1 bg-emerald-300 rounded-full" />
               </div>
-              <button
-                onClick={() => setShowClinicianUpload(false)}
-                className="shrink-0 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
-                title="Close upload panel"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
 
-            <div className="p-4 space-y-4">
-              <form
-                onSubmit={handleUploadScannedNotes}
-                className="flex flex-col gap-2"
-              >
-                <input
-                  type="file"
-                  accept=".pdf,image/*"
-                  onChange={(e) =>
-                    setSelectedNoteFile(e.target.files?.[0] ?? null)
-                  }
-                  className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
-                />
+              <div className="sticky top-0 md:top-0 bg-emerald-50 border-b border-emerald-200 p-4 z-10 flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <h2 className="text-sm font-semibold text-emerald-900">
+                    Upload Scanned Clinical Notes
+                  </h2>
+                  <p className="text-xs text-emerald-800 mt-1">
+                    Select a scanned file (PDF/image) to attach as a patient
+                    clinical note.
+                  </p>
+                </div>
                 <button
-                  type="submit"
-                  disabled={!selectedNoteFile || isUploadingNotes}
-                  className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                  onClick={() => setShowClinicianUpload(false)}
+                  className="shrink-0 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
+                  title="Close upload panel"
                 >
-                  {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
                 </button>
-              </form>
+              </div>
 
-              {selectedNoteFile && (
-                <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
-                  {selectedNoteFile.name}
-                </p>
-              )}
+              <div className="p-4 space-y-4">
+                <form
+                  onSubmit={handleUploadScannedNotes}
+                  className="flex flex-col gap-2"
+                >
+                  <input
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={(e) =>
+                      setSelectedNoteFile(e.target.files?.[0] ?? null)
+                    }
+                    className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!selectedNoteFile || isUploadingNotes}
+                    className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
+                  </button>
+                </form>
 
-              {noteUploadMessage && (
-                <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
-                  {noteUploadMessage}
-                </div>
-              )}
-
-              {noteUploadJobId && noteUploadJobStatus && (
-                <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
-                  <p className="font-medium text-emerald-800 mb-1">
-                    Job: {noteUploadJobId.substring(0, 12)}...
+                {selectedNoteFile && (
+                  <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
+                    {selectedNoteFile.name}
                   </p>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {HARMONIZER_STATUS_STEPS.map((step, index) => {
-                      const mappedStatus =
-                        mapHarmonizerStatusToStep(noteUploadJobStatus);
-                      const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
-                        mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
-                      );
-                      const reached =
-                        mappedStatus === 'FAILED'
-                          ? index <= 2
-                          : currentIndex >= index;
-                      const active = mappedStatus === step;
-                      return (
-                        <React.Fragment key={step}>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
-                              active || reached
-                                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                                : 'bg-gray-100 text-gray-500 border-gray-300'
-                            }`}
-                          >
-                            {step}
-                          </span>
-                        </React.Fragment>
-                      );
-                    })}
+                )}
+
+                {noteUploadMessage && (
+                  <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
+                    {noteUploadMessage}
                   </div>
-                  {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
-                    'FAILED' && (
-                    <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
-                      FAILED
-                    </p>
-                  )}
-                  {noteUploadStepResults.length > 0 && (
-                    <div className="mt-1">
-                      <p className="text-gray-700 font-medium text-xs">
-                        Completed
-                      </p>
-                      <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
-                        {noteUploadStepResults.map((step, idx) => (
-                          <li
-                            key={`${step.stepName || step.step || 'step'}-${idx}`}
-                          >
-                            • {step.stepName || step.step || step.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {noteUploadPercent !== null && (
-                    <div className="mt-1">
-                      <progress
-                        className="mt-0.5 h-1 w-full"
-                        value={Math.max(0, Math.min(100, noteUploadPercent))}
-                        max={100}
-                      />
-                      <p className="text-gray-500 text-xs mt-0.5">
-                        {Math.round(noteUploadPercent)}%
-                      </p>
-                    </div>
-                  )}
-                  {isNoteUploadPolling && (
-                    <p className="mt-1 text-gray-500 text-xs">Polling...</p>
-                  )}
-                  {isLoadingNoteUploadSummary && (
-                    <p className="mt-1 text-gray-500 text-xs">
-                      Loading summary...
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
 
-              {noteUploadSummary && (
-                <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 text-emerald-900">
-                  <p className="font-medium">Summary</p>
-                  <p className="mt-0.5">
-                    Status: {noteUploadSummary.status || '—'}
-                  </p>
-                  {noteUploadSummary.summary && (
-                    <pre className="mt-0.5 text-xs bg-white border border-emerald-100 rounded p-1 overflow-auto max-h-32 whitespace-pre-wrap break-words">
-                      {toDisplayJson(noteUploadSummary.summary)}
-                    </pre>
-                  )}
-                </div>
-              )}
+                {noteUploadJobId && noteUploadJobStatus && (
+                  <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
+                    <p className="font-medium text-emerald-800 mb-1">
+                      Job: {noteUploadJobId.substring(0, 12)}...
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {HARMONIZER_STATUS_STEPS.map((step, index) => {
+                        const mappedStatus =
+                          mapHarmonizerStatusToStep(noteUploadJobStatus);
+                        const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
+                          mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
+                        );
+                        const reached =
+                          mappedStatus === 'FAILED'
+                            ? index <= 2
+                            : currentIndex >= index;
+                        const active = mappedStatus === step;
+                        return (
+                          <React.Fragment key={step}>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
+                                active || reached
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                  : 'bg-gray-100 text-gray-500 border-gray-300'
+                              }`}
+                            >
+                              {step}
+                            </span>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                    {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
+                      'FAILED' && (
+                      <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
+                        FAILED
+                      </p>
+                    )}
+                    {noteUploadStepResults.length > 0 && (
+                      <div className="mt-1">
+                        <p className="text-gray-700 font-medium text-xs">
+                          Completed
+                        </p>
+                        <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
+                          {noteUploadStepResults.map((step, idx) => (
+                            <li
+                              key={`${step.stepName || step.step || 'step'}-${idx}`}
+                            >
+                              • {step.stepName || step.step || step.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {noteUploadPercent !== null && (
+                      <div className="mt-1">
+                        <progress
+                          className="mt-0.5 h-1 w-full"
+                          value={Math.max(0, Math.min(100, noteUploadPercent))}
+                          max={100}
+                        />
+                        <p className="text-gray-500 text-xs mt-0.5">
+                          {Math.round(noteUploadPercent)}%
+                        </p>
+                      </div>
+                    )}
+                    {isNoteUploadPolling && (
+                      <p className="mt-1 text-gray-500 text-xs">Polling...</p>
+                    )}
+                    {isLoadingNoteUploadSummary && (
+                      <p className="mt-1 text-gray-500 text-xs">
+                        Loading summary...
+                      </p>
+                    )}
+                  </div>
+                )}
 
-              {noteUploadError && (
-                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
-                  <div className="mb-1">{noteUploadError}</div>
-                  {noteUploadJobId && (
-                    <button
-                      onClick={handleCheckNoteUploadStatus}
-                      disabled={isNoteUploadPolling}
-                      className="text-xs font-medium bg-red-200 hover:bg-red-300 text-red-800 rounded px-2 py-0.5 transition-colors disabled:opacity-50"
-                    >
-                      {isNoteUploadPolling ? 'Checking...' : 'Retry'}
-                    </button>
-                  )}
-                </div>
-              )}
+                {noteUploadSummary && (
+                  <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 text-emerald-900">
+                    <p className="font-medium">Summary</p>
+                    <p className="mt-0.5">
+                      Status: {noteUploadSummary.status || '—'}
+                    </p>
+                    {noteUploadSummary.summary && (
+                      <pre className="mt-0.5 text-xs bg-white border border-emerald-100 rounded p-1 overflow-auto max-h-32 whitespace-pre-wrap break-words">
+                        {toDisplayJson(noteUploadSummary.summary)}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
+                {noteUploadError && (
+                  <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
+                    <div className="mb-1">{noteUploadError}</div>
+                    {noteUploadJobId && (
+                      <button
+                        onClick={handleCheckNoteUploadStatus}
+                        disabled={isNoteUploadPolling}
+                        className="text-xs font-medium bg-red-200 hover:bg-red-300 text-red-800 rounded px-2 py-0.5 transition-colors disabled:opacity-50"
+                      >
+                        {isNoteUploadPolling ? 'Checking...' : 'Retry'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Right side: Ask AI panel — Desktop side panel, Mobile bottom sheet */}
         {role === 'patient' && showAgentModal && (
