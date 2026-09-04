@@ -614,12 +614,12 @@ const PatientCrudPage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 max-w-4xl">
       {/* Back button */}
       <div className="mb-4">
         <button
           onClick={handleBackToSearch}
-          className="flex items-center text-blue-600 hover:text-blue-800"
+          className="flex items-center text-blue-600 hover:text-blue-800 text-sm sm:text-base"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -637,17 +637,17 @@ const PatientCrudPage: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold order-1">
           {isNew
             ? 'New Patient'
             : `Patient: ${formatPatientName(formData.name?.[0])}`}
         </h1>
-        <div className="space-x-2">
+        <div className="flex flex-wrap gap-2 order-2 sm:order-2">
           {mode === 'view' ? (
             <button
               onClick={() => setMode('edit')}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+              className="flex-1 sm:flex-auto bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
             >
               Edit
             </button>
@@ -655,14 +655,14 @@ const PatientCrudPage: React.FC = () => {
             <>
               <button
                 onClick={handleSubmit}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+                className="flex-1 sm:flex-auto bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
                 disabled={isUpdating || isCreating}
               >
                 {isUpdating || isCreating ? 'Saving...' : 'Save'}
               </button>
               <button
                 onClick={handleCancel}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                className="flex-1 sm:flex-auto bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
               >
                 Cancel
               </button>
@@ -677,13 +677,13 @@ const PatientCrudPage: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white shadow-md rounded-lg p-6">
+      <div className="bg-white shadow-md rounded-lg p-4 sm:p-6">
         {/* Overview Group */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4 border-b pb-2">Overview</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 border-b pb-2">Overview</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="col-span-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Active
               </label>
               {mode === 'edit' ? (
@@ -696,20 +696,20 @@ const PatientCrudPage: React.FC = () => {
                       active: e.target.value === 'true',
                     })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   aria-label="Patient active status"
                 >
                   <option value="true">Yes</option>
                   <option value="false">No</option>
                 </select>
               ) : (
-                <div className="py-2 px-3 bg-gray-50 rounded-md">
+                <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                   {formData.active ? 'Yes' : 'No'}
                 </div>
               )}
             </div>
             <div className="col-span-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Gender
               </label>
               {mode === 'edit' ? (
@@ -717,7 +717,7 @@ const PatientCrudPage: React.FC = () => {
                   name="gender"
                   value={formData.gender || 'unknown'}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   aria-label="Patient gender"
                 >
                   <option value="male">Male</option>
@@ -726,7 +726,7 @@ const PatientCrudPage: React.FC = () => {
                   <option value="unknown">Unknown</option>
                 </select>
               ) : (
-                <div className="py-2 px-3 bg-gray-50 rounded-md">
+                <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                   {formData.gender === 'male'
                     ? 'Male'
                     : formData.gender === 'female'
@@ -738,7 +738,7 @@ const PatientCrudPage: React.FC = () => {
               )}
             </div>
             <div className="col-span-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Birth Date
               </label>
               {mode === 'edit' ? (
@@ -747,13 +747,13 @@ const PatientCrudPage: React.FC = () => {
                   name="birthDate"
                   value={formData.birthDate || ''}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   aria-label="Birth Date"
                   placeholder="YYYY-MM-DD"
                   title="Enter patient's birth date"
                 />
               ) : (
-                <div className="py-2 px-3 bg-gray-50 rounded-md">
+                <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                   {formData.birthDate || 'Not specified'}
                 </div>
               )}
@@ -762,15 +762,15 @@ const PatientCrudPage: React.FC = () => {
         </div>
 
         {/* Name Group */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4 border-b pb-2">Name</h2>
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 border-b pb-2">Name</h2>
           {formData.name?.map((name, index) => (
             <div
               key={index}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4"
             >
               <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Family Name
                 </label>
                 {mode === 'edit' ? (
@@ -779,16 +779,16 @@ const PatientCrudPage: React.FC = () => {
                     name={`name.${index}.family`}
                     value={name.family || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 ) : (
-                  <div className="py-2 px-3 bg-gray-50 rounded-md">
+                  <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                     {name.family || 'Not specified'}
                   </div>
                 )}
               </div>
               <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Given Name
                 </label>
                 {mode === 'edit' ? (
@@ -797,16 +797,16 @@ const PatientCrudPage: React.FC = () => {
                     name={`name.${index}.given`}
                     value={name.given?.[0] || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 ) : (
-                  <div className="py-2 px-3 bg-gray-50 rounded-md">
+                  <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                     {name.given?.join(' ') || 'Not specified'}
                   </div>
                 )}
               </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="sm:col-span-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Text
                 </label>
                 {mode === 'edit' ? (
@@ -815,13 +815,13 @@ const PatientCrudPage: React.FC = () => {
                     name={`name.${index}.text`}
                     value={name.text || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter display name"
                     title="Full display name for the patient"
                     aria-label={`Patient display name ${index + 1}`}
                   />
                 ) : (
-                  <div className="py-2 px-3 bg-gray-50 rounded-md">
+                  <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                     {name.text || 'Not specified'}
                   </div>
                 )}
@@ -831,14 +831,14 @@ const PatientCrudPage: React.FC = () => {
         </div>
 
         {/* Identifier Group */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h2 className="text-xl font-semibold">Identifiers</h2>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4 border-b pb-2">
+            <h2 className="text-lg sm:text-xl font-semibold">Identifiers</h2>
             {mode === 'edit' && (
               <button
                 type="button"
                 onClick={addIdentifier}
-                className="text-blue-500 hover:text-blue-700"
+                className="text-blue-500 hover:text-blue-700 text-sm sm:text-base font-medium"
               >
                 + Add Identifier
               </button>
@@ -847,10 +847,10 @@ const PatientCrudPage: React.FC = () => {
           {(formData.identifier || []).map((identifier, index) => (
             <div
               key={index}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4"
             >
               <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   System
                 </label>
                 {mode === 'edit' ? (
@@ -858,7 +858,7 @@ const PatientCrudPage: React.FC = () => {
                     name={`identifier.${index}.system`}
                     value={identifier.system || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     aria-label={`Identifier system ${index + 1}`}
                   >
                     <option value="">Select a system</option>
@@ -869,7 +869,7 @@ const PatientCrudPage: React.FC = () => {
                     ))}
                   </select>
                 ) : (
-                  <div className="py-2 px-3 bg-gray-50 rounded-md">
+                  <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                     {commonIdentifierSystems.find(
                       (system) => system.value === identifier.system,
                     )?.label ||
@@ -879,7 +879,7 @@ const PatientCrudPage: React.FC = () => {
                 )}
               </div>
               <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Value
                 </label>
                 {mode === 'edit' ? (
@@ -888,13 +888,13 @@ const PatientCrudPage: React.FC = () => {
                     name={`identifier.${index}.value`}
                     value={identifier.value || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter identifier value"
                     title="Value of the patient identifier"
                     aria-label={`Identifier value ${index + 1}`}
                   />
                 ) : (
-                  <div className="py-2 px-3 bg-gray-50 rounded-md">
+                  <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                     {identifier.value || 'Not specified'}
                   </div>
                 )}
@@ -918,14 +918,14 @@ const PatientCrudPage: React.FC = () => {
         </div>
 
         {/* Contact Group */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h2 className="text-xl font-semibold">Contact Information</h2>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4 border-b pb-2">
+            <h2 className="text-lg sm:text-xl font-semibold">Contact Information</h2>
             {mode === 'edit' && (
               <button
                 type="button"
                 onClick={addTelecom}
-                className="text-blue-500 hover:text-blue-700"
+                className="text-blue-500 hover:text-blue-700 text-sm sm:text-base font-medium"
               >
                 + Add Contact
               </button>
@@ -934,10 +934,10 @@ const PatientCrudPage: React.FC = () => {
           {(formData.telecom || []).map((telecom, index) => (
             <div
               key={index}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4"
             >
               <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   System
                 </label>
                 {mode === 'edit' ? (
@@ -945,7 +945,7 @@ const PatientCrudPage: React.FC = () => {
                     name={`telecom.${index}.system`}
                     value={telecom.system || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     aria-label={`Contact system ${index + 1}`}
                   >
                     <option value="">Select a system</option>
@@ -958,7 +958,7 @@ const PatientCrudPage: React.FC = () => {
                     <option value="other">Other</option>
                   </select>
                 ) : (
-                  <div className="py-2 px-3 bg-gray-50 rounded-md">
+                  <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                     {telecom.system
                       ? telecom.system.charAt(0).toUpperCase() +
                         telecom.system.slice(1)
@@ -967,7 +967,7 @@ const PatientCrudPage: React.FC = () => {
                 )}
               </div>
               <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Contact
                 </label>
                 {mode === 'edit' ? (
@@ -976,7 +976,7 @@ const PatientCrudPage: React.FC = () => {
                     name={`telecom.${index}.value`}
                     value={telecom.value || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder={`Enter ${
                       telecom.system || 'contact'
                     } information`}
@@ -1040,14 +1040,14 @@ const PatientCrudPage: React.FC = () => {
         </div>
 
         {/* Address Group */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h2 className="text-xl font-semibold">Addresses</h2>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4 border-b pb-2">
+            <h2 className="text-lg sm:text-xl font-semibold">Addresses</h2>
             {mode === 'edit' && (
               <button
                 type="button"
                 onClick={addAddress}
-                className="text-blue-500 hover:text-blue-700"
+                className="text-blue-500 hover:text-blue-700 text-sm sm:text-base font-medium"
               >
                 + Add Address
               </button>
@@ -1055,9 +1055,9 @@ const PatientCrudPage: React.FC = () => {
           </div>
           {(formData.address || []).map((address, index) => (
             <div key={index} className="mb-6 pb-6 border-b border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     Line
                   </label>
                   {mode === 'edit' ? (
@@ -1066,19 +1066,19 @@ const PatientCrudPage: React.FC = () => {
                       name={`address.${index}.line`}
                       value={address.line?.[0] || ''}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter address line"
                       title="Street address, apartment, suite, etc."
                       aria-label={`Address line ${index + 1}`}
                     />
                   ) : (
-                    <div className="py-2 px-3 bg-gray-50 rounded-md">
+                    <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                       {address.line?.join(', ') || 'Not specified'}
                     </div>
                   )}
                 </div>
                 <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     City
                   </label>
                   {mode === 'edit' ? (
@@ -1087,19 +1087,19 @@ const PatientCrudPage: React.FC = () => {
                       name={`address.${index}.city`}
                       value={address.city || ''}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter city name"
                       title="City for this address"
                       aria-label={`City for address ${index + 1}`}
                     />
                   ) : (
-                    <div className="py-2 px-3 bg-gray-50 rounded-md">
+                    <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                       {address.city || 'Not specified'}
                     </div>
                   )}
                 </div>
                 <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     State
                   </label>
                   {mode === 'edit' ? (
@@ -1108,19 +1108,19 @@ const PatientCrudPage: React.FC = () => {
                       name={`address.${index}.state`}
                       value={address.state || ''}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter state or province"
                       title="State or province for this address"
                       aria-label={`State for address ${index + 1}`}
                     />
                   ) : (
-                    <div className="py-2 px-3 bg-gray-50 rounded-md">
+                    <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                       {address.state || 'Not specified'}
                     </div>
                   )}
                 </div>
                 <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     Postal Code
                   </label>
                   {mode === 'edit' ? (
@@ -1129,19 +1129,19 @@ const PatientCrudPage: React.FC = () => {
                       name={`address.${index}.postalCode`}
                       value={address.postalCode || ''}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter postal code"
                       title="Postal or zip code for this address"
                       aria-label={`Postal code for address ${index + 1}`}
                     />
                   ) : (
-                    <div className="py-2 px-3 bg-gray-50 rounded-md">
+                    <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                       {address.postalCode || 'Not specified'}
                     </div>
                   )}
                 </div>
                 <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     Country
                   </label>
                   {mode === 'edit' ? (
@@ -1149,7 +1149,7 @@ const PatientCrudPage: React.FC = () => {
                       name={`address.${index}.country`}
                       value={address.country || ''}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       aria-label={`Address country ${index + 1}`}
                     >
                       <option value="">Select a country</option>
@@ -1160,7 +1160,7 @@ const PatientCrudPage: React.FC = () => {
                       ))}
                     </select>
                   ) : (
-                    <div className="py-2 px-3 bg-gray-50 rounded-md">
+                    <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                       {countryCodes.find(
                         (country) => country.code === address.country,
                       )?.name ||
@@ -1170,7 +1170,7 @@ const PatientCrudPage: React.FC = () => {
                   )}
                 </div>
                 <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     Use
                   </label>
                   {mode === 'edit' ? (
@@ -1178,7 +1178,7 @@ const PatientCrudPage: React.FC = () => {
                       name={`address.${index}.use`}
                       value={address.use || ''}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       aria-label={`Address use ${index + 1}`}
                     >
                       <option value="">Select a use</option>
@@ -1189,7 +1189,7 @@ const PatientCrudPage: React.FC = () => {
                       <option value="billing">Billing</option>
                     </select>
                   ) : (
-                    <div className="py-2 px-3 bg-gray-50 rounded-md">
+                    <div className="py-2 px-3 bg-gray-50 rounded-md text-sm">
                       {address.use
                         ? address.use.charAt(0).toUpperCase() +
                           address.use.slice(1)
