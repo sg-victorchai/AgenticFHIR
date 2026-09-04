@@ -173,6 +173,7 @@ const VisitRegistrationPage: React.FC = () => {
           <div className="ml-auto">
             <Link
               to={`/patient/${id}/details`}
+              state={{ backTo: `/patient/${id}/visit/new` }}
               className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
             >
               View Profile
@@ -295,7 +296,7 @@ const VisitRegistrationPage: React.FC = () => {
                 : 'Register'}
             </button>
             <Link
-              to={`/patient/${id}/details`}
+              to="/patients"
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-6 rounded-md transition-colors inline-flex items-center"
             >
               Cancel

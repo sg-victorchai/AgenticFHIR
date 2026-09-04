@@ -120,6 +120,7 @@ export const fhirApi = createApi({
             searchParams: {
               ...searchParams,
               _offset: searchParams._offset || '0',
+              _count: searchParams._count || '20',
             },
           });
           return { data: results as Bundle<Patient> };

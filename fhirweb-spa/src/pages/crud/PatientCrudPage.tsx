@@ -489,10 +489,10 @@ const PatientCrudPage: React.FC = () => {
       } else {
         // Update existing resource
         await updatePatient(cleanedFormData).unwrap();
+        // Switch back to view mode after successful update
+        setMode('view');
+        setErrorMessage('');
       }
-
-      // Only navigate back if operation was successful (update case)
-      navigate('/patients');
     } catch (error: any) {
       console.error('Error saving patient:', error);
 
@@ -533,6 +533,11 @@ const PatientCrudPage: React.FC = () => {
     const backTo = (location.state as any)?.backTo;
     navigate(backTo ?? '/patients');
   };
+
+  // Determine back button label based on where we're navigating to
+  const backTo = (location.state as any)?.backTo;
+  const isFromRegistration = backTo?.includes('/visit/new');
+  const backButtonLabel = isFromRegistration ? 'Back to Registration' : 'Back to Patient Search';
 
   // Add new telecom
   const addTelecom = () => {
@@ -628,7 +633,7 @@ const PatientCrudPage: React.FC = () => {
               clipRule="evenodd"
             />
           </svg>
-          Back to Patient Search
+          {backButtonLabel}
         </button>
       </div>
 
