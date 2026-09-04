@@ -19,6 +19,13 @@ interface PatientResult {
   gender: string;
   birthDate: string;
   identifier: string;
+  address?: string;
+  contactNumber?: string;
+  nextOfKin?: {
+    name: string;
+    relationship: string;
+    phone?: string;
+  };
 }
 
 const PatientSearchPage: React.FC = () => {
@@ -30,6 +37,7 @@ const PatientSearchPage: React.FC = () => {
   const [currentBundle, setCurrentBundle] = useState<
     Bundle<FHIRPatient> | undefined
   >();
+  const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
 
   // Only trigger the query when shouldSearch is true and we have search parameters
   const {
@@ -144,12 +152,45 @@ const PatientSearchPage: React.FC = () => {
         const idEntry = patient.identifier?.[0];
         const primaryIdentifier = idEntry?.value || 'Unknown';
 
+        // Extract address
+        const addressObj = patient.address?.[0];
+        const address = addressObj
+          ? [
+              addressObj.line?.join(', '),
+              addressObj.city,
+              addressObj.state,
+              addressObj.postalCode,
+              addressObj.country,
+            ]
+              .filter(Boolean)
+              .join(', ')
+          : undefined;
+
+        // Extract contact number (telecom of type 'phone')
+        const phoneEntry = patient.telecom?.find(
+          (t) => t.system === 'phone'
+        );
+        const contactNumber = phoneEntry?.value;
+
+        // Extract next of kin (contact with relationship)
+        const nokEntry = patient.contact?.[0];
+        const nextOfKin = nokEntry
+          ? {
+              name: nokEntry.name?.text || 'Unknown',
+              relationship: nokEntry.relationship?.[0]?.coding?.[0]?.display || nokEntry.relationship?.[0]?.text || 'Relative',
+              phone: nokEntry.telecom?.find((t) => t.system === 'phone')?.value,
+            }
+          : undefined;
+
         return {
           id: patient.id || '',
           name: fullName,
           gender: patient.gender || 'unknown',
           birthDate: patient.birthDate || 'unknown',
           identifier: primaryIdentifier,
+          address,
+          contactNumber,
+          nextOfKin,
         };
       });
   }, [currentBundle]);
@@ -177,7 +218,17 @@ const PatientSearchPage: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4">
-      <h1 className="text-2xl font-bold mb-6">Patient Search</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Patient Search</h1>
+        {role === 'psa' && (
+          <Link
+            to="/queue"
+            className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+          >
+            Patient Queue
+          </Link>
+        )}
+      </div>
 
       <div className="bg-white shadow-md rounded-lg p-6 mb-6">
         <form onSubmit={handleSearch} className="mb-4">
@@ -283,71 +334,132 @@ const PatientSearchPage: React.FC = () => {
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
-                    Register &amp; Consult
+                    Register
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {patientResults.map((patient) => (
-                  <tr key={patient.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">
-                        {patient.identifier}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {patient.name}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">
-                        {patient.gender}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">
-                        {patient.birthDate}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <Link
-                        to={`/patient/${patient.id}/details`}
-                        state={{ backTo: '/patients' }}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        View Details
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex flex-row gap-2">
-                        {role === 'psa' && (
-                          <Link
-                            to={`/patient/${patient.id}/visit/new`}
-                            className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-                          >
-                            Register
-                          </Link>
-                        )}
-                        {role === 'psa' && (
-                          <Link
-                            to={`/patient/${patient.id}/encounter`}
-                            className="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-                          >
-                            View Visit Summary
-                          </Link>
-                        )}
-                        {role === 'clinician' && (
-                          <Link
-                            to={`/patient/${patient.id}/encounter`}
-                            className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
-                          >
-                            Consult
-                          </Link>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                  <React.Fragment key={patient.id}>
+                    <tr>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {patient.identifier}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {patient.name}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {patient.gender}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {patient.birthDate}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => setExpandedPatientId(expandedPatientId === patient.id ? null : patient.id)}
+                          className="text-blue-600 hover:text-blue-900 font-medium"
+                        >
+                          {expandedPatientId === patient.id ? 'Hide Details' : 'View Details'}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex flex-row gap-2">
+                          {role === 'psa' && (
+                            <Link
+                              to={`/patient/${patient.id}/visit/new`}
+                              className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                            >
+                              Register
+                            </Link>
+                          )}
+                          {role === 'clinician' && (
+                            <Link
+                              to={`/patient/${patient.id}/encounter`}
+                              className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-3 rounded-md transition-colors text-xs"
+                            >
+                              Consult
+                            </Link>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedPatientId === patient.id && (
+                      <tr className="bg-blue-50 border-t-2 border-blue-200">
+                        <td colSpan={6} className="px-6 py-4">
+                          <div className="space-y-4">
+                            {/* Demographics Section */}
+                            <div>
+                              <h3 className="font-semibold text-gray-900 mb-3">Patient Demographics</h3>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-600 font-medium">Full Name</span>
+                                  <p className="text-gray-900 mt-1">{patient.name}</p>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600 font-medium">Identifier / MRN</span>
+                                  <p className="text-gray-900 mt-1">{patient.identifier}</p>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600 font-medium">Gender</span>
+                                  <p className="text-gray-900 mt-1 capitalize">{patient.gender}</p>
+                                </div>
+                                <div className="col-span-2 md:col-span-3">
+                                  <span className="text-gray-600 font-medium">Date of Birth</span>
+                                  <p className="text-gray-900 mt-1">{patient.birthDate}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Contact Information Section */}
+                            <div className="border-t border-blue-200 pt-4">
+                              <h3 className="font-semibold text-gray-900 mb-3">Contact Information</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-600 font-medium">Phone Number</span>
+                                  <p className="text-gray-900 mt-1">{patient.contactNumber || 'N/A'}</p>
+                                </div>
+                                <div className="col-span-1 md:col-span-2">
+                                  <span className="text-gray-600 font-medium">Address</span>
+                                  <p className="text-gray-900 mt-1">{patient.address || 'N/A'}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Next of Kin Section */}
+                            {patient.nextOfKin && (
+                              <div className="border-t border-blue-200 pt-4">
+                                <h3 className="font-semibold text-gray-900 mb-3">Next of Kin</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <span className="text-gray-600 font-medium">Name</span>
+                                    <p className="text-gray-900 mt-1">{patient.nextOfKin.name}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600 font-medium">Relationship</span>
+                                    <p className="text-gray-900 mt-1 capitalize">{patient.nextOfKin.relationship}</p>
+                                  </div>
+                                  {patient.nextOfKin.phone && (
+                                    <div className="col-span-1 md:col-span-2">
+                                      <span className="text-gray-600 font-medium">Phone Number</span>
+                                      <p className="text-gray-900 mt-1">{patient.nextOfKin.phone}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -373,7 +485,7 @@ const PatientSearchPage: React.FC = () => {
               </p>
               <Link
                 to="/patient/new"
-                className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-5 rounded-md transition-colors"
+                className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-5 rounded-md transition-colors w-full sm:w-auto"
               >
                 Create New Patient
               </Link>
