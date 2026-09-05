@@ -19,6 +19,7 @@ import {
   isCancellableStatus,
   riskClassColor,
 } from '../components/care-coordinator/missionUi';
+import { MissionOutcomeDisplay } from '../components/care-coordinator/MissionOutcomeDisplay';
 
 const PERSONA_ID = 'diabetic-care-assessment-manager';
 const DEFAULT_GOAL =
@@ -524,9 +525,7 @@ const CareCoordinatorPage: React.FC = () => {
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
                     Outcome
                   </h3>
-                  <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-100 rounded-lg px-4 py-3.5 leading-relaxed">
-                    {activeMission.outputs.response}
-                  </div>
+                  <MissionOutcomeDisplay response={activeMission.outputs.response} />
                 </div>
               )}
 
