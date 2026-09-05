@@ -945,8 +945,8 @@ const PatientQueuePage: React.FC = () => {
         </div>
 
         {/* Today / Date Range toggle */}
-        <div className="flex flex-col gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 sm:px-4 py-3">
-          <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs sm:text-sm font-medium w-full">
+        <div className="flex flex-col md:flex-row md:items-end gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 sm:px-4 py-3">
+          <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs sm:text-sm font-medium w-full md:w-auto">
             <button
               onClick={() => setModeAndSave('today')}
               className={`flex-1 px-3 sm:px-4 py-2 transition-colors text-center ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
