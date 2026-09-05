@@ -329,9 +329,9 @@ const QueueRow: React.FC<QueueRowProps> = ({
                   <button
                     onClick={() => onEncounterAction(encounter, 'call-patient')}
                     disabled={isUpdating}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50"
                   >
-                    Call Patient
+                    Call
                   </button>
                 )}
                 {stage === 'waiting-patient' && (
@@ -340,25 +340,25 @@ const QueueRow: React.FC<QueueRowProps> = ({
                       onEncounterAction(encounter, 'start-consult')
                     }
                     disabled={isUpdating}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
-                    Start Consult
+                    Consult
                   </button>
                 )}
                 {stage === 'in-consultation' && (
                   <Link
                     to={`/patient/${patientId}/encounter/${encounterId}/consult`}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                   >
-                    Resume Consult
+                    Resume
                   </Link>
                 )}
                 {stage === 'completed' && (
                   <Link
                     to={`/patient/${patientId}/encounter/${encounterId}/notes`}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
                   >
-                    View Notes
+                    Notes
                   </Link>
                 )}
               </>
@@ -403,9 +403,9 @@ const QueueRow: React.FC<QueueRowProps> = ({
                       onEncounterAction(encounter, 'collect-medication')
                     }
                     disabled={isUpdating}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
                   >
-                    Dispense Medications
+                    Dispense
                   </button>
                 )}
                 {stage === 'awaiting-billing' && (
@@ -414,9 +414,9 @@ const QueueRow: React.FC<QueueRowProps> = ({
                       onEncounterAction(encounter, 'collect-payment')
                     }
                     disabled={isUpdating}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50"
                   >
-                    Collect Payment
+                    Payment
                   </button>
                 )}
                 {stage !== 'completed' &&
@@ -427,7 +427,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
                     <button
                       onClick={() => onEncounterAction(encounter, 'cancel')}
                       disabled={isUpdating}
-                      className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50"
+                      className="flex-1 sm:flex-none inline-flex items-center justify-center px-2 sm:px-3 py-1.5 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50"
                     >
                       Cancel
                     </button>
@@ -475,18 +475,18 @@ const QueueSection: React.FC<QueueSectionProps> = ({
   const label = STAGE_LABEL[stage];
 
   return (
-    <div className="mb-6 border rounded-xl overflow-hidden shadow-sm">
+    <div className="mb-4 sm:mb-6 border rounded-xl overflow-hidden shadow-sm">
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className={`w-full flex items-center justify-between px-5 py-3 border-b font-semibold text-left ${headerCls}`}
+        className={`w-full flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b font-semibold text-left text-sm sm:text-base ${headerCls}`}
       >
-        <span className="flex items-center gap-2">
-          {label}
-          <span className="text-sm font-normal text-gray-500">
+        <span className="flex items-center gap-1 sm:gap-2 min-w-0">
+          <span className="truncate">{label}</span>
+          <span className="text-xs sm:text-sm font-normal text-gray-500 shrink-0">
             ({encounters.length})
           </span>
         </span>
-        <span className="text-gray-400 text-xs">{collapsed ? '▼' : '▲'}</span>
+        <span className="text-gray-400 text-xs shrink-0 ml-2">{collapsed ? '▼' : '▲'}</span>
       </button>
 
       {!collapsed && (
@@ -496,8 +496,9 @@ const QueueSection: React.FC<QueueSectionProps> = ({
               No encounters.
             </p>
           ) : (
+            <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 hidden md:table-header-group">
                 <tr>
                   {[
                     'ID',
@@ -510,7 +511,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                   ].map((h) => (
                     <th
                       key={h}
-                      className={`px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'ID' ? 'hidden md:table-cell' : ''} ${h === 'Chief Complaint' ? 'hidden lg:table-cell' : ''} ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
+                      className={`px-3 sm:px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'ID' ? 'hidden md:table-cell' : ''} ${h === 'Chief Complaint' ? 'hidden lg:table-cell' : ''} ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
                     >
                       {h}
                     </th>
@@ -530,8 +531,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                   />
                 ))}
               </tbody>
-            </table>
-          )}
+            </table>            </div>          )}
         </div>
       )}
     </div>
@@ -703,52 +703,52 @@ const PatientQueuePage: React.FC = () => {
   const subtitleLabel = mode === 'today' ? todayLabel : rangeLabel;
 
   return (
-    <div className="container mx-auto px-4 max-w-6xl">
+    <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-6xl">
       {/* Page header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Patient Queue</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{subtitleLabel}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Patient Queue</h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">{subtitleLabel}</p>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {role === 'psa' && (
               <Link
                 to="/patients"
-                className="inline-flex items-center px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
-                + Patient Search
+                + Search
               </Link>
             )}
             <button
               onClick={() => refetch()}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1 px-3 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
             >
-              ↻ Refresh
+              ↻ <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </div>
 
         {/* Today / Date Range toggle */}
-        <div className="flex flex-col gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-          <div className="flex rounded-md overflow-hidden border border-gray-200 text-sm font-medium w-full md:w-auto">
+        <div className="flex flex-col gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 sm:px-4 py-3">
+          <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs sm:text-sm font-medium w-full">
             <button
               onClick={() => setModeAndSave('today')}
-              className={`flex-1 md:flex-none px-4 py-1.5 transition-colors ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`flex-1 px-3 sm:px-4 py-2 transition-colors text-center ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
               Today
             </button>
             <button
               onClick={() => setModeAndSave('range')}
-              className={`flex-1 md:flex-none px-4 py-1.5 transition-colors ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`flex-1 px-3 sm:px-4 py-2 transition-colors text-center ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
             >
-              Date Range
+              Range
             </button>
           </div>
 
           {mode === 'range' && (
-            <div className="flex flex-col md:flex-row gap-3 md:items-center">
-              <div className="flex flex-col md:flex-row md:items-center gap-2">
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+              <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-gray-500">
                   From:
                 </label>
@@ -761,10 +761,10 @@ const PatientQueuePage: React.FC = () => {
                     if (e.target.value > toMonth)
                       setToMonthAndSave(e.target.value);
                   }}
-                  className="w-full md:w-auto px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full sm:w-auto px-2 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
               </div>
-              <div className="flex flex-col md:flex-row md:items-center gap-2">
+              <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-gray-500">To:</label>
                 <input
                   type="month"
@@ -772,7 +772,7 @@ const PatientQueuePage: React.FC = () => {
                   min={fromMonth}
                   max={currentYearMonth}
                   onChange={(e) => setToMonthAndSave(e.target.value)}
-                  className="w-full md:w-auto px-2 py-1.5 text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full sm:w-auto px-2 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
               </div>
             </div>
@@ -781,69 +781,77 @@ const PatientQueuePage: React.FC = () => {
       </div>
 
       {/* Summary chips */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-6">
         {[
           {
             label: 'Awaiting Triage',
+            shortLabel: 'Triage',
             count: awaitingTriage.length,
             cls: 'bg-amber-100 text-amber-800',
           },
           {
             label: 'Awaiting Clinician',
+            shortLabel: 'Clinician',
             count: awaitingClinician.length,
             cls: 'bg-yellow-100 text-yellow-800',
           },
           {
             label: 'Waiting Patient',
+            shortLabel: 'Waiting',
             count: waitingPatient.length,
             cls: 'bg-orange-100 text-orange-800',
           },
           {
             label: 'In Consultation',
+            shortLabel: 'Consult',
             count: inConsultation.length,
             cls: 'bg-blue-100 text-blue-800',
           },
           {
             label: 'Awaiting Medications',
+            shortLabel: 'Meds',
             count: awaitingMedication.length,
             cls: 'bg-teal-100 text-teal-800',
           },
           {
             label: 'Awaiting Billing',
+            shortLabel: 'Billing',
             count: awaitingBilling.length,
             cls: 'bg-purple-100 text-purple-800',
           },
           {
             label: 'Completed',
+            shortLabel: 'Done',
             count: completed.length,
             cls: 'bg-green-100 text-green-800',
           },
           {
             label: 'Cancelled',
+            shortLabel: 'Cancel',
             count: cancelled.length,
             cls: 'bg-gray-100 text-gray-600',
           },
         ].map((s) => (
           <span
             key={s.label}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs md:text-sm font-semibold ${s.cls}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap ${s.cls}`}
           >
-            <span className="hidden md:inline">{s.label}</span>
-            <span className="md:hidden truncate">{s.label.split(' ')[0]}</span>
+            <span className="hidden sm:inline">{s.label}</span>
+            <span className="sm:hidden">{s.shortLabel}</span>
             <span className="font-bold">{s.count}</span>
           </span>
         ))}
       </div>
 
       {isLoading && (
-        <div className="flex justify-center items-center py-16">
+        <div className="flex flex-col items-center justify-center py-12 sm:py-16">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" />
-          <p className="ml-3 text-gray-500">Loading encounters…</p>
+          <p className="mt-3 text-sm text-gray-500">Loading encounters…</p>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-5 py-4 mb-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 sm:px-5 py-3 sm:py-4 mb-6 text-sm">
           Failed to load encounters. Please refresh.
         </div>
       )}
