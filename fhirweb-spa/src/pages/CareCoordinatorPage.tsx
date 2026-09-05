@@ -54,13 +54,6 @@ const InterventionReviewPanel: React.FC<{
               {intervention.context.hitlTriggerReason}
             </p>
           )}
-          {intervention.expiresAt && (
-            <p className="text-xs text-amber-700/60 mt-1">
-              Expires {formatRelativeTime(intervention.expiresAt)}
-              {intervention.timeoutAction &&
-                ` · ${intervention.timeoutAction} on timeout`}
-            </p>
-          )}
         </div>
       </div>
 
