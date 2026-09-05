@@ -218,7 +218,7 @@ const RoleSelectionPage: React.FC = () => {
             Patient Portal
           </h2>
           <p className="text-sm text-gray-500 text-center">
-            View your queue status and follow your consultation progress
+            View your records, upload medical reports and ask AI to check your health conditions
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-600 group-hover:text-violet-800">
             Continue →

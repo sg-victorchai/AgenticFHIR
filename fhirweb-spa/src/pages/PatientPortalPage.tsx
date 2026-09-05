@@ -150,7 +150,7 @@ const PatientPortalPage: React.FC = () => {
   };
 
   const handleBack = () => {
-    navigate('/smartapp');
+    navigate('/');
   };
 
   return (
