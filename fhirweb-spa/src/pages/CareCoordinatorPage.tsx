@@ -398,7 +398,7 @@ const CareCoordinatorPage: React.FC = () => {
           <div className="mt-5 flex items-center gap-3">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !!(activeMission && (activeMission.status === 'PENDING' || activeMission.status === 'RUNNING'))}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-lg font-semibold text-sm hover:bg-amber-700 disabled:opacity-50 shadow-sm transition-colors"
             >
               {submitting ? (
