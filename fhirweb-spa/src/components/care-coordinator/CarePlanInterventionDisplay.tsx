@@ -31,10 +31,18 @@ const parseCarePlanIntervention = (
   message: string,
 ): ParsedCarePlanIntervention => {
   const cohortSummary: CohortSummary | null = (() => {
-    const totalMatch = message.match(/Total diabetic candidates aged 45\+:\s*(\d+)/);
-    const hbA1cMatch = message.match(/Already had a recent HbA1c \(excluded\):\s*(\d+)/);
-    const existingMatch = message.match(/Already had an active care-gap CarePlan from a prior run \(excluded\):\s*(\d+)/);
-    const finalMatch = message.match(/Final care-gap cohort:\s*(\d+)\s*patients/);
+    const totalMatch = message.match(
+      /Total diabetic candidates aged 45\+:\s*(\d+)/,
+    );
+    const hbA1cMatch = message.match(
+      /Already had a recent HbA1c \(excluded\):\s*(\d+)/,
+    );
+    const existingMatch = message.match(
+      /Already had an active care-gap CarePlan from a prior run \(excluded\):\s*(\d+)/,
+    );
+    const finalMatch = message.match(
+      /Final care-gap cohort:\s*(\d+)\s*patients/,
+    );
 
     if (totalMatch && hbA1cMatch && existingMatch && finalMatch) {
       return {
@@ -192,7 +200,9 @@ export const CarePlanInterventionDisplay: React.FC<{
                   <div className="bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 space-y-1">
                     <p className="text-xs">
                       <span className="font-semibold text-amber-900">Gap:</span>{' '}
-                      <span className="text-amber-800">{plan.lastHbA1cDate}</span>
+                      <span className="text-amber-800">
+                        {plan.lastHbA1cDate}
+                      </span>
                     </p>
                     <p className="text-xs">
                       <span className="font-semibold text-amber-900">

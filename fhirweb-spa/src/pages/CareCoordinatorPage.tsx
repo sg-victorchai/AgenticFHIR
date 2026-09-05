@@ -381,9 +381,7 @@ const CareCoordinatorPage: React.FC = () => {
               <IconClipboardList className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Care Manager
-              </h1>
+              <h1 className="text-2xl font-bold text-gray-900">Care Manager</h1>
               <p className="text-sm text-gray-500 mt-1 max-w-md">
                 Submit a diabetic care-gap assessment and track it through to
                 sign-off.

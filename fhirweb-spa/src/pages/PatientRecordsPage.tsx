@@ -3785,7 +3785,9 @@ const PatientRecordsPage: React.FC = () => {
                                   {mr.id || '—'}
                                 </div>
                                 <div>
-                                  <span className="font-medium">Identifier:</span>{' '}
+                                  <span className="font-medium">
+                                    Identifier:
+                                  </span>{' '}
                                   {mr.identifier?.[0]?.value || '—'}
                                 </div>
                                 <div>
@@ -3797,13 +3799,17 @@ const PatientRecordsPage: React.FC = () => {
                                   {mr.priority || '—'}
                                 </div>
                                 <div>
-                                  <span className="font-medium">Requester:</span>{' '}
+                                  <span className="font-medium">
+                                    Requester:
+                                  </span>{' '}
                                   {mr.requester?.display ||
                                     mr.requester?.reference ||
                                     '—'}
                                 </div>
                                 <div>
-                                  <span className="font-medium">Encounter:</span>{' '}
+                                  <span className="font-medium">
+                                    Encounter:
+                                  </span>{' '}
                                   {mr.encounter?.reference || '—'}
                                 </div>
                                 <div>
@@ -3882,8 +3888,9 @@ const PatientRecordsPage: React.FC = () => {
                                 </div>
                                 <div className="col-span-2">
                                   <span className="font-medium">Note:</span>{' '}
-                                  {mr.note?.map((n: any) => n.text).join('; ') ||
-                                    '—'}
+                                  {mr.note
+                                    ?.map((n: any) => n.text)
+                                    .join('; ') || '—'}
                                 </div>
                               </div>
                             </td>
@@ -3925,11 +3932,13 @@ const PatientRecordsPage: React.FC = () => {
 
                       <div className="space-y-2 text-sm">
                         {mr.dosageInstruction?.[0]?.text ||
-                          (mr.dosageInstruction?.[0]?.timing?.repeat?.frequency
-                            ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
-                            : null) ? (
+                        (mr.dosageInstruction?.[0]?.timing?.repeat?.frequency
+                          ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
+                          : null) ? (
                           <div>
-                            <span className="font-medium text-gray-700">Dosage:</span>
+                            <span className="font-medium text-gray-700">
+                              Dosage:
+                            </span>
                             <p className="text-gray-600">
                               {mr.dosageInstruction?.[0]?.text ||
                                 (mr.dosageInstruction?.[0]?.timing?.repeat
@@ -3941,12 +3950,14 @@ const PatientRecordsPage: React.FC = () => {
                         ) : null}
 
                         {mr.reasonCode?.[0]?.text ||
-                          mr.reasonCode?.[0]?.coding?.[0]?.display ||
-                          mr.reason?.[0]?.concept?.text ||
-                          mr.reason?.[0]?.concept?.coding?.[0]?.display ||
-                          mr.reason?.[0]?.reference?.display ? (
+                        mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                        mr.reason?.[0]?.concept?.text ||
+                        mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                        mr.reason?.[0]?.reference?.display ? (
                           <div>
-                            <span className="font-medium text-gray-700">Reason:</span>
+                            <span className="font-medium text-gray-700">
+                              Reason:
+                            </span>
                             <p className="text-gray-600">
                               {mr.reasonCode?.[0]?.text ||
                                 mr.reasonCode?.[0]?.coding?.[0]?.display ||
@@ -3974,51 +3985,76 @@ const PatientRecordsPage: React.FC = () => {
                         </div>
                         {mr.identifier?.[0]?.value && (
                           <div>
-                            <span className="font-medium text-gray-700">Identifier:</span>
-                            <p className="text-gray-600">{mr.identifier[0].value}</p>
+                            <span className="font-medium text-gray-700">
+                              Identifier:
+                            </span>
+                            <p className="text-gray-600">
+                              {mr.identifier[0].value}
+                            </p>
                           </div>
                         )}
                         {mr.intent && (
                           <div>
-                            <span className="font-medium text-gray-700">Intent:</span>
+                            <span className="font-medium text-gray-700">
+                              Intent:
+                            </span>
                             <p className="text-gray-600">{mr.intent}</p>
                           </div>
                         )}
                         {mr.priority && (
                           <div>
-                            <span className="font-medium text-gray-700">Priority:</span>
+                            <span className="font-medium text-gray-700">
+                              Priority:
+                            </span>
                             <p className="text-gray-600">{mr.priority}</p>
                           </div>
                         )}
                         {(mr.requester?.display || mr.requester?.reference) && (
                           <div>
-                            <span className="font-medium text-gray-700">Requester:</span>
-                            <p className="text-gray-600">{mr.requester?.display || mr.requester?.reference}</p>
+                            <span className="font-medium text-gray-700">
+                              Requester:
+                            </span>
+                            <p className="text-gray-600">
+                              {mr.requester?.display || mr.requester?.reference}
+                            </p>
                           </div>
                         )}
                         {mr.encounter?.reference && (
                           <div>
-                            <span className="font-medium text-gray-700">Encounter:</span>
-                            <p className="text-gray-600">{mr.encounter.reference}</p>
+                            <span className="font-medium text-gray-700">
+                              Encounter:
+                            </span>
+                            <p className="text-gray-600">
+                              {mr.encounter.reference}
+                            </p>
                           </div>
                         )}
                         {mr.subject?.reference && (
                           <div>
-                            <span className="font-medium text-gray-700">Subject:</span>
-                            <p className="text-gray-600">{mr.subject.reference}</p>
+                            <span className="font-medium text-gray-700">
+                              Subject:
+                            </span>
+                            <p className="text-gray-600">
+                              {mr.subject.reference}
+                            </p>
                           </div>
                         )}
                         {mr.dispenseRequest?.quantity?.value != null && (
                           <div>
-                            <span className="font-medium text-gray-700">Dispense Qty:</span>
+                            <span className="font-medium text-gray-700">
+                              Dispense Qty:
+                            </span>
                             <p className="text-gray-600">
                               {`${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim()}
                             </p>
                           </div>
                         )}
-                        {mr.dispenseRequest?.expectedSupplyDuration?.value != null && (
+                        {mr.dispenseRequest?.expectedSupplyDuration?.value !=
+                          null && (
                           <div>
-                            <span className="font-medium text-gray-700">Supply Duration:</span>
+                            <span className="font-medium text-gray-700">
+                              Supply Duration:
+                            </span>
                             <p className="text-gray-600">
                               {`${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim()}
                             </p>
@@ -4026,13 +4062,19 @@ const PatientRecordsPage: React.FC = () => {
                         )}
                         {mr.dispenseRequest?.numberOfRepeatsAllowed != null && (
                           <div>
-                            <span className="font-medium text-gray-700">Repeats Allowed:</span>
-                            <p className="text-gray-600">{mr.dispenseRequest.numberOfRepeatsAllowed}</p>
+                            <span className="font-medium text-gray-700">
+                              Repeats Allowed:
+                            </span>
+                            <p className="text-gray-600">
+                              {mr.dispenseRequest.numberOfRepeatsAllowed}
+                            </p>
                           </div>
                         )}
                         {mr.substitution?.allowedBoolean != null && (
                           <div>
-                            <span className="font-medium text-gray-700">Substitution Allowed:</span>
+                            <span className="font-medium text-gray-700">
+                              Substitution Allowed:
+                            </span>
                             <p className="text-gray-600">
                               {mr.substitution.allowedBoolean ? 'Yes' : 'No'}
                             </p>
@@ -4040,8 +4082,12 @@ const PatientRecordsPage: React.FC = () => {
                         )}
                         {mr.note && mr.note.length > 0 && (
                           <div>
-                            <span className="font-medium text-gray-700">Note:</span>
-                            <p className="text-gray-600">{mr.note.map((n: any) => n.text).join('; ')}</p>
+                            <span className="font-medium text-gray-700">
+                              Note:
+                            </span>
+                            <p className="text-gray-600">
+                              {mr.note.map((n: any) => n.text).join('; ')}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -4144,7 +4190,8 @@ const PatientRecordsPage: React.FC = () => {
                             >
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <span className="font-medium">ID:</span> {md.id}
+                                  <span className="font-medium">ID:</span>{' '}
+                                  {md.id}
                                 </div>
                                 <div>
                                   <span className="font-medium">
@@ -4194,7 +4241,9 @@ const PatientRecordsPage: React.FC = () => {
                       <div className="space-y-2 text-sm">
                         {md.quantity?.value != null && (
                           <div>
-                            <span className="font-medium text-gray-700">Quantity:</span>
+                            <span className="font-medium text-gray-700">
+                              Quantity:
+                            </span>
                             <p className="text-gray-600">
                               {`${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()}
                             </p>
@@ -4217,7 +4266,9 @@ const PatientRecordsPage: React.FC = () => {
                         </div>
                         {md.daysSupply?.value != null && (
                           <div>
-                            <span className="font-medium text-gray-700">Days Supply:</span>
+                            <span className="font-medium text-gray-700">
+                              Days Supply:
+                            </span>
                             <p className="text-gray-600">
                               {`${md.daysSupply.value} ${md.daysSupply.unit ?? ''}`.trim()}
                             </p>
@@ -4280,11 +4331,14 @@ const PatientRecordsPage: React.FC = () => {
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {['Medication', 'Status', 'Effective', 'Last Updated'].map(
-                        (h) => (
-                          <TH key={h}>{h}</TH>
-                        ),
-                      )}
+                      {[
+                        'Medication',
+                        'Status',
+                        'Effective',
+                        'Last Updated',
+                      ].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <TH />
                     </tr>
                   </thead>
@@ -4323,7 +4377,8 @@ const PatientRecordsPage: React.FC = () => {
                             >
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <span className="font-medium">ID:</span> {ms.id}
+                                  <span className="font-medium">ID:</span>{' '}
+                                  {ms.id}
                                 </div>
                                 <div>
                                   <span className="font-medium">Note:</span>{' '}
@@ -4367,11 +4422,17 @@ const PatientRecordsPage: React.FC = () => {
                       </div>
 
                       <div className="space-y-2 text-sm">
-                        {(ms.effectivePeriod?.start || ms.effectiveDateTime) && (
+                        {(ms.effectivePeriod?.start ||
+                          ms.effectiveDateTime) && (
                           <div>
-                            <span className="font-medium text-gray-700">Effective:</span>
+                            <span className="font-medium text-gray-700">
+                              Effective:
+                            </span>
                             <p className="text-gray-600">
-                              {fmt(ms.effectivePeriod?.start || ms.effectiveDateTime)}
+                              {fmt(
+                                ms.effectivePeriod?.start ||
+                                  ms.effectiveDateTime,
+                              )}
                             </p>
                           </div>
                         )}
@@ -4392,7 +4453,9 @@ const PatientRecordsPage: React.FC = () => {
                         </div>
                         {ms.note && ms.note.length > 0 && (
                           <div>
-                            <span className="font-medium text-gray-700">Note:</span>
+                            <span className="font-medium text-gray-700">
+                              Note:
+                            </span>
                             <p className="text-gray-600">{ms.note[0].text}</p>
                           </div>
                         )}
@@ -4761,7 +4824,9 @@ const PatientRecordsPage: React.FC = () => {
                                 key={cIdx}
                                 className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md text-indigo-700"
                               >
-                                <span className="font-medium">{code.display || code.code}</span>
+                                <span className="font-medium">
+                                  {code.display || code.code}
+                                </span>
                                 {code.code && code.display && (
                                   <span className="text-indigo-600">
                                     ({code.code})
@@ -4806,7 +4871,9 @@ const PatientRecordsPage: React.FC = () => {
                     )}
                     {cp.goal?.length ? (
                       <div className="mb-3">
-                        <p className="font-medium mb-1 text-sm text-gray-700">Goals:</p>
+                        <p className="font-medium mb-1 text-sm text-gray-700">
+                          Goals:
+                        </p>
                         <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
                           {cp.goal.map((g: any, i: number) => (
                             <li key={i}>
@@ -4818,7 +4885,9 @@ const PatientRecordsPage: React.FC = () => {
                     ) : null}
                     {cp.activity?.length ? (
                       <div>
-                        <p className="font-medium mb-1 text-sm text-gray-700">Activities:</p>
+                        <p className="font-medium mb-1 text-sm text-gray-700">
+                          Activities:
+                        </p>
                         <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
                           {cp.activity.map((act: any, i: number) => {
                             const detail =
@@ -5651,8 +5720,6 @@ const PatientRecordsPage: React.FC = () => {
               userSelect: 'auto',
             }}
           >
-
-
             <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
               <div className="flex-1">
                 <h2 className="text-sm font-semibold text-indigo-900">
@@ -5669,8 +5736,19 @@ const PatientRecordsPage: React.FC = () => {
                   className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
                   title="Expand panel"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2.5}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 19V5m0 0l-7 7m7-7l7 7"
+                    />
                   </svg>
                 </button>
                 <button
@@ -5678,8 +5756,19 @@ const PatientRecordsPage: React.FC = () => {
                   className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
                   title="Collapse panel"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m0 0l-7-7m7 7l7-7" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2.5}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 5v14m0 0l-7-7m7 7l7-7"
+                    />
                   </svg>
                 </button>
                 <button

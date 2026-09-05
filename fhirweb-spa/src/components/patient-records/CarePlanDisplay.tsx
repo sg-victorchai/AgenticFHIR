@@ -29,9 +29,11 @@ const parseCarePlanDescription = (description?: string): ParsedCarePlan => {
   }
 
   const isCarePlanGap = description.includes('Care Gap Identified');
-  
+
   // Extract draft warning
-  const draftMatch = description.match(/^(DRAFT — REQUIRES CLINICAL REVIEW[^\n.]*\.)/);
+  const draftMatch = description.match(
+    /^(DRAFT — REQUIRES CLINICAL REVIEW[^\n.]*\.)/,
+  );
   const draftWarning = draftMatch ? draftMatch[1] : null;
 
   // Extract care gap details
@@ -137,9 +139,7 @@ export const CarePlanDisplay: React.FC<{
                   <span className="font-medium">{item.display}</span>
                 )}
                 {item.code && (
-                  <span className="text-indigo-700 ml-2">
-                    ({item.code})
-                  </span>
+                  <span className="text-indigo-700 ml-2">({item.code})</span>
                 )}
                 {item.system && (
                   <p className="text-xs text-indigo-600 mt-0.5 font-mono">

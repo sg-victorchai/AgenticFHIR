@@ -182,9 +182,7 @@ const RoleSelectionPage: React.FC = () => {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">
-            Care Manager
-          </h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Care Manager</h2>
           <p className="text-sm text-gray-500 text-center">
             Run care-gap agents, track mission status, and review generated care
             plans
@@ -218,7 +216,8 @@ const RoleSelectionPage: React.FC = () => {
             Patient Portal
           </h2>
           <p className="text-sm text-gray-500 text-center">
-            View your records, upload medical reports and ask AI to check your health conditions
+            View your records, upload medical reports and ask AI to check your
+            health conditions
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-600 group-hover:text-violet-800">
             Continue →

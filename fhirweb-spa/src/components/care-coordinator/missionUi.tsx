@@ -57,9 +57,7 @@ export const IconCheckCircle: React.FC<IconProps> = ({
   </svg>
 );
 
-export const IconXCircle: React.FC<IconProps> = ({
-  className = 'h-4 w-4',
-}) => (
+export const IconXCircle: React.FC<IconProps> = ({ className = 'h-4 w-4' }) => (
   <svg viewBox="0 0 24 24" fill="none" className={className}>
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
     <path
@@ -118,9 +116,7 @@ export const IconArrowRight: React.FC<IconProps> = ({
   </svg>
 );
 
-export const IconRefresh: React.FC<IconProps> = ({
-  className = 'h-4 w-4',
-}) => (
+export const IconRefresh: React.FC<IconProps> = ({ className = 'h-4 w-4' }) => (
   <svg viewBox="0 0 24 24" fill="none" className={className}>
     <path
       d="M5.5 9a7 7 0 0 1 12.2-3.4M18.5 15a7 7 0 0 1-12.2 3.4"
@@ -138,9 +134,7 @@ export const IconRefresh: React.FC<IconProps> = ({
   </svg>
 );
 
-export const IconSpinner: React.FC<IconProps> = ({
-  className = 'h-4 w-4',
-}) => (
+export const IconSpinner: React.FC<IconProps> = ({ className = 'h-4 w-4' }) => (
   <svg viewBox="0 0 24 24" fill="none" className={`animate-spin ${className}`}>
     <circle
       cx="12"
