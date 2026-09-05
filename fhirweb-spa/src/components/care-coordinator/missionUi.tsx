@@ -251,6 +251,11 @@ const STATUS_META: Record<MissionExecutionResult['status'], StatusMeta> = {
     badgeClass: 'text-red-700 bg-red-50 border-red-200',
     Icon: IconXCircle,
   },
+  CANCELLED: {
+    label: 'Cancelled',
+    badgeClass: 'text-slate-700 bg-slate-50 border-slate-200',
+    Icon: IconXCircle,
+  },
 };
 
 export const statusMeta = (status: MissionExecutionResult['status']) =>

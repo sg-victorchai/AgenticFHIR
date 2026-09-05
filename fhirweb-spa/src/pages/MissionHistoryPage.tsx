@@ -26,6 +26,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'RUNNING', label: 'Running' },
   { key: 'COMPLETED', label: 'Completed' },
   { key: 'FAILED', label: 'Failed' },
+  { key: 'CANCELLED', label: 'Cancelled' },
 ];
 
 const MissionHistoryPage: React.FC = () => {

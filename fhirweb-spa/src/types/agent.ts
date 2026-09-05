@@ -112,7 +112,8 @@ export interface MissionExecutionResult {
     | 'RUNNING'
     | 'AWAITING_INTERVENTION'
     | 'COMPLETED'
-    | 'FAILED';
+    | 'FAILED'
+    | 'CANCELLED';
   goal: string;
   outputs?: {
     response?: string;
