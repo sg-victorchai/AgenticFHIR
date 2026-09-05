@@ -1519,9 +1519,7 @@ const PatientRecordsPage: React.FC = () => {
 
   // ── Ask AI panel mobile resize state ──
   const [agentPanelHeight, setAgentPanelHeight] = useState(50); // Default 50vh
-  const [isResizingAgent, setIsResizingAgent] = useState(false);
   const agentPanelRef = useRef<HTMLDivElement>(null);
-  const agentDragHandleRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true);
@@ -1557,63 +1555,13 @@ const PatientRecordsPage: React.FC = () => {
   }, [isResizing]);
 
   // ── Agent panel mobile resize handlers ──
-  const handleAgentDragStart = (
-    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>,
-  ) => {
-    setIsResizingAgent(true);
-    e.preventDefault();
+  const handleExpandPanel = () => {
+    setAgentPanelHeight(80);
   };
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingAgent || !agentPanelRef.current) return;
-
-      const panel = agentPanelRef.current;
-      const rect = panel.getBoundingClientRect();
-
-      // Calculate new height as percentage of viewport
-      const newHeight = ((rect.bottom - e.clientY) / window.innerHeight) * 100;
-
-      // Constrain height between 30% and 80%
-      if (newHeight >= 30 && newHeight <= 80) {
-        setAgentPanelHeight(newHeight);
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isResizingAgent || !agentPanelRef.current) return;
-
-      const panel = agentPanelRef.current;
-      const rect = panel.getBoundingClientRect();
-      const touch = e.touches[0];
-
-      // Calculate new height as percentage of viewport
-      const newHeight =
-        ((rect.bottom - touch.clientY) / window.innerHeight) * 100;
-
-      // Constrain height between 30% and 80%
-      if (newHeight >= 30 && newHeight <= 80) {
-        setAgentPanelHeight(newHeight);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingAgent(false);
-    };
-
-    if (isResizingAgent) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('touchmove', handleTouchMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.addEventListener('touchend', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('touchend', handleMouseUp);
-      };
-    }
-  }, [isResizingAgent]);
+  const handleCollapsePanel = () => {
+    setAgentPanelHeight(30);
+  };
 
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -5361,20 +5309,10 @@ const PatientRecordsPage: React.FC = () => {
               ...(window.matchMedia('(min-width: 768px)').matches
                 ? { width: `${uploadPanelWidth}%` }
                 : {}),
-              userSelect: isResizingAgent ? 'none' : 'auto',
+              userSelect: 'auto',
             }}
           >
-            {/* Mobile drag handle */}
-            <div
-              ref={agentDragHandleRef}
-              onMouseDown={handleAgentDragStart}
-              onTouchStart={handleAgentDragStart}
-              className="md:hidden flex justify-center py-2 sticky top-0 bg-indigo-50 border-b border-indigo-200 cursor-grab active:cursor-grabbing"
-            >
-              <div
-                className={`w-12 h-1 rounded-full transition-colors ${isResizingAgent ? 'bg-indigo-500' : 'bg-indigo-300'}`}
-              />
-            </div>
+
 
             <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
               <div className="flex-1">
@@ -5384,6 +5322,27 @@ const PatientRecordsPage: React.FC = () => {
                 <p className="text-xs text-indigo-800 mt-1">
                   Chat with AI to get health insights based on your records.
                 </p>
+              </div>
+              {/* Mobile expand/collapse buttons */}
+              <div className="md:hidden flex items-center gap-1 shrink-0">
+                <button
+                  onClick={handleExpandPanel}
+                  className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
+                  title="Expand panel to 80%"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 15v2a2 2 0 002 2h12a2 2 0 002-2v-2m-8-6l4 4m0 0l-4 4m4-4H4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleCollapsePanel}
+                  className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
+                  title="Collapse panel to 30%"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 9v2a2 2 0 002 2h12a2 2 0 002-2V9m-8 6l4-4m0 0l-4-4m4 4H4" />
+                  </svg>
+                </button>
               </div>
               <button
                 onClick={() => setShowAgentModal(false)}
