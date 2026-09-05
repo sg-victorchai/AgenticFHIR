@@ -19,7 +19,7 @@ const RoleSelectionPage: React.FC = () => {
     psa: 'Patient Service Assistant',
     clinician: 'Clinician',
     patient: 'Patient Portal',
-    CARE_COORDINATOR: 'Care Coordinator',
+    CARE_COORDINATOR: 'Care Manager',
   } as const;
 
   // Handle SMART on FHIR OAuth callback
@@ -183,7 +183,7 @@ const RoleSelectionPage: React.FC = () => {
             </svg>
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">
-            Care Coordinator
+            Care Manager
           </h2>
           <p className="text-sm text-gray-500 text-center">
             Run care-gap agents, track mission status, and review generated care

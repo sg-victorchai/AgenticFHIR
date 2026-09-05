@@ -97,7 +97,7 @@ const MissionHistoryPage: React.FC = () => {
             className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
           >
             <IconArrowLeft className="h-4 w-4" />
-            Back to Care Coordinator
+            Back to Care Manager
           </Link>
         </div>
 

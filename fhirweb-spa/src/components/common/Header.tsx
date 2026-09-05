@@ -27,7 +27,7 @@ const Header: React.FC = () => {
       : role === 'clinician'
         ? 'Clinician'
         : role === 'CARE_COORDINATOR'
-          ? 'Care Coordinator'
+          ? 'Care Manager'
           : 'Patient';
   };
 
