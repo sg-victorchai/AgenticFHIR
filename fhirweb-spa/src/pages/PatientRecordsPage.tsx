@@ -10,6 +10,7 @@ import {
 } from '../services/fhir/client';
 import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
+import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
 import { AgentEndpointConfig } from '../types/agent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -4465,18 +4466,30 @@ const PatientRecordsPage: React.FC = () => {
                     <div className="text-sm text-gray-400 mt-1">
                       Last Updated: {fmt(cp.meta?.lastUpdated)}
                     </div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      {cp.description || '—'}
-                    </div>
+                    {cp.description && (
+                      <div className="text-xs text-gray-500 mt-2 line-clamp-2">
+                        {cp.description.includes('Care Gap Identified')
+                          ? '⚠️ Care Gap: Click to view details'
+                          : cp.description}
+                      </div>
+                    )}
                   </div>
                   <ExpandToggle open={expandedId === cp.id} />
                 </div>
                 {expandedId === cp.id && (
-                  <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 text-sm text-gray-700">
+                  <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
+                    {cp.description && (
+                      <div className="mb-5">
+                        <CarePlanDisplay
+                          description={cp.description}
+                          category={cp.category}
+                        />
+                      </div>
+                    )}
                     {cp.goal?.length ? (
                       <div className="mb-3">
-                        <p className="font-medium mb-1">Goals:</p>
-                        <ul className="list-disc list-inside space-y-1 text-xs">
+                        <p className="font-medium mb-1 text-sm text-gray-700">Goals:</p>
+                        <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
                           {cp.goal.map((g: any, i: number) => (
                             <li key={i}>
                               {g.display || g.reference || JSON.stringify(g)}
@@ -4487,8 +4500,8 @@ const PatientRecordsPage: React.FC = () => {
                     ) : null}
                     {cp.activity?.length ? (
                       <div>
-                        <p className="font-medium mb-1">Activities:</p>
-                        <ul className="list-disc list-inside space-y-1 text-xs">
+                        <p className="font-medium mb-1 text-sm text-gray-700">Activities:</p>
+                        <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
                           {cp.activity.map((act: any, i: number) => {
                             const detail =
                               act.plannedActivityDetail || act.detail;
