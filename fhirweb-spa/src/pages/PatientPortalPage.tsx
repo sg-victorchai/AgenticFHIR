@@ -168,8 +168,7 @@ const PatientPortalPage: React.FC = () => {
             Patient Portal
           </h1>
           <p className="text-gray-600">
-            Search for your patient account to view your medical records and
-            consultation progress
+            View your records, upload medical reports and ask AI to check your health conditions
           </p>
         </div>
 

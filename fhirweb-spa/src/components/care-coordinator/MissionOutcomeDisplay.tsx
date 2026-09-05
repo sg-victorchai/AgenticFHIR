@@ -75,7 +75,9 @@ const parseOutcome = (response: string): ParsedOutcome => {
   }
 
   // Extract generated care plans count
-  const carePlansMatch = response.match(/(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i);
+  const carePlansMatch = response.match(
+    /(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i,
+  );
   if (carePlansMatch) {
     metrics.push({
       label: 'Care Plans Generated',
@@ -105,9 +107,7 @@ const parseOutcome = (response: string): ParsedOutcome => {
   };
 };
 
-const getStatusColor = (
-  status: 'success' | 'warning' | 'info',
-): string => {
+const getStatusColor = (status: 'success' | 'warning' | 'info'): string => {
   switch (status) {
     case 'success':
       return 'bg-green-50 border-green-200';
@@ -159,7 +159,9 @@ export const MissionOutcomeDisplay: React.FC<MissionOutcomeDisplayProps> = ({
               <p className="text-xs text-gray-600 font-medium mb-1">
                 {metric.label}
               </p>
-              <div className={`${getMetricColor(metric.color)} rounded-lg px-3 py-2 text-center`}>
+              <div
+                className={`${getMetricColor(metric.color)} rounded-lg px-3 py-2 text-center`}
+              >
                 <p className="text-lg font-bold">{metric.value}</p>
               </div>
             </div>
@@ -178,7 +180,10 @@ export const MissionOutcomeDisplay: React.FC<MissionOutcomeDisplayProps> = ({
       {parsed.details && parsed.details.length > 0 && (
         <ul className="space-y-1.5 mb-3">
           {parsed.details.map((detail, idx) => (
-            <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
+            <li
+              key={idx}
+              className="text-xs text-gray-700 flex items-start gap-2"
+            >
               <span className="text-blue-600 font-bold mt-0.5">•</span>
               <span>{detail}</span>
             </li>

@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom';
 import { useSSESubscription } from '../hooks/useSSESubscription';
 import { NotificationContainer } from '../components/common/NotificationToast';
 import { agentMissionService } from '../services/agentMissionService';
-import { AgentInterventionRequest, MissionExecutionResult } from '../types/agent';
+import {
+  AgentInterventionRequest,
+  MissionExecutionResult,
+} from '../types/agent';
 import {
   CarePlanReviewRow,
   IconAlertTriangle,
@@ -161,9 +164,7 @@ const CareCoordinatorPage: React.FC = () => {
     setResolveError(null);
     try {
       await agentMissionService.resolveIntervention(intervention.id, decision);
-      setInterventions((prev) =>
-        prev.filter((i) => i.id !== intervention.id),
-      );
+      setInterventions((prev) => prev.filter((i) => i.id !== intervention.id));
       pollMissionUntilUnblocked(intervention.missionId);
     } catch (err: any) {
       setResolveError(err?.message || 'Failed to resolve intervention.');
@@ -364,8 +365,8 @@ const CareCoordinatorPage: React.FC = () => {
             Run a Diabetic Care Assessment
           </h2>
           <p className="text-sm text-gray-500 mt-1 mb-4">
-            The agent finds care gaps, drafts recommendations, and asks you
-            to sign off before anything is written back.
+            The agent finds care gaps, drafts recommendations, and asks you to
+            sign off before anything is written back.
           </p>
 
           <div className="space-y-4">
@@ -437,8 +438,7 @@ const CareCoordinatorPage: React.FC = () => {
               No active mission
             </h3>
             <p className="text-sm text-gray-500 max-w-sm">
-              Submit an assessment above and its live status will appear
-              here.
+              Submit an assessment above and its live status will appear here.
             </p>
           </div>
         ) : (
@@ -525,7 +525,9 @@ const CareCoordinatorPage: React.FC = () => {
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
                     Outcome
                   </h3>
-                  <MissionOutcomeDisplay response={activeMission.outputs.response} />
+                  <MissionOutcomeDisplay
+                    response={activeMission.outputs.response}
+                  />
                 </div>
               )}
 
@@ -542,9 +544,7 @@ const CareCoordinatorPage: React.FC = () => {
                     <div className="border border-gray-100 rounded-lg overflow-hidden">
                       {generatedCarePlans.map((source, idx) => {
                         const carePlanId =
-                          source.id ||
-                          source.reference?.split('/').pop() ||
-                          '';
+                          source.id || source.reference?.split('/').pop() || '';
                         return (
                           <CarePlanReviewRow
                             key={carePlanId || idx}

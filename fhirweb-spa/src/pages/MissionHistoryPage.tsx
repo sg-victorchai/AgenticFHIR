@@ -60,9 +60,7 @@ const MissionHistoryPage: React.FC = () => {
 
   const filteredMissions = useMemo(
     () =>
-      filter === 'ALL'
-        ? missions
-        : missions.filter((m) => m.status === filter),
+      filter === 'ALL' ? missions : missions.filter((m) => m.status === filter),
     [missions, filter],
   );
 
@@ -88,8 +86,8 @@ const MissionHistoryPage: React.FC = () => {
                 Mission History
               </h1>
               <p className="text-sm text-gray-500 mt-1 max-w-md">
-                Every diabetic care-gap assessment submitted for this
-                persona, with its full outcome.
+                Every diabetic care-gap assessment submitted for this persona,
+                with its full outcome.
               </p>
             </div>
           </div>
@@ -202,8 +200,8 @@ const MissionHistoryPage: React.FC = () => {
                   Select a mission
                 </h3>
                 <p className="text-sm text-gray-500 max-w-xs">
-                  Choose one from the list to see its full outcome and
-                  generated care plans.
+                  Choose one from the list to see its full outcome and generated
+                  care plans.
                 </p>
               </div>
             ) : (
@@ -241,7 +239,9 @@ const MissionHistoryPage: React.FC = () => {
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
                         Outcome
                       </h3>
-                      <MissionOutcomeDisplay response={selectedMission.outputs.response} />
+                      <MissionOutcomeDisplay
+                        response={selectedMission.outputs.response}
+                      />
                     </div>
                   )}
 

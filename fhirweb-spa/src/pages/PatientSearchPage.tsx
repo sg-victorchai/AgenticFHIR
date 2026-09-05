@@ -37,7 +37,9 @@ const PatientSearchPage: React.FC = () => {
   const [currentBundle, setCurrentBundle] = useState<
     Bundle<FHIRPatient> | undefined
   >();
-  const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
+  const [expandedPatientId, setExpandedPatientId] = useState<string | null>(
+    null,
+  );
 
   // Only trigger the query when shouldSearch is true and we have search parameters
   const {
@@ -167,9 +169,7 @@ const PatientSearchPage: React.FC = () => {
           : undefined;
 
         // Extract contact number (telecom of type 'phone')
-        const phoneEntry = patient.telecom?.find(
-          (t) => t.system === 'phone'
-        );
+        const phoneEntry = patient.telecom?.find((t) => t.system === 'phone');
         const contactNumber = phoneEntry?.value;
 
         // Extract next of kin (contact with relationship)
@@ -177,7 +177,10 @@ const PatientSearchPage: React.FC = () => {
         const nextOfKin = nokEntry
           ? {
               name: nokEntry.name?.text || 'Unknown',
-              relationship: nokEntry.relationship?.[0]?.coding?.[0]?.display || nokEntry.relationship?.[0]?.text || 'Relative',
+              relationship:
+                nokEntry.relationship?.[0]?.coding?.[0]?.display ||
+                nokEntry.relationship?.[0]?.text ||
+                'Relative',
               phone: nokEntry.telecom?.find((t) => t.system === 'phone')?.value,
             }
           : undefined;
@@ -261,7 +264,11 @@ const PatientSearchPage: React.FC = () => {
             <div className="flex-grow">
               <input
                 type="text"
-                placeholder={searchType === 'name' ? 'Search by patient name…' : 'Enter identifier or MRN…'}
+                placeholder={
+                  searchType === 'name'
+                    ? 'Search by patient name…'
+                    : 'Enter identifier or MRN…'
+                }
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -366,10 +373,18 @@ const PatientSearchPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
-                            onClick={() => setExpandedPatientId(expandedPatientId === patient.id ? null : patient.id)}
+                            onClick={() =>
+                              setExpandedPatientId(
+                                expandedPatientId === patient.id
+                                  ? null
+                                  : patient.id,
+                              )
+                            }
                             className="text-blue-600 hover:text-blue-900 font-medium"
                           >
-                            {expandedPatientId === patient.id ? 'Hide Details' : 'View Details'}
+                            {expandedPatientId === patient.id
+                              ? 'Hide Details'
+                              : 'View Details'}
                           </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -399,102 +414,161 @@ const PatientSearchPage: React.FC = () => {
                             <div className="space-y-4">
                               {/* Demographics Section */}
                               <div>
-                                <h3 className="font-semibold text-gray-900 mb-3">Patient Demographics</h3>
+                                <h3 className="font-semibold text-gray-900 mb-3">
+                                  Patient Demographics
+                                </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                                   <div>
-                                    <span className="text-gray-600 font-medium">Full Name</span>
-                                    <p className="text-gray-900 mt-1">{patient.name}</p>
+                                    <span className="text-gray-600 font-medium">
+                                      Full Name
+                                    </span>
+                                    <p className="text-gray-900 mt-1">
+                                      {patient.name}
+                                    </p>
                                   </div>
                                   <div>
-                                    <span className="text-gray-600 font-medium">Identifier / MRN</span>
-                                    <p className="text-gray-900 mt-1">{patient.identifier}</p>
+                                    <span className="text-gray-600 font-medium">
+                                      Identifier / MRN
+                                    </span>
+                                    <p className="text-gray-900 mt-1">
+                                      {patient.identifier}
+                                    </p>
                                   </div>
                                   <div>
-                                    <span className="text-gray-600 font-medium">Gender</span>
-                                    <p className="text-gray-900 mt-1 capitalize">{patient.gender}</p>
+                                    <span className="text-gray-600 font-medium">
+                                      Gender
+                                    </span>
+                                    <p className="text-gray-900 mt-1 capitalize">
+                                      {patient.gender}
+                                    </p>
                                   </div>
                                   <div className="col-span-2 md:col-span-3">
-                                    <span className="text-gray-600 font-medium">Date of Birth</span>
-                                    <p className="text-gray-900 mt-1">{patient.birthDate}</p>
+                                    <span className="text-gray-600 font-medium">
+                                      Date of Birth
+                                    </span>
+                                    <p className="text-gray-900 mt-1">
+                                      {patient.birthDate}
+                                    </p>
                                   </div>
                                 </div>
                               </div>
-                            {/* Contact Information Section */}
-                            <div className="border-t border-blue-200 pt-4">
-                              <h3 className="font-semibold text-gray-900 mb-3">Contact Information</h3>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <span className="text-gray-600 font-medium">Phone Number</span>
-                                  <p className="text-gray-900 mt-1">{patient.contactNumber || 'N/A'}</p>
-                                </div>
-                                <div className="col-span-1 md:col-span-2">
-                                  <span className="text-gray-600 font-medium">Address</span>
-                                  <p className="text-gray-900 mt-1">{patient.address || 'N/A'}</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Next of Kin Section */}
-                            {patient.nextOfKin && (
+                              {/* Contact Information Section */}
                               <div className="border-t border-blue-200 pt-4">
-                                <h3 className="font-semibold text-gray-900 mb-3">Next of Kin</h3>
+                                <h3 className="font-semibold text-gray-900 mb-3">
+                                  Contact Information
+                                </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                                   <div>
-                                    <span className="text-gray-600 font-medium">Name</span>
-                                    <p className="text-gray-900 mt-1">{patient.nextOfKin.name}</p>
+                                    <span className="text-gray-600 font-medium">
+                                      Phone Number
+                                    </span>
+                                    <p className="text-gray-900 mt-1">
+                                      {patient.contactNumber || 'N/A'}
+                                    </p>
                                   </div>
-                                  <div>
-                                    <span className="text-gray-600 font-medium">Relationship</span>
-                                    <p className="text-gray-900 mt-1 capitalize">{patient.nextOfKin.relationship}</p>
+                                  <div className="col-span-1 md:col-span-2">
+                                    <span className="text-gray-600 font-medium">
+                                      Address
+                                    </span>
+                                    <p className="text-gray-900 mt-1">
+                                      {patient.address || 'N/A'}
+                                    </p>
                                   </div>
-                                  {patient.nextOfKin.phone && (
-                                    <div className="col-span-1 md:col-span-2">
-                                      <span className="text-gray-600 font-medium">Phone Number</span>
-                                      <p className="text-gray-900 mt-1">{patient.nextOfKin.phone}</p>
-                                    </div>
-                                  )}
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+
+                              {/* Next of Kin Section */}
+                              {patient.nextOfKin && (
+                                <div className="border-t border-blue-200 pt-4">
+                                  <h3 className="font-semibold text-gray-900 mb-3">
+                                    Next of Kin
+                                  </h3>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <span className="text-gray-600 font-medium">
+                                        Name
+                                      </span>
+                                      <p className="text-gray-900 mt-1">
+                                        {patient.nextOfKin.name}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-600 font-medium">
+                                        Relationship
+                                      </span>
+                                      <p className="text-gray-900 mt-1 capitalize">
+                                        {patient.nextOfKin.relationship}
+                                      </p>
+                                    </div>
+                                    {patient.nextOfKin.phone && (
+                                      <div className="col-span-1 md:col-span-2">
+                                        <span className="text-gray-600 font-medium">
+                                          Phone Number
+                                        </span>
+                                        <p className="text-gray-900 mt-1">
+                                          {patient.nextOfKin.phone}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             {/* Mobile Card View (hidden on desktop) */}
             <div className="md:hidden space-y-3">
               {patientResults.map((patient) => (
-                <div key={patient.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div
+                  key={patient.id}
+                  className="bg-white border border-gray-200 rounded-lg overflow-hidden"
+                >
                   {/* Card Header */}
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                    <h3 className="text-sm font-semibold text-gray-900">{patient.name}</h3>
-                    <p className="text-xs text-gray-500 mt-1">ID: {patient.identifier}</p>
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {patient.name}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ID: {patient.identifier}
+                    </p>
                   </div>
 
                   {/* Card Body */}
                   <div className="px-4 py-3 space-y-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-600">Gender:</span>
-                      <span className="font-medium text-gray-900 capitalize">{patient.gender}</span>
+                      <span className="font-medium text-gray-900 capitalize">
+                        {patient.gender}
+                      </span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-600">DOB:</span>
-                      <span className="font-medium text-gray-900">{patient.birthDate}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.birthDate}
+                      </span>
                     </div>
                   </div>
 
                   {/* Card Actions */}
                   <div className="px-4 py-3 border-t border-gray-200 space-y-2">
                     <button
-                      onClick={() => setExpandedPatientId(expandedPatientId === patient.id ? null : patient.id)}
+                      onClick={() =>
+                        setExpandedPatientId(
+                          expandedPatientId === patient.id ? null : patient.id,
+                        )
+                      }
                       className="w-full text-left text-sm text-blue-600 hover:text-blue-900 font-medium"
                     >
-                      {expandedPatientId === patient.id ? '▲ Hide Details' : '▼ View Details'}
+                      {expandedPatientId === patient.id
+                        ? '▲ Hide Details'
+                        : '▼ View Details'}
                     </button>
                     <div className="flex gap-2">
                       {role === 'psa' && (
@@ -521,22 +595,36 @@ const PatientSearchPage: React.FC = () => {
                     <div className="bg-blue-50 border-t-2 border-blue-200 px-4 py-3 space-y-4">
                       {/* Demographics Section */}
                       <div>
-                        <h4 className="font-semibold text-gray-900 mb-2 text-sm">Demographics</h4>
+                        <h4 className="font-semibold text-gray-900 mb-2 text-sm">
+                          Demographics
+                        </h4>
                         <div className="space-y-2 text-xs">
                           <div>
-                            <span className="text-gray-600 font-medium">Full Name</span>
+                            <span className="text-gray-600 font-medium">
+                              Full Name
+                            </span>
                             <p className="text-gray-900">{patient.name}</p>
                           </div>
                           <div>
-                            <span className="text-gray-600 font-medium">Identifier / MRN</span>
-                            <p className="text-gray-900">{patient.identifier}</p>
+                            <span className="text-gray-600 font-medium">
+                              Identifier / MRN
+                            </span>
+                            <p className="text-gray-900">
+                              {patient.identifier}
+                            </p>
                           </div>
                           <div>
-                            <span className="text-gray-600 font-medium">Gender</span>
-                            <p className="text-gray-900 capitalize">{patient.gender}</p>
+                            <span className="text-gray-600 font-medium">
+                              Gender
+                            </span>
+                            <p className="text-gray-900 capitalize">
+                              {patient.gender}
+                            </p>
                           </div>
                           <div>
-                            <span className="text-gray-600 font-medium">Date of Birth</span>
+                            <span className="text-gray-600 font-medium">
+                              Date of Birth
+                            </span>
                             <p className="text-gray-900">{patient.birthDate}</p>
                           </div>
                         </div>
@@ -544,15 +632,25 @@ const PatientSearchPage: React.FC = () => {
 
                       {/* Contact Information Section */}
                       <div className="border-t border-blue-200 pt-3">
-                        <h4 className="font-semibold text-gray-900 mb-2 text-sm">Contact Information</h4>
+                        <h4 className="font-semibold text-gray-900 mb-2 text-sm">
+                          Contact Information
+                        </h4>
                         <div className="space-y-2 text-xs">
                           <div>
-                            <span className="text-gray-600 font-medium">Phone Number</span>
-                            <p className="text-gray-900">{patient.contactNumber || 'N/A'}</p>
+                            <span className="text-gray-600 font-medium">
+                              Phone Number
+                            </span>
+                            <p className="text-gray-900">
+                              {patient.contactNumber || 'N/A'}
+                            </p>
                           </div>
                           <div>
-                            <span className="text-gray-600 font-medium">Address</span>
-                            <p className="text-gray-900">{patient.address || 'N/A'}</p>
+                            <span className="text-gray-600 font-medium">
+                              Address
+                            </span>
+                            <p className="text-gray-900">
+                              {patient.address || 'N/A'}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -560,20 +658,34 @@ const PatientSearchPage: React.FC = () => {
                       {/* Next of Kin Section */}
                       {patient.nextOfKin && (
                         <div className="border-t border-blue-200 pt-3">
-                          <h4 className="font-semibold text-gray-900 mb-2 text-sm">Next of Kin</h4>
+                          <h4 className="font-semibold text-gray-900 mb-2 text-sm">
+                            Next of Kin
+                          </h4>
                           <div className="space-y-2 text-xs">
                             <div>
-                              <span className="text-gray-600 font-medium">Name</span>
-                              <p className="text-gray-900">{patient.nextOfKin.name}</p>
+                              <span className="text-gray-600 font-medium">
+                                Name
+                              </span>
+                              <p className="text-gray-900">
+                                {patient.nextOfKin.name}
+                              </p>
                             </div>
                             <div>
-                              <span className="text-gray-600 font-medium">Relationship</span>
-                              <p className="text-gray-900 capitalize">{patient.nextOfKin.relationship}</p>
+                              <span className="text-gray-600 font-medium">
+                                Relationship
+                              </span>
+                              <p className="text-gray-900 capitalize">
+                                {patient.nextOfKin.relationship}
+                              </p>
                             </div>
                             {patient.nextOfKin.phone && (
                               <div>
-                                <span className="text-gray-600 font-medium">Phone Number</span>
-                                <p className="text-gray-900">{patient.nextOfKin.phone}</p>
+                                <span className="text-gray-600 font-medium">
+                                  Phone Number
+                                </span>
+                                <p className="text-gray-900">
+                                  {patient.nextOfKin.phone}
+                                </p>
                               </div>
                             )}
                           </div>

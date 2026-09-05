@@ -289,9 +289,7 @@ const QueueRow: React.FC<QueueRowProps> = ({
   return (
     <>
       {/* Desktop Table View */}
-      <tr
-        className="transition-colors hover:bg-gray-50 hidden md:table-row"
-      >
+      <tr className="transition-colors hover:bg-gray-50 hidden md:table-row">
         <td className="px-4 py-3 text-xs text-gray-500 font-mono hidden md:table-cell">
           {patientIdentifier}
         </td>
@@ -447,7 +445,9 @@ const QueueRow: React.FC<QueueRowProps> = ({
             <h3 className="text-sm font-semibold text-gray-800 truncate">
               {patientName}
             </h3>
-            <p className="text-xs text-gray-500 truncate">ID: {patientIdentifier}</p>
+            <p className="text-xs text-gray-500 truncate">
+              ID: {patientIdentifier}
+            </p>
           </div>
           <span
             className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${badgeCls}`}
@@ -460,7 +460,8 @@ const QueueRow: React.FC<QueueRowProps> = ({
         {getChiefComplaint(encounter) !== '—' && (
           <div className="mb-2 pb-2 border-b border-gray-100">
             <p className="text-xs text-gray-600">
-              <span className="font-semibold">Complaint:</span> {getChiefComplaint(encounter)}
+              <span className="font-semibold">Complaint:</span>{' '}
+              {getChiefComplaint(encounter)}
             </p>
           </div>
         )}
@@ -681,7 +682,9 @@ const QueueSection: React.FC<QueueSectionProps> = ({
             ({encounters.length})
           </span>
         </span>
-        <span className="text-gray-400 text-xs shrink-0 ml-2">{collapsed ? '▼' : '▲'}</span>
+        <span className="text-gray-400 text-xs shrink-0 ml-2">
+          {collapsed ? '▼' : '▲'}
+        </span>
       </button>
 
       {!collapsed && (
@@ -923,8 +926,12 @@ const PatientQueuePage: React.FC = () => {
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Patient Queue</h1>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">{subtitleLabel}</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
+              Patient Queue
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">
+              {subtitleLabel}
+            </p>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {role === 'psa' && (

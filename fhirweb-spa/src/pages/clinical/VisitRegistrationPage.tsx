@@ -105,10 +105,12 @@ const VisitRegistrationPage: React.FC = () => {
       ],
       subject: { reference: `Patient/${id}`, display: patientName },
       actualPeriod: { start: toFHIRDateTime(formData.visitDate) },
-      location: [{
-        location: { identifier: { value: 'triage' } } as any,
-        status: 'planned',
-      }],
+      location: [
+        {
+          location: { identifier: { value: 'triage' } } as any,
+          status: 'planned',
+        },
+      ],
       reason: [
         {
           value: [{ concept: { text: effectiveComplaint.trim() } }],
@@ -291,9 +293,7 @@ const VisitRegistrationPage: React.FC = () => {
               disabled={isCreating}
               className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md disabled:opacity-50 transition-colors"
             >
-              {isCreating
-                ? 'Registering...'
-                : 'Register'}
+              {isCreating ? 'Registering...' : 'Register'}
             </button>
             <Link
               to="/patients"

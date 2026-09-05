@@ -444,10 +444,18 @@ const ExpandToggle: React.FC<{ open: boolean }> = ({ open }) => (
   >
     {open ? (
       // Chevron Down - expanded
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19 14l-7 7m0 0l-7-7"
+      />
     ) : (
       // Chevron Right - collapsed
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7m0 0l-7 7" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 5l7 7m0 0l-7 7"
+      />
     )}
   </svg>
 );
@@ -1562,7 +1570,7 @@ const PatientRecordsPage: React.FC = () => {
 
       const panel = agentPanelRef.current;
       const rect = panel.getBoundingClientRect();
-      
+
       // Calculate new height as percentage of viewport
       const newHeight = ((rect.bottom - e.clientY) / window.innerHeight) * 100;
 
@@ -1580,7 +1588,8 @@ const PatientRecordsPage: React.FC = () => {
       const touch = e.touches[0];
 
       // Calculate new height as percentage of viewport
-      const newHeight = ((rect.bottom - touch.clientY) / window.innerHeight) * 100;
+      const newHeight =
+        ((rect.bottom - touch.clientY) / window.innerHeight) * 100;
 
       // Constrain height between 30% and 80%
       if (newHeight >= 30 && newHeight <= 80) {
@@ -2572,238 +2581,278 @@ const PatientRecordsPage: React.FC = () => {
           <Empty />
         ) : (
           <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <SortHeader
-                    label="Onset"
-                    sortDir={sortDir}
-                    onToggle={() =>
-                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-                    }
-                  />
-                  {[
-                    'Condition',
-                    'Clinical Status',
-                    'Severity',
-                    'Category',
-                    'Last Updated',
-                  ].map((h) => (
-                    <TH key={h}>{h}</TH>
-                  ))}
-                  <TH />
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {conditions.map((cond: any) => (
-                  <React.Fragment key={cond.id}>
-                    <tr
-                      id={`record-${cond.id}`}
-                      className={`cursor-pointer transition-colors ${highlightId === cond.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                      onClick={() => toggle(cond.id)}
-                    >
-                      <TD>{fmt(cond.onsetDateTime || cond.recordedDate)}</TD>
-                      <TD>
-                        {cond.code?.coding?.[0]?.display ||
-                          cond.code?.text ||
-                          '—'}
-                      </TD>
-                      <TD>
-                        <StatusBadge
-                          status={cond.clinicalStatus?.coding?.[0]?.code}
-                        />
-                      </TD>
-                      <TD>
-                        {cond.severity?.coding?.[0]?.display ||
-                          cond.severity?.text ||
-                          '—'}
-                      </TD>
-                      <TD>
-                        {cond.category?.[0]?.coding?.[0]?.display ||
-                          cond.category?.[0]?.text ||
-                          '—'}
-                      </TD>
-                      <TD>{fmt(cond.meta?.lastUpdated)}</TD>
-                      <td className="px-4 py-3 text-right">
-                        <ExpandToggle open={expandedId === cond.id} />
-                      </td>
-                    </tr>
-                    {expandedId === cond.id && (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                            <div>
-                              <span className="font-medium">ID:</span> {cond.id}
-                            </div>
-                            <div>
-                              <span className="font-medium">Verification:</span>{' '}
-                              {cond.verificationStatus?.coding?.[0]?.code ||
-                                '—'}
-                            </div>
-                            <div>
-                              <span className="font-medium">Recorded:</span>{' '}
-                              {fmt(cond.recordedDate)}
-                            </div>
-                            <div>
-                              <span className="font-medium">Recorder:</span>{' '}
-                              {cond.recorder?.display ||
-                                cond.recorder?.reference ||
-                                '—'}
-                            </div>
-                            <div>
-                              <span className="font-medium">Asserter:</span>{' '}
-                              {cond.asserter?.display ||
-                                cond.asserter?.reference ||
-                                '—'}
-                            </div>
-                            <div>
-                              <span className="font-medium">Encounter:</span>{' '}
-                              {cond.encounter?.reference || '—'}
-                            </div>
-                            <div className="col-span-2">
-                              <span className="font-medium">Body Site:</span>{' '}
-                              {cond.bodySite
-                                ?.map(
-                                  (b: any) => b.coding?.[0]?.display || b.text,
-                                )
-                                .filter(Boolean)
-                                .join(', ') || '—'}
-                            </div>
-                            <div className="col-span-2">
-                              <span className="font-medium">Note:</span>{' '}
-                              {cond.note?.map((n: any) => n.text).join('; ') ||
-                                '—'}
-                            </div>
-                            {cond.abatementDateTime && (
-                              <div>
-                                <span className="font-medium">Abatement:</span>{' '}
-                                {fmt(cond.abatementDateTime)}
-                              </div>
-                            )}
-                            {cond.stage?.length ? (
-                              <div className="col-span-2">
-                                <span className="font-medium">Stage:</span>{' '}
-                                {cond.stage
-                                  .map(
-                                    (s: any) =>
-                                      s.summary?.coding?.[0]?.display ||
-                                      s.summary?.text,
-                                  )
-                                  .filter(Boolean)
-                                  .join(', ')}
-                              </div>
-                            ) : null}
-                          </div>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <SortHeader
+                      label="Onset"
+                      sortDir={sortDir}
+                      onToggle={() =>
+                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                      }
+                    />
+                    {[
+                      'Condition',
+                      'Clinical Status',
+                      'Severity',
+                      'Category',
+                      'Last Updated',
+                    ].map((h) => (
+                      <TH key={h}>{h}</TH>
+                    ))}
+                    <TH />
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {conditions.map((cond: any) => (
+                    <React.Fragment key={cond.id}>
+                      <tr
+                        id={`record-${cond.id}`}
+                        className={`cursor-pointer transition-colors ${highlightId === cond.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggle(cond.id)}
+                      >
+                        <TD>{fmt(cond.onsetDateTime || cond.recordedDate)}</TD>
+                        <TD>
+                          {cond.code?.coding?.[0]?.display ||
+                            cond.code?.text ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          <StatusBadge
+                            status={cond.clinicalStatus?.coding?.[0]?.code}
+                          />
+                        </TD>
+                        <TD>
+                          {cond.severity?.coding?.[0]?.display ||
+                            cond.severity?.text ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          {cond.category?.[0]?.coding?.[0]?.display ||
+                            cond.category?.[0]?.text ||
+                            '—'}
+                        </TD>
+                        <TD>{fmt(cond.meta?.lastUpdated)}</TD>
+                        <td className="px-4 py-3 text-right">
+                          <ExpandToggle open={expandedId === cond.id} />
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* Mobile Card View */}
-          <div className="md:hidden space-y-3">
-            {conditions.map((cond: any) => (
-              <div
-                key={cond.id}
-                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-              >
+                      {expandedId === cond.id && (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                          >
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                              <div>
+                                <span className="font-medium">ID:</span>{' '}
+                                {cond.id}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Verification:
+                                </span>{' '}
+                                {cond.verificationStatus?.coding?.[0]?.code ||
+                                  '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Recorded:</span>{' '}
+                                {fmt(cond.recordedDate)}
+                              </div>
+                              <div>
+                                <span className="font-medium">Recorder:</span>{' '}
+                                {cond.recorder?.display ||
+                                  cond.recorder?.reference ||
+                                  '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Asserter:</span>{' '}
+                                {cond.asserter?.display ||
+                                  cond.asserter?.reference ||
+                                  '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Encounter:</span>{' '}
+                                {cond.encounter?.reference || '—'}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="font-medium">Body Site:</span>{' '}
+                                {cond.bodySite
+                                  ?.map(
+                                    (b: any) =>
+                                      b.coding?.[0]?.display || b.text,
+                                  )
+                                  .filter(Boolean)
+                                  .join(', ') || '—'}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="font-medium">Note:</span>{' '}
+                                {cond.note
+                                  ?.map((n: any) => n.text)
+                                  .join('; ') || '—'}
+                              </div>
+                              {cond.abatementDateTime && (
+                                <div>
+                                  <span className="font-medium">
+                                    Abatement:
+                                  </span>{' '}
+                                  {fmt(cond.abatementDateTime)}
+                                </div>
+                              )}
+                              {cond.stage?.length ? (
+                                <div className="col-span-2">
+                                  <span className="font-medium">Stage:</span>{' '}
+                                  {cond.stage
+                                    .map(
+                                      (s: any) =>
+                                        s.summary?.coding?.[0]?.display ||
+                                        s.summary?.text,
+                                    )
+                                    .filter(Boolean)
+                                    .join(', ')}
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {conditions.map((cond: any) => (
                 <div
-                  onClick={() => toggle(cond.id)}
-                  className="p-4 cursor-pointer"
+                  key={cond.id}
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <div className="flex justify-between items-start gap-2 mb-3">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">
-                        {cond.code?.coding?.[0]?.display || cond.code?.text || '—'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {fmt(cond.onsetDateTime || cond.recordedDate)}
-                      </p>
+                  <div
+                    onClick={() => toggle(cond.id)}
+                    className="p-4 cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start gap-2 mb-3">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
+                          {cond.code?.coding?.[0]?.display ||
+                            cond.code?.text ||
+                            '—'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {fmt(cond.onsetDateTime || cond.recordedDate)}
+                        </p>
+                      </div>
+                      <ExpandToggle open={expandedId === cond.id} />
                     </div>
-                    <ExpandToggle open={expandedId === cond.id} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-500 text-xs">Status</span>
-                      <div className="mt-1">
-                        <StatusBadge
-                          status={cond.clinicalStatus?.coding?.[0]?.code}
-                        />
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-500 text-xs">Status</span>
+                        <div className="mt-1">
+                          <StatusBadge
+                            status={cond.clinicalStatus?.coding?.[0]?.code}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Severity</span>
+                        <p className="text-gray-800 font-medium mt-1">
+                          {cond.severity?.coding?.[0]?.display ||
+                            cond.severity?.text ||
+                            '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Category</span>
+                        <p className="text-gray-800 font-medium mt-1 line-clamp-2">
+                          {cond.category?.[0]?.coding?.[0]?.display ||
+                            cond.category?.[0]?.text ||
+                            '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">
+                          Verification
+                        </span>
+                        <p className="text-gray-800 font-medium mt-1">
+                          {cond.verificationStatus?.coding?.[0]?.code || '—'}
+                        </p>
                       </div>
                     </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Severity</span>
-                      <p className="text-gray-800 font-medium mt-1">
-                        {cond.severity?.coding?.[0]?.display || cond.severity?.text || '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Category</span>
-                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
-                        {cond.category?.[0]?.coding?.[0]?.display || cond.category?.[0]?.text || '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Verification</span>
-                      <p className="text-gray-800 font-medium mt-1">
-                        {cond.verificationStatus?.coding?.[0]?.code || '—'}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-500">
+                        Last Updated: {fmt(cond.meta?.lastUpdated)}
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-500">Last Updated: {fmt(cond.meta?.lastUpdated)}</p>
-                  </div>
+                  {expandedId === cond.id && (
+                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                      <div className="space-y-3">
+                        <div>
+                          <span className="font-medium">ID:</span> {cond.id}
+                        </div>
+                        <div>
+                          <span className="font-medium">Verification:</span>{' '}
+                          {cond.verificationStatus?.coding?.[0]?.code || '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Recorded:</span>{' '}
+                          {fmt(cond.recordedDate)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Recorder:</span>{' '}
+                          {cond.recorder?.display ||
+                            cond.recorder?.reference ||
+                            '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Asserter:</span>{' '}
+                          {cond.asserter?.display ||
+                            cond.asserter?.reference ||
+                            '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Encounter:</span>{' '}
+                          {cond.encounter?.reference || '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Body Site:</span>{' '}
+                          {cond.bodySite
+                            ?.map((b: any) => b.coding?.[0]?.display || b.text)
+                            .filter(Boolean)
+                            .join(', ') || '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Note:</span>{' '}
+                          {cond.note?.map((n: any) => n.text).join('; ') || '—'}
+                        </div>
+                        {cond.abatementDateTime && (
+                          <div>
+                            <span className="font-medium">Abatement:</span>{' '}
+                            {fmt(cond.abatementDateTime)}
+                          </div>
+                        )}
+                        {cond.stage?.length && (
+                          <div>
+                            <span className="font-medium">Stage:</span>{' '}
+                            {cond.stage
+                              .map(
+                                (s: any) =>
+                                  s.summary?.coding?.[0]?.display ||
+                                  s.summary?.text,
+                              )
+                              .filter(Boolean)
+                              .join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {expandedId === cond.id && (
-                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
-                    <div className="space-y-3">
-                      <div>
-                        <span className="font-medium">ID:</span> {cond.id}
-                      </div>
-                      <div>
-                        <span className="font-medium">Verification:</span> {cond.verificationStatus?.coding?.[0]?.code || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Recorded:</span> {fmt(cond.recordedDate)}
-                      </div>
-                      <div>
-                        <span className="font-medium">Recorder:</span> {cond.recorder?.display || cond.recorder?.reference || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Asserter:</span> {cond.asserter?.display || cond.asserter?.reference || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Encounter:</span> {cond.encounter?.reference || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Body Site:</span> {cond.bodySite?.map((b: any) => b.coding?.[0]?.display || b.text).filter(Boolean).join(', ') || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Note:</span> {cond.note?.map((n: any) => n.text).join('; ') || '—'}
-                      </div>
-                      {cond.abatementDateTime && (
-                        <div>
-                          <span className="font-medium">Abatement:</span> {fmt(cond.abatementDateTime)}
-                        </div>
-                      )}
-                      {cond.stage?.length && (
-                        <div>
-                          <span className="font-medium">Stage:</span> {cond.stage.map((s: any) => s.summary?.coding?.[0]?.display || s.summary?.text).filter(Boolean).join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
           </>
         )}
         <Pagination
@@ -2840,177 +2889,208 @@ const PatientRecordsPage: React.FC = () => {
           <Empty />
         ) : (
           <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <SortHeader
-                    label="Date"
-                    sortDir={sortDir}
-                    onToggle={() =>
-                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-                    }
-                  />
-                  <TH className="hidden md:table-cell">Type</TH>
-                  <TH>Status</TH>
-                  <TH className="hidden lg:table-cell">Chief Complaint</TH>
-                  <TH className="hidden md:table-cell">Last Updated</TH>
-                  <TH />
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {encounters.map((enc: any) => (
-                  <React.Fragment key={enc.id}>
-                    <tr
-                      id={`record-${enc.id}`}
-                      className={`cursor-pointer transition-colors ${highlightId === enc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                      onClick={() => toggle(enc.id)}
-                    >
-                      <TD>
-                        {fmt(enc.actualPeriod?.start || enc.period?.start)}
-                      </TD>
-                      <TD className="hidden md:table-cell">
-                        {enc.type?.[0]?.text ||
-                          enc.class?.[0]?.coding?.[0]?.display ||
-                          '—'}
-                      </TD>
-                      <TD>
-                        <StatusBadge status={enc.status} />
-                      </TD>
-                      <TD className="hidden lg:table-cell">
-                        {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
-                      </TD>
-                      <TD className="hidden md:table-cell">
-                        {fmt(enc.meta?.lastUpdated)}
-                      </TD>
-                      <td className="px-4 py-3 text-right">
-                        <ExpandToggle open={expandedId === enc.id} />
-                      </td>
-                    </tr>
-                    {expandedId === enc.id && (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="bg-gray-50 px-6 py-4 text-sm"
-                        >
-                          <div className="grid grid-cols-2 gap-2 text-gray-700">
-                            <div>
-                              <span className="font-medium">Encounter ID:</span>{' '}
-                              {enc.id}
-                            </div>
-                            <div>
-                              <span className="font-medium">Identifier:</span>{' '}
-                              {enc.identifier?.[0]?.value || '—'}
-                            </div>
-                            <div>
-                              <span className="font-medium">Period:</span>{' '}
-                              {fmt(
-                                enc.actualPeriod?.start || enc.period?.start,
-                              )}{' '}
-                              → {fmt(enc.actualPeriod?.end || enc.period?.end)}
-                            </div>
-                            <div>
-                              <span className="font-medium">Location:</span>{' '}
-                              {enc.location
-                                ?.map(
-                                  (l: any) =>
-                                    l.location?.identifier?.value ||
-                                    l.location?.reference ||
-                                    '—',
-                                )
-                                .join(', ') || '—'}
-                            </div>
-                            <div className="col-span-2">
-                              <span className="font-medium">Participants:</span>{' '}
-                              {enc.participant
-                                ?.map(
-                                  (p: any) =>
-                                    p.actor?.display ||
-                                    p.actor?.reference ||
-                                    '—',
-                                )
-                                .join(', ') || '—'}
-                            </div>
-                          </div>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <SortHeader
+                      label="Date"
+                      sortDir={sortDir}
+                      onToggle={() =>
+                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                      }
+                    />
+                    <TH className="hidden md:table-cell">Type</TH>
+                    <TH>Status</TH>
+                    <TH className="hidden lg:table-cell">Chief Complaint</TH>
+                    <TH className="hidden md:table-cell">Last Updated</TH>
+                    <TH />
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {encounters.map((enc: any) => (
+                    <React.Fragment key={enc.id}>
+                      <tr
+                        id={`record-${enc.id}`}
+                        className={`cursor-pointer transition-colors ${highlightId === enc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggle(enc.id)}
+                      >
+                        <TD>
+                          {fmt(enc.actualPeriod?.start || enc.period?.start)}
+                        </TD>
+                        <TD className="hidden md:table-cell">
+                          {enc.type?.[0]?.text ||
+                            enc.class?.[0]?.coding?.[0]?.display ||
+                            '—'}
+                        </TD>
+                        <TD>
+                          <StatusBadge status={enc.status} />
+                        </TD>
+                        <TD className="hidden lg:table-cell">
+                          {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
+                        </TD>
+                        <TD className="hidden md:table-cell">
+                          {fmt(enc.meta?.lastUpdated)}
+                        </TD>
+                        <td className="px-4 py-3 text-right">
+                          <ExpandToggle open={expandedId === enc.id} />
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* Mobile Card View */}
-          <div className="md:hidden space-y-3">
-            {encounters.map((enc: any) => (
-              <div
-                key={enc.id}
-                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-              >
+                      {expandedId === enc.id && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="bg-gray-50 px-6 py-4 text-sm"
+                          >
+                            <div className="grid grid-cols-2 gap-2 text-gray-700">
+                              <div>
+                                <span className="font-medium">
+                                  Encounter ID:
+                                </span>{' '}
+                                {enc.id}
+                              </div>
+                              <div>
+                                <span className="font-medium">Identifier:</span>{' '}
+                                {enc.identifier?.[0]?.value || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Period:</span>{' '}
+                                {fmt(
+                                  enc.actualPeriod?.start || enc.period?.start,
+                                )}{' '}
+                                →{' '}
+                                {fmt(enc.actualPeriod?.end || enc.period?.end)}
+                              </div>
+                              <div>
+                                <span className="font-medium">Location:</span>{' '}
+                                {enc.location
+                                  ?.map(
+                                    (l: any) =>
+                                      l.location?.identifier?.value ||
+                                      l.location?.reference ||
+                                      '—',
+                                  )
+                                  .join(', ') || '—'}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="font-medium">
+                                  Participants:
+                                </span>{' '}
+                                {enc.participant
+                                  ?.map(
+                                    (p: any) =>
+                                      p.actor?.display ||
+                                      p.actor?.reference ||
+                                      '—',
+                                  )
+                                  .join(', ') || '—'}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {encounters.map((enc: any) => (
                 <div
-                  onClick={() => toggle(enc.id)}
-                  className="p-4 cursor-pointer"
+                  key={enc.id}
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <div className="flex justify-between items-start gap-2 mb-3">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">
-                        {fmt(enc.actualPeriod?.start || enc.period?.start)}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {enc.type?.[0]?.text || enc.class?.[0]?.coding?.[0]?.display || '—'}
-                      </p>
+                  <div
+                    onClick={() => toggle(enc.id)}
+                    className="p-4 cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start gap-2 mb-3">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
+                          {fmt(enc.actualPeriod?.start || enc.period?.start)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {enc.type?.[0]?.text ||
+                            enc.class?.[0]?.coding?.[0]?.display ||
+                            '—'}
+                        </p>
+                      </div>
+                      <ExpandToggle open={expandedId === enc.id} />
                     </div>
-                    <ExpandToggle open={expandedId === enc.id} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-500 text-xs">Status</span>
-                      <div className="mt-1">
-                        <StatusBadge status={enc.status} />
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-500 text-xs">Status</span>
+                        <div className="mt-1">
+                          <StatusBadge status={enc.status} />
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Type</span>
+                        <p className="text-gray-800 font-medium mt-1 line-clamp-2">
+                          {enc.type?.[0]?.text ||
+                            enc.class?.[0]?.coding?.[0]?.display ||
+                            '—'}
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500 text-xs">
+                          Chief Complaint
+                        </span>
+                        <p className="text-gray-800 font-medium mt-1 line-clamp-2">
+                          {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
+                        </p>
                       </div>
                     </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Type</span>
-                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
-                        {enc.type?.[0]?.text || enc.class?.[0]?.coding?.[0]?.display || '—'}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-gray-500 text-xs">Chief Complaint</span>
-                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
-                        {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-500">
+                        Last Updated: {fmt(enc.meta?.lastUpdated)}
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-500">Last Updated: {fmt(enc.meta?.lastUpdated)}</p>
-                  </div>
+                  {expandedId === enc.id && (
+                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                      <div className="space-y-3">
+                        <div>
+                          <span className="font-medium">Encounter ID:</span>{' '}
+                          {enc.id}
+                        </div>
+                        <div>
+                          <span className="font-medium">Identifier:</span>{' '}
+                          {enc.identifier?.[0]?.value || '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Period:</span>{' '}
+                          {fmt(enc.actualPeriod?.start || enc.period?.start)} →{' '}
+                          {fmt(enc.actualPeriod?.end || enc.period?.end)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Location:</span>{' '}
+                          {enc.location
+                            ?.map(
+                              (l: any) =>
+                                l.location?.identifier?.value ||
+                                l.location?.reference ||
+                                '—',
+                            )
+                            .join(', ') || '—'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Participants:</span>{' '}
+                          {enc.participant
+                            ?.map(
+                              (p: any) =>
+                                p.actor?.display || p.actor?.reference || '—',
+                            )
+                            .join(', ') || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {expandedId === enc.id && (
-                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
-                    <div className="space-y-3">
-                      <div>
-                        <span className="font-medium">Encounter ID:</span> {enc.id}
-                      </div>
-                      <div>
-                        <span className="font-medium">Identifier:</span> {enc.identifier?.[0]?.value || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Period:</span> {fmt(enc.actualPeriod?.start || enc.period?.start)} → {fmt(enc.actualPeriod?.end || enc.period?.end)}
-                      </div>
-                      <div>
-                        <span className="font-medium">Location:</span> {enc.location?.map((l: any) => l.location?.identifier?.value || l.location?.reference || '—').join(', ') || '—'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Participants:</span> {enc.participant?.map((p: any) => p.actor?.display || p.actor?.reference || '—').join(', ') || '—'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
           </>
         )}
         <Pagination
@@ -3069,58 +3149,244 @@ const PatientRecordsPage: React.FC = () => {
           <Empty />
         ) : (
           <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <SortHeader
-                    label="Date"
-                    sortDir={sortDir}
-                    onToggle={() =>
-                      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-                    }
-                  />
-                  <TH>Code</TH>
-                  <TH className="hidden md:table-cell">Value</TH>
-                  <TH>Interpretation</TH>
-                  <TH className="hidden md:table-cell">Category</TH>
-                  <TH>Status</TH>
-                  <TH className="hidden md:table-cell">Last Updated</TH>
-                  <TH />
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {observations.map((obs: any) => {
-                  const value = obs.valueQuantity
-                    ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
-                    : obs.valueString ||
-                      obs.valueCodeableConcept?.text ||
-                      (obs.component?.length
-                        ? `${obs.component.length} components`
-                        : '—');
-                  return (
-                    <React.Fragment key={obs.id}>
-                      <tr
-                        id={`record-${obs.id}`}
-                        className={`cursor-pointer transition-colors ${expandedId === obs.id ? 'bg-blue-50 border-l-4 border-blue-400' : highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => toggle(obs.id)}
-                      >
-                        <TD>
-                          {fmt(
-                            obs.effectiveDateTime || obs.effectivePeriod?.start,
-                          )}
-                        </TD>
-                        <TD>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <SortHeader
+                      label="Date"
+                      sortDir={sortDir}
+                      onToggle={() =>
+                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                      }
+                    />
+                    <TH>Code</TH>
+                    <TH className="hidden md:table-cell">Value</TH>
+                    <TH>Interpretation</TH>
+                    <TH className="hidden md:table-cell">Category</TH>
+                    <TH>Status</TH>
+                    <TH className="hidden md:table-cell">Last Updated</TH>
+                    <TH />
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {observations.map((obs: any) => {
+                    const value = obs.valueQuantity
+                      ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
+                      : obs.valueString ||
+                        obs.valueCodeableConcept?.text ||
+                        (obs.component?.length
+                          ? `${obs.component.length} components`
+                          : '—');
+                    return (
+                      <React.Fragment key={obs.id}>
+                        <tr
+                          id={`record-${obs.id}`}
+                          className={`cursor-pointer transition-colors ${expandedId === obs.id ? 'bg-blue-50 border-l-4 border-blue-400' : highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          onClick={() => toggle(obs.id)}
+                        >
+                          <TD>
+                            {fmt(
+                              obs.effectiveDateTime ||
+                                obs.effectivePeriod?.start,
+                            )}
+                          </TD>
+                          <TD>
+                            {obs.code?.coding?.[0]?.display ||
+                              obs.code?.text ||
+                              obs.code?.coding?.[0]?.code ||
+                              '—'}
+                          </TD>
+                          <TD className="hidden md:table-cell font-medium">
+                            {value}
+                          </TD>
+                          <TD>
+                            {(() => {
+                              const interpretation =
+                                getInterpretationBadge(obs);
+                              return interpretation ? (
+                                <span
+                                  className={`inline-block text-xs font-medium px-2 py-1 rounded ${interpretation.bgColor}`}
+                                >
+                                  {interpretation.text}
+                                </span>
+                              ) : (
+                                '—'
+                              );
+                            })()}
+                          </TD>
+                          <TD className="hidden md:table-cell">
+                            {obs.category?.[0]?.coding?.[0]?.display ||
+                              obs.category?.[0]?.text ||
+                              '—'}
+                          </TD>
+                          <TD>
+                            <StatusBadge status={obs.status} />
+                          </TD>
+                          <TD className="hidden md:table-cell">
+                            {fmt(obs.meta?.lastUpdated)}
+                          </TD>
+                          <td className="px-4 py-3 text-right">
+                            <ExpandToggle open={expandedId === obs.id} />
+                          </td>
+                        </tr>
+                        {expandedId === obs.id && (
+                          <tr>
+                            <td
+                              colSpan={7}
+                              className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
+                            >
+                              {obs.component?.length ? (
+                                <div>
+                                  <p className="font-medium mb-2">
+                                    Components:
+                                  </p>
+                                  <table className="text-xs border border-gray-200 rounded">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="px-3 py-1 text-left">
+                                          Code
+                                        </th>
+                                        <th className="px-3 py-1 text-left">
+                                          Value
+                                        </th>
+                                        <th className="px-3 py-1 text-left">
+                                          Ref Range
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {obs.component.map(
+                                        (c: any, i: number) => (
+                                          <tr
+                                            key={i}
+                                            className="border-t border-gray-200"
+                                          >
+                                            <td className="px-3 py-1">
+                                              {c.code?.coding?.[0]?.display ||
+                                                c.code?.text ||
+                                                '—'}
+                                            </td>
+                                            <td className="px-3 py-1">
+                                              {c.valueQuantity
+                                                ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
+                                                : c.valueString || '—'}
+                                            </td>
+                                            <td className="px-3 py-1">
+                                              {formatReferenceRange(
+                                                c.referenceRange,
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ),
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <span className="font-medium">Value:</span>{' '}
+                                    {value}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">
+                                      Category:
+                                    </span>{' '}
+                                    {obs.category?.[0]?.coding?.[0]?.display ||
+                                    obs.category?.[0]?.coding?.[0]?.code ? (
+                                      obs.category[0]?.coding?.[0]?.display ||
+                                      obs.category[0]?.coding?.[0]?.code
+                                    ) : (
+                                      <span className="text-gray-400 italic">
+                                        (not specified)
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">
+                                      Reference Range:
+                                    </span>{' '}
+                                    {formatReferenceRange(obs.referenceRange)}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">
+                                      Interpretation:
+                                    </span>{' '}
+                                    {(() => {
+                                      const interpretation =
+                                        getInterpretationBadge(obs);
+                                      return interpretation ? (
+                                        <span
+                                          className={`inline-block text-xs font-medium px-2 py-1 rounded ${interpretation.bgColor}`}
+                                        >
+                                          {interpretation.text}
+                                        </span>
+                                      ) : (
+                                        '—'
+                                      );
+                                    })()}
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="font-medium">Note:</span>{' '}
+                                    {obs.note?.[0]?.text || '—'}
+                                  </div>
+                                  {obs.hasMember?.length ||
+                                  obs.derivedFrom?.length ? (
+                                    <div className="col-span-2">
+                                      <ObservationReferencedResources
+                                        observation={obs}
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {observations.map((obs: any) => (
+                <div
+                  key={obs.id}
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div
+                    onClick={() => toggle(obs.id)}
+                    className="p-4 cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start gap-2 mb-3">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
                           {obs.code?.coding?.[0]?.display ||
                             obs.code?.text ||
-                            obs.code?.coding?.[0]?.code ||
                             '—'}
-                        </TD>
-                        <TD className="hidden md:table-cell font-medium">
-                          {value}
-                        </TD>
-                        <TD>
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {fmt(obs.effectiveDateTime)}
+                        </p>
+                      </div>
+                      <ExpandToggle open={expandedId === obs.id} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-500 text-xs">Status</span>
+                        <div className="mt-1">
+                          <StatusBadge status={obs.status} />
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">
+                          Interpretation
+                        </span>
+                        <div className="mt-1">
                           {(() => {
                             const interpretation = getInterpretationBadge(obs);
                             return interpretation ? (
@@ -3130,227 +3396,73 @@ const PatientRecordsPage: React.FC = () => {
                                 {interpretation.text}
                               </span>
                             ) : (
-                              '—'
+                              <p className="text-gray-800 font-medium">—</p>
                             );
                           })()}
-                        </TD>
-                        <TD className="hidden md:table-cell">
-                          {obs.category?.[0]?.coding?.[0]?.display ||
-                            obs.category?.[0]?.text ||
-                            '—'}
-                        </TD>
-                        <TD>
-                          <StatusBadge status={obs.status} />
-                        </TD>
-                        <TD className="hidden md:table-cell">
-                          {fmt(obs.meta?.lastUpdated)}
-                        </TD>
-                        <td className="px-4 py-3 text-right">
-                          <ExpandToggle open={expandedId === obs.id} />
-                        </td>
-                      </tr>
-                      {expandedId === obs.id && (
-                        <tr>
-                          <td
-                            colSpan={7}
-                            className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
-                          >
-                            {obs.component?.length ? (
-                              <div>
-                                <p className="font-medium mb-2">Components:</p>
-                                <table className="text-xs border border-gray-200 rounded">
-                                  <thead className="bg-gray-100">
-                                    <tr>
-                                      <th className="px-3 py-1 text-left">
-                                        Code
-                                      </th>
-                                      <th className="px-3 py-1 text-left">
-                                        Value
-                                      </th>
-                                      <th className="px-3 py-1 text-left">
-                                        Ref Range
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {obs.component.map((c: any, i: number) => (
-                                      <tr
-                                        key={i}
-                                        className="border-t border-gray-200"
-                                      >
-                                        <td className="px-3 py-1">
-                                          {c.code?.coding?.[0]?.display ||
-                                            c.code?.text ||
-                                            '—'}
-                                        </td>
-                                        <td className="px-3 py-1">
-                                          {c.valueQuantity
-                                            ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
-                                            : c.valueString || '—'}
-                                        </td>
-                                        <td className="px-3 py-1">
-                                          {formatReferenceRange(
-                                            c.referenceRange,
-                                          )}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="font-medium">Value:</span>{' '}
-                                  {value}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Category:</span>{' '}
-                                  {obs.category?.[0]?.coding?.[0]?.display ||
-                                  obs.category?.[0]?.coding?.[0]?.code ? (
-                                    obs.category[0]?.coding?.[0]?.display ||
-                                    obs.category[0]?.coding?.[0]?.code
-                                  ) : (
-                                    <span className="text-gray-400 italic">
-                                      (not specified)
-                                    </span>
-                                  )}
-                                </div>
-                                <div>
-                                  <span className="font-medium">
-                                    Reference Range:
-                                  </span>{' '}
-                                  {formatReferenceRange(obs.referenceRange)}
-                                </div>
-                                <div>
-                                  <span className="font-medium">
-                                    Interpretation:
-                                  </span>{' '}
-                                  {(() => {
-                                    const interpretation =
-                                      getInterpretationBadge(obs);
-                                    return interpretation ? (
-                                      <span
-                                        className={`inline-block text-xs font-medium px-2 py-1 rounded ${interpretation.bgColor}`}
-                                      >
-                                        {interpretation.text}
-                                      </span>
-                                    ) : (
-                                      '—'
-                                    );
-                                  })()}
-                                </div>
-                                <div className="col-span-2">
-                                  <span className="font-medium">Note:</span>{' '}
-                                  {obs.note?.[0]?.text || '—'}
-                                </div>
-                                {obs.hasMember?.length ||
-                                obs.derivedFrom?.length ? (
-                                  <div className="col-span-2">
-                                    <ObservationReferencedResources
-                                      observation={obs}
-                                    />
-                                  </div>
-                                ) : null}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {/* Mobile Card View */}
-          <div className="md:hidden space-y-3">
-            {observations.map((obs: any) => (
-              <div
-                key={obs.id}
-                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div
-                  onClick={() => toggle(obs.id)}
-                  className="p-4 cursor-pointer"
-                >
-                  <div className="flex justify-between items-start gap-2 mb-3">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">
-                        {obs.code?.coding?.[0]?.display || obs.code?.text || '—'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {fmt(obs.effectiveDateTime)}
-                      </p>
-                    </div>
-                    <ExpandToggle open={expandedId === obs.id} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-500 text-xs">Status</span>
-                      <div className="mt-1">
-                        <StatusBadge status={obs.status} />
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 text-xs">Interpretation</span>
-                      <div className="mt-1">
-                        {(() => {
-                          const interpretation = getInterpretationBadge(obs);
-                          return interpretation ? (
-                            <span className={`inline-block text-xs font-medium px-2 py-1 rounded ${interpretation.bgColor}`}>
-                              {interpretation.text}
-                            </span>
-                          ) : (
-                            <p className="text-gray-800 font-medium">—</p>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-gray-500 text-xs">Value</span>
-                      <p className="text-gray-800 font-medium mt-1 line-clamp-2">
-                        {obs.valueQuantity
-                          ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
-                          : obs.valueString || obs.valueCodeableConcept?.coding?.[0]?.display || obs.valueCodeableConcept?.text || '—'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-500">Last Updated: {fmt(obs.meta?.lastUpdated)}</p>
-                  </div>
-                </div>
-                {expandedId === obs.id && (
-                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
-                    <div className="space-y-3">
-                      <div>
-                        <span className="font-medium">ID:</span> {obs.id}
-                      </div>
-                      <div>
-                        <span className="font-medium">Reference Range:</span> {formatReferenceRange(obs.referenceRange)}
-                      </div>
-                      {obs.component?.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <p className="font-medium mb-2">Components:</p>
-                          <div className="text-xs space-y-1">
-                            {obs.component.map((c: any, i: number) => (
-                              <div key={i} className="bg-white p-2 rounded border border-gray-200">
-                                <p className="font-medium">{c.code?.coding?.[0]?.display || c.code?.text || '—'}</p>
-                                <p>{c.valueQuantity ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim() : c.valueString || '—'}</p>
-                              </div>
-                            ))}
-                          </div>
                         </div>
-                      )}
-                      <div>
-                        <span className="font-medium">Note:</span> {obs.note?.[0]?.text || '—'}
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500 text-xs">Value</span>
+                        <p className="text-gray-800 font-medium mt-1 line-clamp-2">
+                          {obs.valueQuantity
+                            ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit ?? ''}`.trim()
+                            : obs.valueString ||
+                              obs.valueCodeableConcept?.coding?.[0]?.display ||
+                              obs.valueCodeableConcept?.text ||
+                              '—'}
+                        </p>
                       </div>
                     </div>
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-500">
+                        Last Updated: {fmt(obs.meta?.lastUpdated)}
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  {expandedId === obs.id && (
+                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                      <div className="space-y-3">
+                        <div>
+                          <span className="font-medium">ID:</span> {obs.id}
+                        </div>
+                        <div>
+                          <span className="font-medium">Reference Range:</span>{' '}
+                          {formatReferenceRange(obs.referenceRange)}
+                        </div>
+                        {obs.component?.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="font-medium mb-2">Components:</p>
+                            <div className="text-xs space-y-1">
+                              {obs.component.map((c: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="bg-white p-2 rounded border border-gray-200"
+                                >
+                                  <p className="font-medium">
+                                    {c.code?.coding?.[0]?.display ||
+                                      c.code?.text ||
+                                      '—'}
+                                  </p>
+                                  <p>
+                                    {c.valueQuantity
+                                      ? `${c.valueQuantity.value} ${c.valueQuantity.unit ?? ''}`.trim()
+                                      : c.valueString || '—'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-medium">Note:</span>{' '}
+                          {obs.note?.[0]?.text || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </>
         )}
         <Pagination
@@ -4568,7 +4680,12 @@ const PatientRecordsPage: React.FC = () => {
                     className="flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
                     title="More options"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                      className="w-4 h-4"
+                    >
                       <circle cx="12" cy="5" r="2" />
                       <circle cx="12" cy="12" r="2" />
                       <circle cx="12" cy="19" r="2" />
@@ -4714,7 +4831,12 @@ const PatientRecordsPage: React.FC = () => {
                     className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
                     title="More options"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                      className="w-4 h-4"
+                    >
                       <circle cx="12" cy="5" r="2" />
                       <circle cx="12" cy="12" r="2" />
                       <circle cx="12" cy="19" r="2" />
@@ -4896,7 +5018,8 @@ const PatientRecordsPage: React.FC = () => {
                   className="flex-1 min-w-0 px-2 py-1.5 pr-7 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 hover:bg-gray-50 transition-colors appearance-none cursor-pointer relative"
                 >
                   <span className="truncate text-left block">
-                    {TABS.find(t => t.id === activeTab)?.label || 'Select Tab'}
+                    {TABS.find((t) => t.id === activeTab)?.label ||
+                      'Select Tab'}
                   </span>
                   {/* Dropdown Chevron */}
                   <svg
@@ -4907,7 +5030,11 @@ const PatientRecordsPage: React.FC = () => {
                     strokeWidth={2}
                     stroke="currentColor"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7-7m0 0L5 14" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M19 14l-7-7m0 0L5 14"
+                    />
                   </svg>
                 </button>
                 {/* Filters Button - Icon only (Azure DevOps style) */}
@@ -5244,7 +5371,9 @@ const PatientRecordsPage: React.FC = () => {
               onTouchStart={handleAgentDragStart}
               className="md:hidden flex justify-center py-2 sticky top-0 bg-indigo-50 border-b border-indigo-200 cursor-grab active:cursor-grabbing"
             >
-              <div className={`w-12 h-1 rounded-full transition-colors ${isResizingAgent ? 'bg-indigo-500' : 'bg-indigo-300'}`} />
+              <div
+                className={`w-12 h-1 rounded-full transition-colors ${isResizingAgent ? 'bg-indigo-500' : 'bg-indigo-300'}`}
+              />
             </div>
 
             <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
@@ -5307,7 +5436,9 @@ const PatientRecordsPage: React.FC = () => {
             >
               {/* Modal Header */}
               <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-gray-900">Select Tab</h2>
+                <h2 className="text-base font-semibold text-gray-900">
+                  Select Tab
+                </h2>
                 <button
                   onClick={() => setShowTabModal(false)}
                   className="p-1 hover:bg-gray-100 rounded-lg transition-colors"

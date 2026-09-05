@@ -537,7 +537,9 @@ const PatientCrudPage: React.FC = () => {
   // Determine back button label based on where we're navigating to
   const backTo = (location.state as any)?.backTo;
   const isFromRegistration = backTo?.includes('/visit/new');
-  const backButtonLabel = isFromRegistration ? 'Back to Registration' : 'Back to Patient Search';
+  const backButtonLabel = isFromRegistration
+    ? 'Back to Registration'
+    : 'Back to Patient Search';
 
   // Add new telecom
   const addTelecom = () => {
@@ -680,7 +682,9 @@ const PatientCrudPage: React.FC = () => {
       <div className="bg-white shadow-md rounded-lg p-4 sm:p-6">
         {/* Overview Group */}
         <div className="mb-6 sm:mb-8">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 border-b pb-2">Overview</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 border-b pb-2">
+            Overview
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="col-span-1">
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
@@ -763,7 +767,9 @@ const PatientCrudPage: React.FC = () => {
 
         {/* Name Group */}
         <div className="mb-6 sm:mb-8">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 border-b pb-2">Name</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 border-b pb-2">
+            Name
+          </h2>
           {formData.name?.map((name, index) => (
             <div
               key={index}
@@ -920,7 +926,9 @@ const PatientCrudPage: React.FC = () => {
         {/* Contact Group */}
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4 border-b pb-2">
-            <h2 className="text-lg sm:text-xl font-semibold">Contact Information</h2>
+            <h2 className="text-lg sm:text-xl font-semibold">
+              Contact Information
+            </h2>
             {mode === 'edit' && (
               <button
                 type="button"
