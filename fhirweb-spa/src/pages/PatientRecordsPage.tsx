@@ -4460,7 +4460,33 @@ const PatientRecordsPage: React.FC = () => {
                       </h3>
                       <StatusBadge status={cp.status} />
                     </div>
-                    <div className="text-sm text-gray-500">
+                    {cp.category && cp.category.length > 0 && (
+                      <div className="text-xs text-gray-600 mt-1.5 flex flex-wrap gap-2">
+                        {cp.category.map((cat: any, idx: number) => (
+                          <div key={idx}>
+                            {cat.coding?.map((code: any, cIdx: number) => (
+                              <span
+                                key={cIdx}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md text-indigo-700"
+                              >
+                                <span className="font-medium">{code.display || code.code}</span>
+                                {code.code && code.display && (
+                                  <span className="text-indigo-600">
+                                    ({code.code})
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                            {cat.text && !cat.coding && (
+                              <span className="inline-flex items-center px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md text-indigo-700">
+                                {cat.text}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-sm text-gray-500 mt-2">
                       Period: {fmt(cp.period?.start)} → {fmt(cp.period?.end)}
                     </div>
                     <div className="text-sm text-gray-400 mt-1">
