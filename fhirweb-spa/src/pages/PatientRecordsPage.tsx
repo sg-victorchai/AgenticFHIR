@@ -1509,6 +1509,12 @@ const PatientRecordsPage: React.FC = () => {
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // ── Ask AI panel mobile resize state ──
+  const [agentPanelHeight, setAgentPanelHeight] = useState(50); // Default 50vh
+  const [isResizingAgent, setIsResizingAgent] = useState(false);
+  const agentPanelRef = useRef<HTMLDivElement>(null);
+  const agentDragHandleRef = useRef<HTMLDivElement>(null);
+
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true);
     e.preventDefault();
@@ -1541,6 +1547,64 @@ const PatientRecordsPage: React.FC = () => {
       };
     }
   }, [isResizing]);
+
+  // ── Agent panel mobile resize handlers ──
+  const handleAgentDragStart = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>,
+  ) => {
+    setIsResizingAgent(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingAgent || !agentPanelRef.current) return;
+
+      const panel = agentPanelRef.current;
+      const rect = panel.getBoundingClientRect();
+      
+      // Calculate new height as percentage of viewport
+      const newHeight = ((rect.bottom - e.clientY) / window.innerHeight) * 100;
+
+      // Constrain height between 30% and 80%
+      if (newHeight >= 30 && newHeight <= 80) {
+        setAgentPanelHeight(newHeight);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isResizingAgent || !agentPanelRef.current) return;
+
+      const panel = agentPanelRef.current;
+      const rect = panel.getBoundingClientRect();
+      const touch = e.touches[0];
+
+      // Calculate new height as percentage of viewport
+      const newHeight = ((rect.bottom - touch.clientY) / window.innerHeight) * 100;
+
+      // Constrain height between 30% and 80%
+      if (newHeight >= 30 && newHeight <= 80) {
+        setAgentPanelHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingAgent(false);
+    };
+
+    if (isResizingAgent) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('touchmove', handleTouchMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchend', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchend', handleMouseUp);
+      };
+    }
+  }, [isResizingAgent]);
 
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -5158,19 +5222,29 @@ const PatientRecordsPage: React.FC = () => {
         {/* Right side: Ask AI panel — Desktop side panel, Mobile bottom sheet */}
         {role === 'patient' && showAgentModal && (
           <div
+            ref={agentPanelRef}
             className="bg-indigo-50 border-l border-indigo-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
-              w-screen md:w-auto h-1/3 md:h-auto max-h-screen z-40 md:z-auto
+              w-screen md:w-auto md:h-auto max-h-screen z-40 md:z-auto
               border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
             style={{
-              ...(!window.matchMedia('(min-width: 768px)').matches
-                ? {}
-                : { width: `${uploadPanelWidth}%` }),
+              height: window.matchMedia('(min-width: 768px)').matches
+                ? 'auto'
+                : `${agentPanelHeight}vh`,
+              ...(window.matchMedia('(min-width: 768px)').matches
+                ? { width: `${uploadPanelWidth}%` }
+                : {}),
+              userSelect: isResizingAgent ? 'none' : 'auto',
             }}
           >
             {/* Mobile drag handle */}
-            <div className="md:hidden flex justify-center py-2 sticky top-0 bg-indigo-50 border-b border-indigo-200">
-              <div className="w-12 h-1 bg-indigo-300 rounded-full" />
+            <div
+              ref={agentDragHandleRef}
+              onMouseDown={handleAgentDragStart}
+              onTouchStart={handleAgentDragStart}
+              className="md:hidden flex justify-center py-2 sticky top-0 bg-indigo-50 border-b border-indigo-200 cursor-grab active:cursor-grabbing"
+            >
+              <div className={`w-12 h-1 rounded-full transition-colors ${isResizingAgent ? 'bg-indigo-500' : 'bg-indigo-300'}`} />
             </div>
 
             <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
