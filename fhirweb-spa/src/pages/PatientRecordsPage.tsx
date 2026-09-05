@@ -4613,7 +4613,7 @@ const PatientRecordsPage: React.FC = () => {
                         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
                       />
                     </svg>
-                    Upload Notes
+                    Upload Report
                   </button>
                 )}
 
@@ -4984,11 +4984,10 @@ const PatientRecordsPage: React.FC = () => {
               <div className="sticky top-0 md:top-0 bg-emerald-50 border-b border-emerald-200 p-4 z-10 flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <h2 className="text-sm font-semibold text-emerald-900">
-                    Upload Scanned Clinical Notes
+                    Upload Scanned Medical Report
                   </h2>
                   <p className="text-xs text-emerald-800 mt-1">
-                    Select a scanned file (PDF/image) to attach as a patient
-                    clinical note.
+                    Select a scanned file (PDF/image) to extract clinical data
                   </p>
                 </div>
                 <button
@@ -5031,7 +5030,7 @@ const PatientRecordsPage: React.FC = () => {
                     disabled={!selectedNoteFile || isUploadingNotes}
                     className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
                   >
-                    {isUploadingNotes ? 'Uploading...' : 'Upload Notes'}
+                    {isUploadingNotes ? 'Uploading...' : 'Upload Report'}
                   </button>
                 </form>
 
