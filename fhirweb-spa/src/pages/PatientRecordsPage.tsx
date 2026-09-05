@@ -1556,11 +1556,19 @@ const PatientRecordsPage: React.FC = () => {
 
   // ── Agent panel mobile resize handlers ──
   const handleExpandPanel = () => {
-    setAgentPanelHeight(80);
+    setAgentPanelHeight((prev) => {
+      if (prev <= 30) return 50;
+      if (prev < 80) return 80;
+      return 80;
+    });
   };
 
   const handleCollapsePanel = () => {
-    setAgentPanelHeight(30);
+    setAgentPanelHeight((prev) => {
+      if (prev >= 80) return 50;
+      if (prev > 30) return 30;
+      return 30;
+    });
   };
 
   const sleep = (ms: number) =>
@@ -5328,19 +5336,19 @@ const PatientRecordsPage: React.FC = () => {
                 <button
                   onClick={handleExpandPanel}
                   className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
-                  title="Expand panel to 80%"
+                  title="Expand panel"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 15v2a2 2 0 002 2h12a2 2 0 002-2v-2m-8-6l4 4m0 0l-4 4m4-4H4" />
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m0 0l-7-7m7 7l7-7" />
                   </svg>
                 </button>
                 <button
                   onClick={handleCollapsePanel}
                   className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded p-1 transition-colors"
-                  title="Collapse panel to 30%"
+                  title="Collapse panel"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 9v2a2 2 0 002 2h12a2 2 0 002-2V9m-8 6l4-4m0 0l-4-4m4 4H4" />
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
                   </svg>
                 </button>
               </div>
