@@ -275,15 +275,21 @@ export const agentMissionService = {
   async resolveIntervention(
     interventionId: string,
     decision: string,
+    notes?: string,
   ): Promise<void> {
     const headers = await buildAuthHeaders();
+
+    const body: Record<string, any> = { decision };
+    if (notes) {
+      body.notes = notes;
+    }
 
     const response = await fetch(
       `${AGENT_API_BASE_URL}/api/agent/AgentInterventionRequest/${encodeURIComponent(interventionId)}`,
       {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ decision }),
+        body: JSON.stringify(body),
       },
     );
 

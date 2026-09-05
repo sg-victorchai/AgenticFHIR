@@ -35,10 +35,12 @@ const ACTIVE_MISSION_STORAGE_KEY = 'careCoordinatorActiveMissionId';
 // inside the Current Mission card rather than a separate global queue.
 const InterventionReviewPanel: React.FC<{
   intervention: AgentInterventionRequest;
-  onResolve: (intervention: AgentInterventionRequest, decision: string) => void;
+  onResolve: (intervention: AgentInterventionRequest, decision: string, notes?: string) => void;
   resolving: boolean;
   error: string | null;
 }> = ({ intervention, onResolve, resolving, error }) => {
+  const [requestChangesNotes, setRequestChangesNotes] = useState<string>('');
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const steps = intervention.context?.proposedPlan?.steps;
 
   return (
@@ -76,17 +78,63 @@ const InterventionReviewPanel: React.FC<{
 
       {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
 
+      {selectedOption === 'request-changes' && (
+        <div className="mt-3 ml-7 space-y-2">
+          <label className="block text-xs font-semibold text-gray-700">
+            Describe the changes needed
+          </label>
+          <textarea
+            value={requestChangesNotes}
+            onChange={(e) => setRequestChangesNotes(e.target.value)}
+            placeholder="e.g., Please add a step to verify patient consent before drafting CarePlans"
+            rows={3}
+            className="w-full px-3 py-2 text-sm border border-amber-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 resize-none"
+          />
+        </div>
+      )}
+
       <div className="mt-4 ml-7 flex flex-wrap gap-2">
-        {intervention.options.map((option) => (
-          <button
-            key={option}
-            onClick={() => onResolve(intervention, option)}
-            disabled={resolving}
-            className="px-3.5 py-1.5 text-xs font-semibold rounded-md border border-amber-300 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50 transition-colors capitalize"
-          >
-            {resolving ? 'Submitting…' : option.replace(/-/g, ' ')}
-          </button>
-        ))}
+        {intervention.options.map((option) => {
+          const isRequestChanges = option === 'request-changes';
+          const isSelected = selectedOption === option;
+          return isRequestChanges ? (
+            <div key={option} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                onClick={() => setSelectedOption(isSelected ? null : option)}
+                disabled={resolving}
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-md border transition-colors capitalize ${
+                  isSelected
+                    ? 'border-amber-400 text-amber-900 bg-amber-100'
+                    : 'border-amber-300 text-amber-800 bg-white hover:bg-amber-100'
+                } disabled:opacity-50`}
+              >
+                {resolving ? 'Submitting…' : 'Request Changes'}
+              </button>
+              {isSelected && (
+                <button
+                  onClick={() => {
+                    if (requestChangesNotes.trim()) {
+                      onResolve(intervention, option, requestChangesNotes);
+                    }
+                  }}
+                  disabled={resolving || !requestChangesNotes.trim()}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-md border border-amber-500 text-amber-900 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                >
+                  {resolving ? 'Submitting…' : 'Submit Changes'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              key={option}
+              onClick={() => onResolve(intervention, option)}
+              disabled={resolving}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-md border border-amber-300 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50 transition-colors capitalize"
+            >
+              {resolving ? 'Submitting…' : option.replace(/-/g, ' ')}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -152,11 +200,12 @@ const CareCoordinatorPage: React.FC = () => {
   const handleResolveIntervention = async (
     intervention: AgentInterventionRequest,
     decision: string,
+    notes?: string,
   ) => {
     setResolvingInterventionId(intervention.id);
     setResolveError(null);
     try {
-      await agentMissionService.resolveIntervention(intervention.id, decision);
+      await agentMissionService.resolveIntervention(intervention.id, decision, notes);
       setInterventions((prev) => prev.filter((i) => i.id !== intervention.id));
       pollMissionUntilUnblocked(intervention.missionId);
     } catch (err: any) {
