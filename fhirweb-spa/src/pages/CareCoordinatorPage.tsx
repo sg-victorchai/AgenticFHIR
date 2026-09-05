@@ -23,6 +23,7 @@ import {
   riskClassColor,
 } from '../components/care-coordinator/missionUi';
 import { MissionOutcomeDisplay } from '../components/care-coordinator/MissionOutcomeDisplay';
+import { CarePlanInterventionDisplay } from '../components/care-coordinator/CarePlanInterventionDisplay';
 
 const PERSONA_ID = 'diabetic-care-assessment-manager';
 const DEFAULT_GOAL =
@@ -52,13 +53,19 @@ const InterventionReviewPanel: React.FC<{
       <div className="flex items-start gap-2.5">
         <IconAlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">
-            {intervention.question}
-          </p>
-          {intervention.context?.hitlTriggerReason && (
-            <p className="text-xs text-amber-700/80 mt-1">
-              {intervention.context.hitlTriggerReason}
-            </p>
+          {intervention.question.includes('Drafted CarePlans') ? (
+            <CarePlanInterventionDisplay message={intervention.question} />
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-gray-900">
+                {intervention.question}
+              </p>
+              {intervention.context?.hitlTriggerReason && (
+                <p className="text-xs text-amber-700/80 mt-1">
+                  {intervention.context.hitlTriggerReason}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
