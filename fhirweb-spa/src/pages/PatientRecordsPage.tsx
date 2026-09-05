@@ -3710,188 +3710,346 @@ const PatientRecordsPage: React.FC = () => {
           ) : !medRequests.length ? (
             <Empty />
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <SortHeader
-                      label="Date"
-                      sortDir={sortDir}
-                      onToggle={() =>
-                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-                      }
-                    />
-                    {[
-                      'Medication',
-                      'Status',
-                      'Dosage',
-                      'Reason',
-                      'Last Updated',
-                    ].map((h) => (
-                      <TH key={h}>{h}</TH>
-                    ))}
-                    <TH />
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {medRequests.map((mr: any) => (
-                    <React.Fragment key={mr.id}>
-                      <tr
-                        id={`record-${mr.id}`}
-                        className={`cursor-pointer transition-colors ${highlightId === mr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => toggle(mr.id)}
-                      >
-                        <TD>{fmt(mr.authoredOn)}</TD>
-                        <TD>
-                          {mr.medication?.concept?.text ||
-                            mr.medication?.concept?.coding?.[0]?.display ||
-                            mr.medication?.reference?.display ||
-                            '—'}
-                        </TD>
-                        <TD>
-                          <StatusBadge status={mr.status} />
-                        </TD>
-                        <TD>
-                          {mr.dosageInstruction?.[0]?.text ||
-                            (mr.dosageInstruction?.[0]?.timing?.repeat
-                              ?.frequency
-                              ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
-                              : '—')}
-                        </TD>
-                        <TD>
-                          {mr.reasonCode?.[0]?.text ||
-                            mr.reasonCode?.[0]?.coding?.[0]?.display ||
-                            mr.reason?.[0]?.concept?.text ||
-                            mr.reason?.[0]?.concept?.coding?.[0]?.display ||
-                            mr.reason?.[0]?.reference?.display ||
-                            '—'}
-                        </TD>
-                        <TD>{fmt(mr.meta?.lastUpdated)}</TD>
-                        <td className="px-4 py-3 text-right">
-                          <ExpandToggle open={expandedId === mr.id} />
-                        </td>
-                      </tr>
-                      {expandedId === mr.id && (
-                        <tr>
-                          <td
-                            colSpan={7}
-                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
-                          >
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                              <div>
-                                <span className="font-medium">ID:</span>{' '}
-                                {mr.id || '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Identifier:</span>{' '}
-                                {mr.identifier?.[0]?.value || '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Intent:</span>{' '}
-                                {mr.intent || '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Priority:</span>{' '}
-                                {mr.priority || '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Requester:</span>{' '}
-                                {mr.requester?.display ||
-                                  mr.requester?.reference ||
-                                  '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Encounter:</span>{' '}
-                                {mr.encounter?.reference || '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Reason:</span>{' '}
-                                {mr.reasonCode?.[0]?.text ||
-                                  mr.reasonCode?.[0]?.coding?.[0]?.display ||
-                                  mr.reason?.[0]?.concept?.text ||
-                                  mr.reason?.[0]?.concept?.coding?.[0]
-                                    ?.display ||
-                                  mr.reason?.[0]?.reference?.display ||
-                                  '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">Subject:</span>{' '}
-                                {mr.subject?.reference || '—'}
-                              </div>
-                              <div className="col-span-2">
-                                <span className="font-medium">
-                                  Dosage Instructions:
-                                </span>{' '}
-                                {mr.dosageInstruction
-                                  ?.map((d: any) => {
-                                    const parts = [
-                                      d.text,
-                                      d.route?.coding?.[0]?.display
-                                        ? `Route: ${d.route.coding[0].display}`
-                                        : null,
-                                      d.timing?.repeat?.frequency
-                                        ? `${d.timing.repeat.frequency}× per ${d.timing.repeat.period} ${d.timing.repeat.periodUnit}`
-                                        : null,
-                                      d.doseAndRate?.[0]?.doseQuantity
-                                        ? `Dose: ${d.doseAndRate[0].doseQuantity.value} ${d.doseAndRate[0].doseQuantity.unit}`
-                                        : null,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(' | ');
-                                    return parts || null;
-                                  })
-                                  .filter(Boolean)
-                                  .join('; ') || '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Dispense Qty:
-                                </span>{' '}
-                                {mr.dispenseRequest?.quantity?.value != null
-                                  ? `${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim()
-                                  : '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Supply Duration:
-                                </span>{' '}
-                                {mr.dispenseRequest?.expectedSupplyDuration
-                                  ?.value != null
-                                  ? `${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim()
-                                  : '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Repeats Allowed:
-                                </span>{' '}
-                                {mr.dispenseRequest?.numberOfRepeatsAllowed ??
-                                  '—'}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Substitution Allowed:
-                                </span>{' '}
-                                {mr.substitution?.allowedBoolean != null
-                                  ? mr.substitution.allowedBoolean
-                                    ? 'Yes'
-                                    : 'No'
-                                  : mr.substitution?.allowedCodeableConcept
-                                      ?.text || '—'}
-                              </div>
-                              <div className="col-span-2">
-                                <span className="font-medium">Note:</span>{' '}
-                                {mr.note?.map((n: any) => n.text).join('; ') ||
-                                  '—'}
-                              </div>
-                            </div>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <SortHeader
+                        label="Date"
+                        sortDir={sortDir}
+                        onToggle={() =>
+                          setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                        }
+                      />
+                      {[
+                        'Medication',
+                        'Status',
+                        'Dosage',
+                        'Reason',
+                        'Last Updated',
+                      ].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
+                      <TH />
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {medRequests.map((mr: any) => (
+                      <React.Fragment key={mr.id}>
+                        <tr
+                          id={`record-${mr.id}`}
+                          className={`cursor-pointer transition-colors ${highlightId === mr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          onClick={() => toggle(mr.id)}
+                        >
+                          <TD>{fmt(mr.authoredOn)}</TD>
+                          <TD>
+                            {mr.medication?.concept?.text ||
+                              mr.medication?.concept?.coding?.[0]?.display ||
+                              mr.medication?.reference?.display ||
+                              '—'}
+                          </TD>
+                          <TD>
+                            <StatusBadge status={mr.status} />
+                          </TD>
+                          <TD>
+                            {mr.dosageInstruction?.[0]?.text ||
+                              (mr.dosageInstruction?.[0]?.timing?.repeat
+                                ?.frequency
+                                ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
+                                : '—')}
+                          </TD>
+                          <TD>
+                            {mr.reasonCode?.[0]?.text ||
+                              mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                              mr.reason?.[0]?.concept?.text ||
+                              mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                              mr.reason?.[0]?.reference?.display ||
+                              '—'}
+                          </TD>
+                          <TD>{fmt(mr.meta?.lastUpdated)}</TD>
+                          <td className="px-4 py-3 text-right">
+                            <ExpandToggle open={expandedId === mr.id} />
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        {expandedId === mr.id && (
+                          <tr>
+                            <td
+                              colSpan={7}
+                              className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                            >
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                                <div>
+                                  <span className="font-medium">ID:</span>{' '}
+                                  {mr.id || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Identifier:</span>{' '}
+                                  {mr.identifier?.[0]?.value || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Intent:</span>{' '}
+                                  {mr.intent || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Priority:</span>{' '}
+                                  {mr.priority || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Requester:</span>{' '}
+                                  {mr.requester?.display ||
+                                    mr.requester?.reference ||
+                                    '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Encounter:</span>{' '}
+                                  {mr.encounter?.reference || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Reason:</span>{' '}
+                                  {mr.reasonCode?.[0]?.text ||
+                                    mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                                    mr.reason?.[0]?.concept?.text ||
+                                    mr.reason?.[0]?.concept?.coding?.[0]
+                                      ?.display ||
+                                    mr.reason?.[0]?.reference?.display ||
+                                    '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Subject:</span>{' '}
+                                  {mr.subject?.reference || '—'}
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="font-medium">
+                                    Dosage Instructions:
+                                  </span>{' '}
+                                  {mr.dosageInstruction
+                                    ?.map((d: any) => {
+                                      const parts = [
+                                        d.text,
+                                        d.route?.coding?.[0]?.display
+                                          ? `Route: ${d.route.coding[0].display}`
+                                          : null,
+                                        d.timing?.repeat?.frequency
+                                          ? `${d.timing.repeat.frequency}× per ${d.timing.repeat.period} ${d.timing.repeat.periodUnit}`
+                                          : null,
+                                        d.doseAndRate?.[0]?.doseQuantity
+                                          ? `Dose: ${d.doseAndRate[0].doseQuantity.value} ${d.doseAndRate[0].doseQuantity.unit}`
+                                          : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(' | ');
+                                      return parts || null;
+                                    })
+                                    .filter(Boolean)
+                                    .join('; ') || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Dispense Qty:
+                                  </span>{' '}
+                                  {mr.dispenseRequest?.quantity?.value != null
+                                    ? `${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim()
+                                    : '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Supply Duration:
+                                  </span>{' '}
+                                  {mr.dispenseRequest?.expectedSupplyDuration
+                                    ?.value != null
+                                    ? `${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim()
+                                    : '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Repeats Allowed:
+                                  </span>{' '}
+                                  {mr.dispenseRequest?.numberOfRepeatsAllowed ??
+                                    '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Substitution Allowed:
+                                  </span>{' '}
+                                  {mr.substitution?.allowedBoolean != null
+                                    ? mr.substitution.allowedBoolean
+                                      ? 'Yes'
+                                      : 'No'
+                                    : mr.substitution?.allowedCodeableConcept
+                                        ?.text || '—'}
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="font-medium">Note:</span>{' '}
+                                  {mr.note?.map((n: any) => n.text).join('; ') ||
+                                    '—'}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {medRequests.map((mr: any) => (
+                  <div
+                    key={mr.id}
+                    className={`rounded-lg border transition-all cursor-pointer ${
+                      expandedId === mr.id
+                        ? 'bg-amber-50 border-amber-300 shadow-md'
+                        : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
+                    }`}
+                    onClick={() => toggle(mr.id)}
+                  >
+                    <div className="p-4">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 text-sm">
+                            {mr.medication?.concept?.text ||
+                              mr.medication?.concept?.coding?.[0]?.display ||
+                              mr.medication?.reference?.display ||
+                              '—'}
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {fmt(mr.authoredOn)}
+                          </p>
+                        </div>
+                        <StatusBadge status={mr.status} />
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        {mr.dosageInstruction?.[0]?.text ||
+                          (mr.dosageInstruction?.[0]?.timing?.repeat?.frequency
+                            ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
+                            : null) ? (
+                          <div>
+                            <span className="font-medium text-gray-700">Dosage:</span>
+                            <p className="text-gray-600">
+                              {mr.dosageInstruction?.[0]?.text ||
+                                (mr.dosageInstruction?.[0]?.timing?.repeat
+                                  ?.frequency
+                                  ? `${mr.dosageInstruction[0].timing.repeat.frequency} times`
+                                  : '—')}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {mr.reasonCode?.[0]?.text ||
+                          mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                          mr.reason?.[0]?.concept?.text ||
+                          mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                          mr.reason?.[0]?.reference?.display ? (
+                          <div>
+                            <span className="font-medium text-gray-700">Reason:</span>
+                            <p className="text-gray-600">
+                              {mr.reasonCode?.[0]?.text ||
+                                mr.reasonCode?.[0]?.coding?.[0]?.display ||
+                                mr.reason?.[0]?.concept?.text ||
+                                mr.reason?.[0]?.concept?.coding?.[0]?.display ||
+                                mr.reason?.[0]?.reference?.display ||
+                                '—'}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        <div className="pt-2 border-t border-gray-100">
+                          <p className="text-xs text-gray-500">
+                            Updated: {fmt(mr.meta?.lastUpdated)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {expandedId === mr.id && (
+                      <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3 text-sm">
+                        <div>
+                          <span className="font-medium text-gray-700">ID:</span>
+                          <p className="text-gray-600">{mr.id || '—'}</p>
+                        </div>
+                        {mr.identifier?.[0]?.value && (
+                          <div>
+                            <span className="font-medium text-gray-700">Identifier:</span>
+                            <p className="text-gray-600">{mr.identifier[0].value}</p>
+                          </div>
+                        )}
+                        {mr.intent && (
+                          <div>
+                            <span className="font-medium text-gray-700">Intent:</span>
+                            <p className="text-gray-600">{mr.intent}</p>
+                          </div>
+                        )}
+                        {mr.priority && (
+                          <div>
+                            <span className="font-medium text-gray-700">Priority:</span>
+                            <p className="text-gray-600">{mr.priority}</p>
+                          </div>
+                        )}
+                        {(mr.requester?.display || mr.requester?.reference) && (
+                          <div>
+                            <span className="font-medium text-gray-700">Requester:</span>
+                            <p className="text-gray-600">{mr.requester?.display || mr.requester?.reference}</p>
+                          </div>
+                        )}
+                        {mr.encounter?.reference && (
+                          <div>
+                            <span className="font-medium text-gray-700">Encounter:</span>
+                            <p className="text-gray-600">{mr.encounter.reference}</p>
+                          </div>
+                        )}
+                        {mr.subject?.reference && (
+                          <div>
+                            <span className="font-medium text-gray-700">Subject:</span>
+                            <p className="text-gray-600">{mr.subject.reference}</p>
+                          </div>
+                        )}
+                        {mr.dispenseRequest?.quantity?.value != null && (
+                          <div>
+                            <span className="font-medium text-gray-700">Dispense Qty:</span>
+                            <p className="text-gray-600">
+                              {`${mr.dispenseRequest.quantity.value} ${mr.dispenseRequest.quantity.unit || ''}`.trim()}
+                            </p>
+                          </div>
+                        )}
+                        {mr.dispenseRequest?.expectedSupplyDuration?.value != null && (
+                          <div>
+                            <span className="font-medium text-gray-700">Supply Duration:</span>
+                            <p className="text-gray-600">
+                              {`${mr.dispenseRequest.expectedSupplyDuration.value} ${mr.dispenseRequest.expectedSupplyDuration.unit || ''}`.trim()}
+                            </p>
+                          </div>
+                        )}
+                        {mr.dispenseRequest?.numberOfRepeatsAllowed != null && (
+                          <div>
+                            <span className="font-medium text-gray-700">Repeats Allowed:</span>
+                            <p className="text-gray-600">{mr.dispenseRequest.numberOfRepeatsAllowed}</p>
+                          </div>
+                        )}
+                        {mr.substitution?.allowedBoolean != null && (
+                          <div>
+                            <span className="font-medium text-gray-700">Substitution Allowed:</span>
+                            <p className="text-gray-600">
+                              {mr.substitution.allowedBoolean ? 'Yes' : 'No'}
+                            </p>
+                          </div>
+                        )}
+                        {mr.note && mr.note.length > 0 && (
+                          <div>
+                            <span className="font-medium text-gray-700">Note:</span>
+                            <p className="text-gray-600">{mr.note.map((n: any) => n.text).join('; ')}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
           <Pagination
             total={medReqBundle?.total}
@@ -3930,79 +4088,147 @@ const PatientRecordsPage: React.FC = () => {
           ) : !medDispenses.length ? (
             <Empty />
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <SortHeader
-                      label="Date"
-                      sortDir={sortDir}
-                      onToggle={() =>
-                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-                      }
-                    />
-                    {['Medication', 'Status', 'Quantity', 'Last Updated'].map(
-                      (h) => (
-                        <TH key={h}>{h}</TH>
-                      ),
-                    )}
-                    <TH />
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {medDispenses.map((md: any) => (
-                    <React.Fragment key={md.id}>
-                      <tr
-                        id={`record-${md.id}`}
-                        className={`cursor-pointer transition-colors ${highlightId === md.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => toggle(md.id)}
-                      >
-                        <TD>{fmt(md.whenHandedOver || md.whenPrepared)}</TD>
-                        <TD>
-                          {md.medication?.concept?.text ||
-                            md.medication?.concept?.coding?.[0]?.display ||
-                            '—'}
-                        </TD>
-                        <TD>
-                          <StatusBadge status={md.status} />
-                        </TD>
-                        <TD>
-                          {md.quantity?.value != null
-                            ? `${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()
-                            : '—'}
-                        </TD>
-                        <TD>{fmt(md.meta?.lastUpdated)}</TD>
-                        <td className="px-4 py-3 text-right">
-                          <ExpandToggle open={expandedId === md.id} />
-                        </td>
-                      </tr>
-                      {expandedId === md.id && (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
-                          >
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <span className="font-medium">ID:</span> {md.id}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Days Supply:
-                                </span>{' '}
-                                {md.daysSupply?.value != null
-                                  ? `${md.daysSupply.value} ${md.daysSupply.unit ?? ''}`.trim()
-                                  : '—'}
-                              </div>
-                            </div>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <SortHeader
+                        label="Date"
+                        sortDir={sortDir}
+                        onToggle={() =>
+                          setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                        }
+                      />
+                      {['Medication', 'Status', 'Quantity', 'Last Updated'].map(
+                        (h) => (
+                          <TH key={h}>{h}</TH>
+                        ),
+                      )}
+                      <TH />
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {medDispenses.map((md: any) => (
+                      <React.Fragment key={md.id}>
+                        <tr
+                          id={`record-${md.id}`}
+                          className={`cursor-pointer transition-colors ${highlightId === md.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          onClick={() => toggle(md.id)}
+                        >
+                          <TD>{fmt(md.whenHandedOver || md.whenPrepared)}</TD>
+                          <TD>
+                            {md.medication?.concept?.text ||
+                              md.medication?.concept?.coding?.[0]?.display ||
+                              '—'}
+                          </TD>
+                          <TD>
+                            <StatusBadge status={md.status} />
+                          </TD>
+                          <TD>
+                            {md.quantity?.value != null
+                              ? `${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()
+                              : '—'}
+                          </TD>
+                          <TD>{fmt(md.meta?.lastUpdated)}</TD>
+                          <td className="px-4 py-3 text-right">
+                            <ExpandToggle open={expandedId === md.id} />
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        {expandedId === md.id && (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                            >
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="font-medium">ID:</span> {md.id}
+                                </div>
+                                <div>
+                                  <span className="font-medium">
+                                    Days Supply:
+                                  </span>{' '}
+                                  {md.daysSupply?.value != null
+                                    ? `${md.daysSupply.value} ${md.daysSupply.unit ?? ''}`.trim()
+                                    : '—'}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {medDispenses.map((md: any) => (
+                  <div
+                    key={md.id}
+                    className={`rounded-lg border transition-all cursor-pointer ${
+                      expandedId === md.id
+                        ? 'bg-amber-50 border-amber-300 shadow-md'
+                        : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
+                    }`}
+                    onClick={() => toggle(md.id)}
+                  >
+                    <div className="p-4">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 text-sm">
+                            {md.medication?.concept?.text ||
+                              md.medication?.concept?.coding?.[0]?.display ||
+                              '—'}
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {fmt(md.whenHandedOver || md.whenPrepared)}
+                          </p>
+                        </div>
+                        <StatusBadge status={md.status} />
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        {md.quantity?.value != null && (
+                          <div>
+                            <span className="font-medium text-gray-700">Quantity:</span>
+                            <p className="text-gray-600">
+                              {`${md.quantity.value} ${md.quantity.unit ?? ''}`.trim()}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-gray-100">
+                          <p className="text-xs text-gray-500">
+                            Updated: {fmt(md.meta?.lastUpdated)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {expandedId === md.id && (
+                      <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3 text-sm">
+                        <div>
+                          <span className="font-medium text-gray-700">ID:</span>
+                          <p className="text-gray-600">{md.id}</p>
+                        </div>
+                        {md.daysSupply?.value != null && (
+                          <div>
+                            <span className="font-medium text-gray-700">Days Supply:</span>
+                            <p className="text-gray-600">
+                              {`${md.daysSupply.value} ${md.daysSupply.unit ?? ''}`.trim()}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
           <Pagination
             total={medDispBundle?.total}
@@ -4041,75 +4267,141 @@ const PatientRecordsPage: React.FC = () => {
           ) : !medStatements.length ? (
             <Empty />
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <SortHeader
-                      label="Date"
-                      sortDir={sortDir}
-                      onToggle={() =>
-                        setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-                      }
-                    />
-                    {['Medication', 'Status', 'Effective', 'Last Updated'].map(
-                      (h) => (
-                        <TH key={h}>{h}</TH>
-                      ),
-                    )}
-                    <TH />
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {medStatements.map((ms: any) => (
-                    <React.Fragment key={ms.id}>
-                      <tr
-                        id={`record-${ms.id}`}
-                        className={`cursor-pointer transition-colors ${highlightId === ms.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => toggle(ms.id)}
-                      >
-                        <TD>{fmt(ms.dateAsserted)}</TD>
-                        <TD>
-                          {ms.medication?.concept?.text ||
-                            ms.medication?.concept?.coding?.[0]?.display ||
-                            '—'}
-                        </TD>
-                        <TD>
-                          <StatusBadge status={ms.status} />
-                        </TD>
-                        <TD>
-                          {fmt(
-                            ms.effectivePeriod?.start || ms.effectiveDateTime,
-                          )}
-                        </TD>
-                        <TD>{fmt(ms.meta?.lastUpdated)}</TD>
-                        <td className="px-4 py-3 text-right">
-                          <ExpandToggle open={expandedId === ms.id} />
-                        </td>
-                      </tr>
-                      {expandedId === ms.id && (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
-                          >
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <span className="font-medium">ID:</span> {ms.id}
-                              </div>
-                              <div>
-                                <span className="font-medium">Note:</span>{' '}
-                                {ms.note?.[0]?.text || '—'}
-                              </div>
-                            </div>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <SortHeader
+                        label="Date"
+                        sortDir={sortDir}
+                        onToggle={() =>
+                          setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+                        }
+                      />
+                      {['Medication', 'Status', 'Effective', 'Last Updated'].map(
+                        (h) => (
+                          <TH key={h}>{h}</TH>
+                        ),
+                      )}
+                      <TH />
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {medStatements.map((ms: any) => (
+                      <React.Fragment key={ms.id}>
+                        <tr
+                          id={`record-${ms.id}`}
+                          className={`cursor-pointer transition-colors ${highlightId === ms.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          onClick={() => toggle(ms.id)}
+                        >
+                          <TD>{fmt(ms.dateAsserted)}</TD>
+                          <TD>
+                            {ms.medication?.concept?.text ||
+                              ms.medication?.concept?.coding?.[0]?.display ||
+                              '—'}
+                          </TD>
+                          <TD>
+                            <StatusBadge status={ms.status} />
+                          </TD>
+                          <TD>
+                            {fmt(
+                              ms.effectivePeriod?.start || ms.effectiveDateTime,
+                            )}
+                          </TD>
+                          <TD>{fmt(ms.meta?.lastUpdated)}</TD>
+                          <td className="px-4 py-3 text-right">
+                            <ExpandToggle open={expandedId === ms.id} />
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        {expandedId === ms.id && (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                            >
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="font-medium">ID:</span> {ms.id}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Note:</span>{' '}
+                                  {ms.note?.[0]?.text || '—'}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {medStatements.map((ms: any) => (
+                  <div
+                    key={ms.id}
+                    className={`rounded-lg border transition-all cursor-pointer ${
+                      expandedId === ms.id
+                        ? 'bg-amber-50 border-amber-300 shadow-md'
+                        : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
+                    }`}
+                    onClick={() => toggle(ms.id)}
+                  >
+                    <div className="p-4">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 text-sm">
+                            {ms.medication?.concept?.text ||
+                              ms.medication?.concept?.coding?.[0]?.display ||
+                              '—'}
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {fmt(ms.dateAsserted)}
+                          </p>
+                        </div>
+                        <StatusBadge status={ms.status} />
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        {(ms.effectivePeriod?.start || ms.effectiveDateTime) && (
+                          <div>
+                            <span className="font-medium text-gray-700">Effective:</span>
+                            <p className="text-gray-600">
+                              {fmt(ms.effectivePeriod?.start || ms.effectiveDateTime)}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-gray-100">
+                          <p className="text-xs text-gray-500">
+                            Updated: {fmt(ms.meta?.lastUpdated)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {expandedId === ms.id && (
+                      <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3 text-sm">
+                        <div>
+                          <span className="font-medium text-gray-700">ID:</span>
+                          <p className="text-gray-600">{ms.id}</p>
+                        </div>
+                        {ms.note && ms.note.length > 0 && (
+                          <div>
+                            <span className="font-medium text-gray-700">Note:</span>
+                            <p className="text-gray-600">{ms.note[0].text}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
           <Pagination
             total={medStmtBundle?.total}
