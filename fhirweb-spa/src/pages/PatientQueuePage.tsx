@@ -288,8 +288,9 @@ const QueueRow: React.FC<QueueRowProps> = ({
 
   return (
     <>
+      {/* Desktop Table View */}
       <tr
-        className="transition-colors hover:bg-gray-50"
+        className="transition-colors hover:bg-gray-50 hidden md:table-row"
       >
         <td className="px-4 py-3 text-xs text-gray-500 font-mono hidden md:table-cell">
           {patientIdentifier}
@@ -437,6 +438,200 @@ const QueueRow: React.FC<QueueRowProps> = ({
           </div>
         </td>
       </tr>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden block p-3 sm:p-4 mb-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+        {/* Header with Patient Name and Status */}
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-gray-800 truncate">
+              {patientName}
+            </h3>
+            <p className="text-xs text-gray-500 truncate">ID: {patientIdentifier}</p>
+          </div>
+          <span
+            className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${badgeCls}`}
+          >
+            {STAGE_LABEL[stage]}
+          </span>
+        </div>
+
+        {/* Chief Complaint */}
+        {getChiefComplaint(encounter) !== '—' && (
+          <div className="mb-2 pb-2 border-b border-gray-100">
+            <p className="text-xs text-gray-600">
+              <span className="font-semibold">Complaint:</span> {getChiefComplaint(encounter)}
+            </p>
+          </div>
+        )}
+
+        {/* Details Grid */}
+        <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+          <div>
+            <p className="text-gray-500">Type</p>
+            <p className="font-medium text-gray-700 truncate">
+              {getEncounterClass(encounter)}
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-500">{showDate ? 'Date & Time' : 'Time'}</p>
+            <p className="font-medium text-gray-700">
+              {showDate
+                ? formatDateTime(encounter.actualPeriod?.start)
+                : formatTime(encounter.actualPeriod?.start)}
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons - Stacked on Mobile */}
+        <div className="flex flex-col gap-2">
+          {/* ── Clinician actions ── */}
+          {role === 'clinician' && (
+            <>
+              <div className="flex gap-2 flex-wrap">
+                {stage === 'awaiting-clinician' && (
+                  <button
+                    onClick={() => onEncounterAction(encounter, 'call-patient')}
+                    disabled={isUpdating}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                  >
+                    Call
+                  </button>
+                )}
+                {stage === 'waiting-patient' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'start-consult')
+                    }
+                    disabled={isUpdating}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    Consult
+                  </button>
+                )}
+                {stage === 'in-consultation' && (
+                  <Link
+                    to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Resume
+                  </Link>
+                )}
+                {stage === 'completed' && (
+                  <Link
+                    to={`/patient/${patientId}/encounter/${encounterId}/notes`}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
+                  >
+                    Notes
+                  </Link>
+                )}
+                {stage === 'awaiting-medication' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'collect-medication')
+                    }
+                    disabled={isUpdating}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
+                  >
+                    Dispense
+                  </button>
+                )}
+                {stage === 'awaiting-billing' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'collect-payment')
+                    }
+                    disabled={isUpdating}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    Payment
+                  </button>
+                )}
+                {stage !== 'completed' &&
+                  stage !== 'cancelled' &&
+                  stage !== 'in-consultation' &&
+                  stage !== 'awaiting-medication' &&
+                  stage !== 'awaiting-billing' && (
+                    <button
+                      onClick={() => onEncounterAction(encounter, 'cancel')}
+                      disabled={isUpdating}
+                      className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  )}
+              </div>
+              <Link
+                to={`/patient/${patientId}/records`}
+                title="Patient Records"
+                className="w-full inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-100 border border-indigo-200 rounded-md hover:bg-indigo-200 transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-4 h-4 mr-1"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"
+                  />
+                </svg>
+                Records
+              </Link>
+            </>
+          )}
+
+          {/* ── PSA actions ── */}
+          {role === 'psa' && (
+            <>
+              <div className="flex gap-2 flex-wrap">
+                {stage === 'awaiting-triage' && (
+                  <Link
+                    to={`/patient/${patientId}/encounter/${encounterId}/triage`}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Triage
+                  </Link>
+                )}
+                {stage === 'awaiting-medication' && (
+                  <button
+                    onClick={() =>
+                      onEncounterAction(encounter, 'collect-medication')
+                    }
+                    disabled={isUpdating}
+                    className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors disabled:opacity-50"
+                  >
+                    Dispense
+                  </button>
+                )}
+                {stage !== 'completed' &&
+                  stage !== 'cancelled' &&
+                  stage !== 'awaiting-triage' &&
+                  stage !== 'awaiting-medication' && (
+                    <button
+                      onClick={() => onEncounterAction(encounter, 'cancel')}
+                      disabled={isUpdating}
+                      className="flex-1 min-w-[60px] inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  )}
+              </div>
+            </>
+          )}
+
+          {/* ── Patient actions ── */}
+          {role === 'patient' && (
+            <div className="text-xs text-gray-600 italic">
+              Waiting for clinical team...
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 };
@@ -490,35 +685,54 @@ const QueueSection: React.FC<QueueSectionProps> = ({
       </button>
 
       {!collapsed && (
-        <div className="overflow-x-auto bg-white">
+        <div className="bg-white">
           {encounters.length === 0 ? (
             <p className="text-sm text-gray-400 italic px-5 py-4">
               No encounters.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-50 hidden md:table-header-group">
-                <tr>
-                  {[
-                    'ID',
-                    'Patient',
-                    'Chief Complaint',
-                    showDate ? 'Date & Time' : 'Time',
-                    'Type',
-                    'Status',
-                    'Actions',
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className={`px-3 sm:px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'ID' ? 'hidden md:table-cell' : ''} ${h === 'Chief Complaint' ? 'hidden lg:table-cell' : ''} ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {[
+                        'ID',
+                        'Patient',
+                        'Chief Complaint',
+                        showDate ? 'Date & Time' : 'Time',
+                        'Type',
+                        'Status',
+                        'Actions',
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className={`px-3 sm:px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'ID' ? 'hidden md:table-cell' : ''} ${h === 'Chief Complaint' ? 'hidden lg:table-cell' : ''} ${h === 'Type' ? 'hidden md:table-cell' : ''}`}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {encounters.map((enc) => (
+                      <QueueRow
+                        key={enc.id}
+                        encounter={enc}
+                        role={role}
+                        onEncounterAction={onEncounterAction}
+                        isUpdating={isUpdating}
+                        showDate={showDate}
+                        patientMap={patientMap}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-3 sm:p-4">
                 {encounters.map((enc) => (
                   <QueueRow
                     key={enc.id}
@@ -530,8 +744,9 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                     patientMap={patientMap}
                   />
                 ))}
-              </tbody>
-            </table>            </div>          )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
