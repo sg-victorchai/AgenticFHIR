@@ -35,7 +35,11 @@ const ACTIVE_MISSION_STORAGE_KEY = 'careCoordinatorActiveMissionId';
 // inside the Current Mission card rather than a separate global queue.
 const InterventionReviewPanel: React.FC<{
   intervention: AgentInterventionRequest;
-  onResolve: (intervention: AgentInterventionRequest, decision: string, notes?: string) => void;
+  onResolve: (
+    intervention: AgentInterventionRequest,
+    decision: string,
+    notes?: string,
+  ) => void;
   resolving: boolean;
   error: string | null;
 }> = ({ intervention, onResolve, resolving, error }) => {
@@ -98,7 +102,10 @@ const InterventionReviewPanel: React.FC<{
           const isRequestChanges = option === 'request-changes';
           const isSelected = selectedOption === option;
           return isRequestChanges ? (
-            <div key={option} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div
+              key={option}
+              className="flex flex-col gap-2 sm:flex-row sm:items-center"
+            >
               <button
                 onClick={() => setSelectedOption(isSelected ? null : option)}
                 disabled={resolving}
@@ -205,7 +212,11 @@ const CareCoordinatorPage: React.FC = () => {
     setResolvingInterventionId(intervention.id);
     setResolveError(null);
     try {
-      await agentMissionService.resolveIntervention(intervention.id, decision, notes);
+      await agentMissionService.resolveIntervention(
+        intervention.id,
+        decision,
+        notes,
+      );
       setInterventions((prev) => prev.filter((i) => i.id !== intervention.id));
       pollMissionUntilUnblocked(intervention.missionId);
     } catch (err: any) {
@@ -447,7 +458,14 @@ const CareCoordinatorPage: React.FC = () => {
           <div className="mt-5 flex items-center gap-3">
             <button
               type="submit"
-              disabled={submitting || !!(activeMission && (activeMission.status === 'PENDING' || activeMission.status === 'RUNNING'))}
+              disabled={
+                submitting ||
+                !!(
+                  activeMission &&
+                  (activeMission.status === 'PENDING' ||
+                    activeMission.status === 'RUNNING')
+                )
+              }
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-lg font-semibold text-sm hover:bg-amber-700 disabled:opacity-50 shadow-sm transition-colors"
             >
               {submitting ? (

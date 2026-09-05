@@ -159,28 +159,29 @@ const Header: React.FC = () => {
                       Webhooks
                     </Link>
                     {isAuthenticated && (
-                      <Link
-                        to="/dashboard"
-                        onClick={() => setMenuOpen(false)}
-                        className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
-                      >
-                        Dashboard
-                      </Link>
+                      <>
+                        <Link
+                          to="/dashboard"
+                          onClick={() => setMenuOpen(false)}
+                          className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
+                        >
+                          Dashboard
+                        </Link>
+                        <button
+                          onClick={() => {
+                            setMenuOpen(false);
+                            handleLogout();
+                          }}
+                          className="px-4 py-2 text-white hover:bg-blue-800 transition-colors text-left rounded-b-lg"
+                        >
+                          Logout
+                        </button>
+                      </>
                     )}
                   </nav>
                 </div>
               )}
             </div>
-
-            {/* Logout Button */}
-            {isAuthenticated ? (
-              <button
-                onClick={handleLogout}
-                className="text-white hover:text-blue-200 px-3 py-2 text-sm font-medium transition-colors"
-              >
-                Logout
-              </button>
-            ) : null}
           </div>
         </div>
       </div>
