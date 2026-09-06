@@ -177,7 +177,9 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
     status: (asObject.status || 'PENDING') as MissionExecutionResult['status'],
     goal: asObject.goal || '',
     outputs: {
-      response: outputs.response || result.summary || asObject.summary,
+      // Pass the complete result object (including proposedPlan, hitlTriggerReason, etc.) as JSON string
+      // This allows MissionOutcomeDisplay to parse structured outcomes
+      response: outputs.response || JSON.stringify(result) || asObject.summary,
       confidence: outputs.confidence,
       sources: outputs.sources as AgentSource[] | undefined,
       disclaimer: outputs.disclaimer,

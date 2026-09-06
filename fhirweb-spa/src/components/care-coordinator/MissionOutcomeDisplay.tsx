@@ -46,11 +46,39 @@ const parseOutcome = (response: string): ParsedOutcome => {
     // Handle structured JSON response
     assessmentType = 'diabetic care-gap';
 
-    // Extract metrics from structured fields
-    const { proposedPlan, createdResourceIds = [] } = jsonData;
+    // Extract metrics from different possible JSON structures
+    // Structure 1: New format with outputs field containing metrics
+    const { outputs = {}, proposedPlan, createdResourceIds = [] } = jsonData;
+    const { totalCandidates, excludedRecentHbA1c, finalCohortSize, carePlansCreated = [] } = outputs;
 
-    // Try to extract metrics from proposedPlan.steps descriptions
-    if (proposedPlan && Array.isArray(proposedPlan.steps)) {
+    // Use new structure if available
+    if (totalCandidates !== undefined) {
+      metrics.push({
+        label: 'Candidate Patients',
+        value: totalCandidates,
+        color: 'blue',
+      });
+      
+      if (excludedRecentHbA1c !== undefined) {
+        metrics.push({
+          label: 'With Recent HbA1c',
+          value: totalCandidates - excludedRecentHbA1c,
+          color: 'green',
+        });
+      }
+      
+      if (finalCohortSize !== undefined && finalCohortSize > 0) {
+        metrics.push({
+          label: 'Care-Gap Cohort',
+          value: finalCohortSize,
+          color: 'amber',
+        });
+        status = 'warning';
+        summary = `${finalCohortSize} patient${finalCohortSize !== 1 ? 's' : ''} identified for HbA1c testing gap`;
+      }
+    } 
+    // Fallback: Structure 2: Legacy format with proposedPlan.steps
+    else if (proposedPlan && Array.isArray(proposedPlan.steps)) {
       const step0 = proposedPlan.steps[0]?.description || '';
       const step1 = proposedPlan.steps[1]?.description || '';
 
@@ -68,7 +96,9 @@ const parseOutcome = (response: string): ParsedOutcome => {
       }
 
       // Extract HbA1c count from step 0: "28 already have a recent HbA1c"
-      const hba1cMatch = step0.match(/(\d+)\s+already\s+have\s+a\s+recent\s+HbA1c/i);
+      const hba1cMatch = step0.match(
+        /(\d+)\s+already\s+have\s+a\s+recent\s+HbA1c/i,
+      );
       if (hba1cMatch) {
         const num = parseInt(hba1cMatch[1]);
         if (num > 0 && num < 500) {
@@ -81,7 +111,9 @@ const parseOutcome = (response: string): ParsedOutcome => {
       }
 
       // Extract final cohort from step 1: "2 remain in finalCohort"
-      const cohortMatch = step1.match(/(\d+)\s+remain\s+in\s+(?:final)?cohort/i);
+      const cohortMatch = step1.match(
+        /(\d+)\s+remain\s+in\s+(?:final)?cohort/i,
+      );
       if (cohortMatch) {
         const num = parseInt(cohortMatch[1]);
         if (num > 0 && num < 500) {
@@ -96,11 +128,15 @@ const parseOutcome = (response: string): ParsedOutcome => {
       }
     }
 
-    // Extract care plans from createdResourceIds
-    if (Array.isArray(createdResourceIds) && createdResourceIds.length > 0) {
+    // Extract care plans from multiple sources (new structure takes priority)
+    let finalCarePlans = carePlansCreated;
+    if (!finalCarePlans || finalCarePlans.length === 0) {
+      finalCarePlans = createdResourceIds;
+    }
+    if (Array.isArray(finalCarePlans) && finalCarePlans.length > 0) {
       metrics.push({
         label: 'Care Plans Generated',
-        value: createdResourceIds.length,
+        value: finalCarePlans.length,
         color: 'blue',
       });
     }
@@ -187,7 +223,9 @@ const parseOutcome = (response: string): ParsedOutcome => {
     // Extract generated care plans count - multiple patterns
     const carePlansMatch =
       response.match(/(?:Drafted|Generated)\s+(\d+)\s+CarePlan/i) ||
-      response.match(/(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i);
+      response.match(
+        /(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i,
+      );
     if (carePlansMatch) {
       metrics.push({
         label: 'Care Plans Generated',
@@ -236,7 +274,10 @@ const parseOutcome = (response: string): ParsedOutcome => {
     ) {
       details.push('📊 Recommends HbA1c testing');
     }
-    if (response.includes('disclaimer') || response.includes('clinical review')) {
+    if (
+      response.includes('disclaimer') ||
+      response.includes('clinical review')
+    ) {
       details.push('⚠️ Requires clinical review before action');
     }
   }
