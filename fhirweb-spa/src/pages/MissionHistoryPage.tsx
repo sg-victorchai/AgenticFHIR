@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { agentMissionService } from '../services/agentMissionService';
-import { MissionExecutionResult } from '../types/agent';
+import { MissionExecutionResult, CarePlanCreated } from '../types/agent';
 import {
-  CarePlanReviewRow,
   IconAlertTriangle,
   IconArrowLeft,
   IconClockHistory,
@@ -15,6 +14,7 @@ import {
   formatRelativeTime,
 } from '../components/care-coordinator/missionUi';
 import { MissionOutcomeDisplay } from '../components/care-coordinator/MissionOutcomeDisplay';
+import { CarePlanModal } from '../components/care-coordinator/CarePlanModal';
 
 const PERSONA_ID = 'diabetic-care-assessment-manager';
 
@@ -37,6 +37,7 @@ const MissionHistoryPage: React.FC = () => {
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(
     null,
   );
+  const [selectedCarePlan, setSelectedCarePlan] = useState<CarePlanCreated | null>(null);
 
   const loadMissions = () => {
     setLoading(true);
@@ -254,16 +255,31 @@ const MissionHistoryPage: React.FC = () => {
                           : 'Care plans will appear here once the mission completes.'}
                       </p>
                     ) : (
-                      <div className="border border-gray-100 rounded-lg overflow-hidden">
-                        {generatedCarePlans.map((carePlan, idx) => {
-                          return (
-                            <CarePlanReviewRow
-                              key={carePlan.carePlanId || idx}
-                              carePlanId={carePlan.carePlanId}
-                              label={carePlan.name}
-                            />
-                          );
-                        })}
+                      <div className="space-y-2">
+                        {generatedCarePlans.map((carePlan, idx) => (
+                          <button
+                            key={carePlan.carePlanId || idx}
+                            onClick={() => setSelectedCarePlan(carePlan)}
+                            className="w-full text-left p-4 bg-gray-50 border border-gray-200 rounded-lg hover:shadow-md hover:border-blue-300 transition-all group"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors truncate text-sm">
+                                  {carePlan.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  MRN: {carePlan.mrn}
+                                </p>
+                                <p className="text-xs text-gray-400 font-mono mt-1 truncate">
+                                  {carePlan.carePlanId}
+                                </p>
+                              </div>
+                              <span className="inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 whitespace-nowrap">
+                                View / Edit
+                              </span>
+                            </div>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -272,6 +288,15 @@ const MissionHistoryPage: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Care Plan Modal */}
+        {selectedCarePlan && (
+          <CarePlanModal
+            carePlanId={selectedCarePlan.carePlanId}
+            patientName={selectedCarePlan.name}
+            onClose={() => setSelectedCarePlan(null)}
+          />
+        )}
       </div>
     </div>
   );
