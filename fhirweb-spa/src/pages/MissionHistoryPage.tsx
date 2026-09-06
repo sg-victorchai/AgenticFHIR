@@ -68,10 +68,7 @@ const MissionHistoryPage: React.FC = () => {
   const selectedMission = missions.find(
     (m) => m.missionId === selectedMissionId,
   );
-  const generatedCarePlans =
-    selectedMission?.outputs?.sources?.filter(
-      (s) => s.resourceType === 'CarePlan',
-    ) || [];
+  const generatedCarePlans = selectedMission?.outputs?.carePlansCreated || [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -258,16 +255,12 @@ const MissionHistoryPage: React.FC = () => {
                       </p>
                     ) : (
                       <div className="border border-gray-100 rounded-lg overflow-hidden">
-                        {generatedCarePlans.map((source, idx) => {
-                          const carePlanId =
-                            source.id ||
-                            source.reference?.split('/').pop() ||
-                            '';
+                        {generatedCarePlans.map((carePlan, idx) => {
                           return (
                             <CarePlanReviewRow
-                              key={carePlanId || idx}
-                              carePlanId={carePlanId}
-                              label={source.display}
+                              key={carePlan.carePlanId || idx}
+                              carePlanId={carePlan.carePlanId}
+                              label={carePlan.name}
                             />
                           );
                         })}
