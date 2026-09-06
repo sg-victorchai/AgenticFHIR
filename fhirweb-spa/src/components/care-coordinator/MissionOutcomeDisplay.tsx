@@ -46,39 +46,91 @@ const parseOutcome = (response: string): ParsedOutcome => {
     // Handle structured JSON response
     assessmentType = 'diabetic care-gap';
 
-    // Extract metrics from different possible JSON structures
-    // Structure 1: New format with outputs field containing metrics
-    const { outputs = {}, proposedPlan, createdResourceIds = [] } = jsonData;
-    const { totalCandidates, excludedRecentHbA1c, finalCohortSize, carePlansCreated = [] } = outputs;
+    // Check if summary contains nested markdown code block with JSON
+    // New format: {"summary": "```json\n{...}\n```"}
+    let nestedOutputs = null;
+    if (jsonData.summary && typeof jsonData.summary === 'string') {
+      try {
+        // Extract JSON from markdown code block: ```json\n{...}\n```
+        const jsonMatch = jsonData.summary.match(/```json\s*\n([\s\S]*?)\n```/);
+        if (jsonMatch && jsonMatch[1]) {
+          const nestedJson = JSON.parse(jsonMatch[1]);
+          nestedOutputs = nestedJson.parameters?.outputs;
+        }
+      } catch (e) {
+        // Not a markdown code block or invalid JSON, continue
+      }
+    }
 
-    // Use new structure if available
-    if (totalCandidates !== undefined) {
-      metrics.push({
-        label: 'Candidate Patients',
-        value: totalCandidates,
-        color: 'blue',
-      });
-      
-      if (excludedRecentHbA1c !== undefined) {
+    // Extract metrics from different possible JSON structures
+    // Structure 1: Nested summary format (new local dev format)
+    let outputsToUse = nestedOutputs;
+
+    // Structure 2: Direct outputs field
+    if (!outputsToUse) {
+      outputsToUse = jsonData.outputs;
+    }
+
+    let foundCarePlans: any[] = [];
+
+    if (outputsToUse && typeof outputsToUse === 'object') {
+      const {
+        totalCandidates,
+        excludedRecentHbA1c,
+        excludedPriorCarePlan,
+        finalCohortSize,
+        finalCohortCount, // New field name in local dev format
+        carePlansCreated = [],
+      } = outputsToUse;
+
+      foundCarePlans = carePlansCreated;
+
+      // Use new structure if available
+      if (totalCandidates !== undefined) {
         metrics.push({
-          label: 'With Recent HbA1c',
-          value: totalCandidates - excludedRecentHbA1c,
-          color: 'green',
+          label: 'Candidate Patients',
+          value: totalCandidates,
+          color: 'blue',
         });
+
+        if (excludedRecentHbA1c !== undefined) {
+          metrics.push({
+            label: 'With Recent HbA1c',
+            value: totalCandidates - excludedRecentHbA1c,
+            color: 'green',
+          });
+        }
+
+        if (excludedPriorCarePlan !== undefined) {
+          metrics.push({
+            label: 'Excluded (Existing Plan)',
+            value: excludedPriorCarePlan,
+            color: 'gray',
+          });
+        }
+
+        // Use finalCohortCount (new format) or finalCohortSize (old format)
+        const cohortCount =
+          finalCohortCount !== undefined ? finalCohortCount : finalCohortSize;
+        if (cohortCount !== undefined && cohortCount > 0) {
+          metrics.push({
+            label: 'Care-Gap Cohort',
+            value: cohortCount,
+            color: 'amber',
+          });
+          status = 'success'; // Changed to success since these are approved/drafted
+          summary = `${cohortCount} patient${cohortCount !== 1 ? 's' : ''} with care-gap identified and drafted for review`;
+        }
       }
-      
-      if (finalCohortSize !== undefined && finalCohortSize > 0) {
-        metrics.push({
-          label: 'Care-Gap Cohort',
-          value: finalCohortSize,
-          color: 'amber',
-        });
-        status = 'warning';
-        summary = `${finalCohortSize} patient${finalCohortSize !== 1 ? 's' : ''} identified for HbA1c testing gap`;
-      }
-    } 
-    // Fallback: Structure 2: Legacy format with proposedPlan.steps
-    else if (proposedPlan && Array.isArray(proposedPlan.steps)) {
+    }
+
+    // Fallback: Structure 3: Legacy format with proposedPlan.steps
+    const { proposedPlan, createdResourceIds = [] } = jsonData;
+    if (
+      metrics.length === 0 &&
+      proposedPlan &&
+      Array.isArray(proposedPlan.steps)
+    ) {
       const step0 = proposedPlan.steps[0]?.description || '';
       const step1 = proposedPlan.steps[1]?.description || '';
 
@@ -129,7 +181,7 @@ const parseOutcome = (response: string): ParsedOutcome => {
     }
 
     // Extract care plans from multiple sources (new structure takes priority)
-    let finalCarePlans = carePlansCreated;
+    let finalCarePlans = foundCarePlans;
     if (!finalCarePlans || finalCarePlans.length === 0) {
       finalCarePlans = createdResourceIds;
     }

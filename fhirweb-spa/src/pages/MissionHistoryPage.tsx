@@ -70,9 +70,9 @@ const MissionHistoryPage: React.FC = () => {
   const selectedMission = missions.find(
     (m) => m.missionId === selectedMissionId,
   );
-  
+
   // Use carePlansCreated if available, otherwise create placeholder objects from createdResourceIds
-  const generatedCarePlans = selectedMission?.outputs?.carePlansCreated 
+  const generatedCarePlans = selectedMission?.outputs?.carePlansCreated
     ? selectedMission.outputs.carePlansCreated
     : (selectedMission?.outputs?.createdResourceIds || []).map((id) => ({
         patientId: '',
