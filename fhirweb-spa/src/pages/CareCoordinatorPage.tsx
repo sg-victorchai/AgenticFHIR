@@ -174,7 +174,8 @@ const CareCoordinatorPage: React.FC = () => {
     string | null
   >(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
-  const [selectedCarePlan, setSelectedCarePlan] = useState<CarePlanCreated | null>(null);
+  const [selectedCarePlan, setSelectedCarePlan] =
+    useState<CarePlanCreated | null>(null);
 
   const persistActiveMission = (mission: MissionExecutionResult) => {
     setActiveMission(mission);
@@ -366,8 +367,7 @@ const CareCoordinatorPage: React.FC = () => {
   const activeIntervention = interventions.find(
     (i) => i.missionId === activeMission?.missionId,
   );
-  const generatedCarePlans =
-    activeMission?.outputs?.carePlansCreated || [];
+  const generatedCarePlans = activeMission?.outputs?.carePlansCreated || [];
 
   return (
     <div className="min-h-screen bg-gray-50">

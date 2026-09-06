@@ -13,7 +13,11 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
   patientName,
   onClose,
 }) => {
-  const { data: carePlanData, isLoading, error } = useGetResourceByIdQuery({
+  const {
+    data: carePlanData,
+    isLoading,
+    error,
+  } = useGetResourceByIdQuery({
     resourceType: 'CarePlan',
     id: carePlanId,
   });
@@ -60,7 +64,9 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <IconSpinner className="h-6 w-6 text-blue-600 animate-spin" />
-              <span className="ml-2 text-sm text-gray-600">Loading care plan...</span>
+              <span className="ml-2 text-sm text-gray-600">
+                Loading care plan...
+              </span>
             </div>
           ) : error ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -75,7 +81,9 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
                 <label className="font-medium text-gray-700 block mb-1">
                   Care Plan ID
                 </label>
-                <p className="text-gray-600 font-mono break-all">{carePlanId}</p>
+                <p className="text-gray-600 font-mono break-all">
+                  {carePlanId}
+                </p>
               </div>
 
               {/* Status */}
@@ -259,7 +267,9 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
             </>
           ) : (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-              <p className="text-sm text-gray-600">No care plan data available</p>
+              <p className="text-sm text-gray-600">
+                No care plan data available
+              </p>
             </div>
           )}
         </div>

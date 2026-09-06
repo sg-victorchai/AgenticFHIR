@@ -140,7 +140,27 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
       : {}),
   } as Record<string, any>;
 
-  return {
+  // Extract carePlansCreated from multiple possible locations
+  let carePlansCreated = outputs.carePlansCreated;
+  
+  // If not found in outputs, try parsing from summary (which may contain nested JSON)
+  if (!carePlansCreated && result.summary && typeof result.summary === 'string') {
+    try {
+      // The summary might be a markdown code block with JSON, e.g., ```json\n{...}\n```
+      const summaryText = result.summary.replace(/^```.*?\n/, '').replace(/\n```$/, '');
+      const summaryJson = JSON.parse(summaryText);
+      carePlansCreated = summaryJson?.parameters?.outputs?.carePlansCreated;
+    } catch {
+      // Summary is not JSON, leave it alone
+    }
+  }
+
+  // Fallback: check top level asObject
+  if (!carePlansCreated) {
+    carePlansCreated = asObject.carePlansCreated;
+  }
+
+  const normalized = {
     missionId: asObject.missionId || asObject.id || asObject.executionId || '',
     status: (asObject.status || 'PENDING') as MissionExecutionResult['status'],
     goal: asObject.goal || '',
@@ -152,7 +172,7 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
       executionTimeMs: outputs.executionTimeMs,
       tokensUsed: outputs.tokensUsed,
       costBreakdown: outputs.costBreakdown as CostBreakdown | undefined,
-      carePlansCreated: outputs.carePlansCreated,
+      carePlansCreated: carePlansCreated,
     },
     failureReason:
       asObject.failureReason ||
@@ -163,6 +183,8 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
     completedAt: asObject.completedAt,
     auditTrail: asObject.auditTrail,
   };
+
+  return normalized;
 };
 
 // Extracts a resource list from whatever envelope shape the endpoint returns
