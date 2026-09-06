@@ -34,132 +34,211 @@ const parseOutcome = (response: string): ParsedOutcome => {
   let summary = '';
   const details: string[] = [];
 
-  // Extract assessment type
-  const assessmentMatch = response.match(
-    /diabetic\s+care-gap|care-gap|assessment/i,
-  );
-  if (assessmentMatch) {
-    assessmentType = assessmentMatch[0];
+  // Try to parse as JSON first
+  let jsonData: any = null;
+  try {
+    jsonData = JSON.parse(response);
+  } catch (e) {
+    // Not JSON, will use regex fallback
   }
 
-  // Extract candidate patients count - multiple patterns
-  const candidateMatch =
-    response.match(/(\d+)\s+candidate\s+patients/i) ||
-    response.match(/Total.*?candidate[^:]*:\s*(\d+)/i) ||
-    response.match(/found.*?(\d+)\s+patient/i);
-  if (candidateMatch) {
-    metrics.push({
-      label: 'Candidate Patients',
-      value: candidateMatch[1],
-      color: 'blue',
-    });
-  }
+  if (jsonData && typeof jsonData === 'object') {
+    // Handle structured JSON response
+    assessmentType = 'diabetic care-gap';
 
-  // Extract recent HbA1c count - multiple patterns
-  // Look for "6 already had a recent HbA1c" (number BEFORE the phrase, not dates after)
-  let recentHbA1cMatch =
-    response.match(/(\d+)\s+already had a recent HbA1c/i) ||
-    response.match(/candidatesWithRecentHbA1c\s*[=:]\s*(\d+)/i) ||
-    response.match(/With\s+(?:recent\s+)?HbA1c[^:]*:\s*(\d+)/i) ||
-    response.match(/HbA1c.*?already.*?(\d+)/i);
+    // Extract metrics from structured fields
+    const { proposedPlan, createdResourceIds = [] } = jsonData;
 
-  if (recentHbA1cMatch) {
-    const count = recentHbA1cMatch[1] || '0';
-    // Validate that the count is reasonable (should be less than or equal to candidates)
-    // and not a year like 1966 from dates
-    const numValue = parseInt(count);
-    if (numValue > 0 && numValue < 500) {
-      // Avoid matching years from dates and skip 0 values
+    // Try to extract metrics from proposedPlan.steps descriptions
+    if (proposedPlan && Array.isArray(proposedPlan.steps)) {
+      const step0 = proposedPlan.steps[0]?.description || '';
+      const step1 = proposedPlan.steps[1]?.description || '';
+
+      // Extract candidate patients from step 0: "30 patients found"
+      const candidateMatch = step0.match(/(\d+)\s+patients?\s+found/i);
+      if (candidateMatch) {
+        const num = parseInt(candidateMatch[1]);
+        if (num > 0 && num < 500) {
+          metrics.push({
+            label: 'Candidate Patients',
+            value: num,
+            color: 'blue',
+          });
+        }
+      }
+
+      // Extract HbA1c count from step 0: "28 already have a recent HbA1c"
+      const hba1cMatch = step0.match(/(\d+)\s+already\s+have\s+a\s+recent\s+HbA1c/i);
+      if (hba1cMatch) {
+        const num = parseInt(hba1cMatch[1]);
+        if (num > 0 && num < 500) {
+          metrics.push({
+            label: 'With Recent HbA1c',
+            value: num,
+            color: 'green',
+          });
+        }
+      }
+
+      // Extract final cohort from step 1: "2 remain in finalCohort"
+      const cohortMatch = step1.match(/(\d+)\s+remain\s+in\s+(?:final)?cohort/i);
+      if (cohortMatch) {
+        const num = parseInt(cohortMatch[1]);
+        if (num > 0 && num < 500) {
+          metrics.push({
+            label: 'Care-Gap Cohort',
+            value: num,
+            color: 'amber',
+          });
+          status = 'warning';
+          summary = `${num} patient${num !== 1 ? 's' : ''} identified for HbA1c testing gap`;
+        }
+      }
+    }
+
+    // Extract care plans from createdResourceIds
+    if (Array.isArray(createdResourceIds) && createdResourceIds.length > 0) {
       metrics.push({
-        label: 'With Recent HbA1c',
-        value: count,
-        color: 'green',
+        label: 'Care Plans Generated',
+        value: createdResourceIds.length,
+        color: 'blue',
       });
     }
-  }
 
-  // Extract care-gap cohort count - multiple patterns
-  // Look for "4 in the final care-gap cohort" or "finalCohortSize": 4 or other formats
-  const gapCohortMatch =
-    response.match(/(\d+)\s+in\s+the\s+final\s+care-gap\s+cohort/i) ||
-    response.match(/(?:Final\s+)?care-gap\s+cohort[^:]*:\s*(\d+)/i) ||
-    response.match(/finalCohort[^:]*[":]*\s*[=:]\s*(\d+)/i) ||
-    response.match(/"finalCohortSize"\s*:\s*(\d+)/i) ||
-    response.match(/finalCohort.*?[=:]\s*(\d+)/i) ||
-    response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
-
-  if (gapCohortMatch) {
-    const count = parseInt(gapCohortMatch[1] || '0');
-    // Validate that the count is reasonable (should be < 500 to avoid matching years like 1966)
-    if (count > 0 && count < 500) {
-      metrics.push({
-        label: 'Care-Gap Cohort',
-        value: count,
-        color: 'amber',
-      });
-
-      // Determine status based on cohort
-      status = 'warning';
-      summary = `${count} patient${count !== 1 ? 's' : ''} identified for HbA1c testing gap`;
+    // Extract HITL trigger reason
+    const { hitlTriggerReason = '' } = jsonData;
+    if (hitlTriggerReason) {
+      if (hitlTriggerReason.includes('Drafted')) {
+        details.push('📋 Care plans were generated and await review');
+      }
+      if (hitlTriggerReason.includes('HbA1c')) {
+        details.push('📊 Recommends HbA1c testing');
+      }
+      if (hitlTriggerReason.includes('clinical review')) {
+        details.push('⚠️ Requires clinical review before action');
+      }
     }
-  }
+  } else {
+    // Fallback to regex-based parsing for plain text responses
+    assessmentType = '';
+    const assessmentMatch = response.match(
+      /diabetic\s+care-gap|care-gap|assessment/i,
+    );
+    if (assessmentMatch) {
+      assessmentType = assessmentMatch[0];
+    }
 
-  // Extract generated care plans count - multiple patterns
-  const carePlansMatch =
-    response.match(/(?:Drafted|Generated)\s+(\d+)\s+CarePlan/i) ||
-    response.match(/(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i);
-  if (carePlansMatch) {
-    metrics.push({
-      label: 'Care Plans Generated',
-      value: carePlansMatch[1],
-      color: carePlansMatch[1] === '0' ? 'gray' : 'blue',
-    });
-  }
-
-  // Extract existing plans excluded - be specific to avoid matching dates
-  // Look for "0 of 4 gap-cohort" (number BEFORE the phrase)
-  const existingPlansMatch =
-    response.match(
-      /(\d+)\s+of\s+\d+\s+gap-cohort\s+patients\s+had\s+a\s+prior/i,
-    ) ||
-    response.match(/Already\s+had\s+an\s+active.*?CarePlan[^:]*:\s*(\d+)/i) ||
-    response.match(/Existing\s+care-gap\s+CarePlan[^:]*:\s*(\d+)/i);
-
-  if (existingPlansMatch) {
-    const count = existingPlansMatch[1] || '0';
-    const numValue = parseInt(count);
-    if (numValue < 500) {
-      // Avoid matching years from dates
+    // Extract candidate patients count - multiple patterns
+    const candidateMatch =
+      response.match(/(\d+)\s+candidate\s+patients/i) ||
+      response.match(/Total.*?candidate[^:]*:\s*(\d+)/i) ||
+      response.match(/found.*?(\d+)\s+patient/i);
+    if (candidateMatch) {
       metrics.push({
-        label: 'Existing Plans',
-        value: count,
-        color: 'gray',
+        label: 'Candidate Patients',
+        value: candidateMatch[1],
+        color: 'blue',
       });
     }
-  }
 
-  // Extract key details
-  if (response.includes('no action needed')) {
-    details.push('✓ No action required at this time');
-  }
-  if (response.includes('care plans') && response.includes('reviewed')) {
-    details.push('✓ Care plans were reviewed and approved');
-  }
-  if (
-    response.includes('drafted') ||
-    response.includes('Drafted') ||
-    response.includes('created')
-  ) {
-    details.push('📋 Care plans were generated and await review');
-  }
-  if (
-    response.includes('HbA1c test') ||
-    response.includes('ordering an HbA1c')
-  ) {
-    details.push('📊 Recommends HbA1c testing');
-  }
-  if (response.includes('disclaimer') || response.includes('clinical review')) {
-    details.push('⚠️  Requires clinical review before action');
+    // Extract recent HbA1c count - multiple patterns
+    // Look for "6 already had a recent HbA1c" (number BEFORE the phrase, not dates after)
+    let recentHbA1cMatch =
+      response.match(/(\d+)\s+already had a recent HbA1c/i) ||
+      response.match(/candidatesWithRecentHbA1c\s*[=:]\s*(\d+)/i) ||
+      response.match(/With\s+(?:recent\s+)?HbA1c[^:]*:\s*(\d+)/i) ||
+      response.match(/HbA1c.*?already.*?(\d+)/i);
+
+    if (recentHbA1cMatch) {
+      const count = recentHbA1cMatch[1] || '0';
+      const numValue = parseInt(count);
+      if (numValue > 0 && numValue < 500) {
+        metrics.push({
+          label: 'With Recent HbA1c',
+          value: count,
+          color: 'green',
+        });
+      }
+    }
+
+    // Extract care-gap cohort count - multiple patterns
+    const gapCohortMatch =
+      response.match(/(\d+)\s+in\s+the\s+final\s+care-gap\s+cohort/i) ||
+      response.match(/(?:Final\s+)?care-gap\s+cohort[^:]*:\s*(\d+)/i) ||
+      response.match(/finalCohort[^:]*[":]*\s*[=:]\s*(\d+)/i) ||
+      response.match(/"finalCohortSize"\s*:\s*(\d+)/i) ||
+      response.match(/finalCohort.*?[=:]\s*(\d+)/i) ||
+      response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
+
+    if (gapCohortMatch) {
+      const count = parseInt(gapCohortMatch[1] || '0');
+      if (count > 0 && count < 500) {
+        metrics.push({
+          label: 'Care-Gap Cohort',
+          value: count,
+          color: 'amber',
+        });
+
+        status = 'warning';
+        summary = `${count} patient${count !== 1 ? 's' : ''} identified for HbA1c testing gap`;
+      }
+    }
+
+    // Extract generated care plans count - multiple patterns
+    const carePlansMatch =
+      response.match(/(?:Drafted|Generated)\s+(\d+)\s+CarePlan/i) ||
+      response.match(/(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i);
+    if (carePlansMatch) {
+      metrics.push({
+        label: 'Care Plans Generated',
+        value: carePlansMatch[1],
+        color: carePlansMatch[1] === '0' ? 'gray' : 'blue',
+      });
+    }
+
+    // Extract existing plans excluded
+    const existingPlansMatch =
+      response.match(
+        /(\d+)\s+of\s+\d+\s+gap-cohort\s+patients\s+had\s+a\s+prior/i,
+      ) ||
+      response.match(/Already\s+had\s+an\s+active.*?CarePlan[^:]*:\s*(\d+)/i) ||
+      response.match(/Existing\s+care-gap\s+CarePlan[^:]*:\s*(\d+)/i);
+
+    if (existingPlansMatch) {
+      const count = existingPlansMatch[1] || '0';
+      const numValue = parseInt(count);
+      if (numValue < 500) {
+        metrics.push({
+          label: 'Existing Plans',
+          value: count,
+          color: 'gray',
+        });
+      }
+    }
+
+    // Extract key details from plain text
+    if (response.includes('no action needed')) {
+      details.push('✓ No action required at this time');
+    }
+    if (response.includes('care plans') && response.includes('reviewed')) {
+      details.push('✓ Care plans were reviewed and approved');
+    }
+    if (
+      response.includes('drafted') ||
+      response.includes('Drafted') ||
+      response.includes('created')
+    ) {
+      details.push('📋 Care plans were generated and await review');
+    }
+    if (
+      response.includes('HbA1c test') ||
+      response.includes('ordering an HbA1c')
+    ) {
+      details.push('📊 Recommends HbA1c testing');
+    }
+    if (response.includes('disclaimer') || response.includes('clinical review')) {
+      details.push('⚠️ Requires clinical review before action');
+    }
   }
 
   return {
