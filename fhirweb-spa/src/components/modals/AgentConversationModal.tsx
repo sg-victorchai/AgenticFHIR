@@ -9,6 +9,7 @@ import {
   parseAgentResponse,
   extractMissionId,
 } from '../../utils/agentResponseParser';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 interface AgentConversationModalProps {
   isOpen: boolean;
@@ -264,7 +265,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const response = await fetch(agentConfig.endpoint, {
+    // Use extended 60-second timeout for AI processing (can take time)
+    const response = await fetchWithTimeout(agentConfig.endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -274,6 +276,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           channel: 'patient-portal',
         },
       }),
+      timeout: 60000, // 60 seconds for AI processing
     });
 
     const parsed = parseJsonSafely(await response.text());
@@ -319,7 +322,11 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       statusUrl = `${proxyPrefix}${missionStatusPath}`;
     }
 
-    const response = await fetch(statusUrl, { headers });
+    // Use 10-second timeout for status checks
+    const response = await fetchWithTimeout(statusUrl, {
+      headers,
+      timeout: 10000, // 10 seconds for status polling
+    });
 
     if (!response.ok) {
       throw new Error(`Status check failed (${response.status})`);
