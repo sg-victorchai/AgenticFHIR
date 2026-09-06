@@ -74,12 +74,16 @@ const MissionHistoryPage: React.FC = () => {
   // Use carePlansCreated if available, otherwise create placeholder objects from createdResourceIds
   const generatedCarePlans = selectedMission?.outputs?.carePlansCreated
     ? selectedMission.outputs.carePlansCreated
-    : (selectedMission?.outputs?.createdResourceIds || []).map((id) => ({
-        patientId: '',
-        mrn: '',
-        name: '',
-        carePlanId: id,
-      }));
+    : (selectedMission?.outputs?.createdResourceIds || []).map((id) => {
+        // Extract just the ID part if it's in the format "CarePlan/id" or "CarePlan/type/id"
+        const planId = id.includes('/') ? id.split('/').pop() || id : id;
+        return {
+          patientId: '',
+          mrn: '',
+          name: '',
+          carePlanId: planId,
+        };
+      });
 
   return (
     <div className="min-h-screen bg-gray-50">
