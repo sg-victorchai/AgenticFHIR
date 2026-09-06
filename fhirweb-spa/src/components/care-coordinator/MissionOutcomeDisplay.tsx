@@ -85,19 +85,19 @@ const parseOutcome = (response: string): ParsedOutcome => {
     response.match(/(?:Final\s+)?care-gap\s+cohort[^:]*:\s*(\d+)/i) ||
     response.match(/finalCohort.*?[=:]\s*(\d+)/i) ||
     response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
+  
   if (gapCohortMatch) {
     const count = parseInt(gapCohortMatch[1] || '0');
-    metrics.push({
-      label: 'Care-Gap Cohort',
-      value: count,
-      color: count === 0 ? 'green' : 'amber',
-    });
+    // Validate that the count is reasonable (should be < 500 to avoid matching years like 1966)
+    // and > 0 to avoid false matches
+    if (count > 0 && count < 500) {
+      metrics.push({
+        label: 'Care-Gap Cohort',
+        value: count,
+        color: count === 0 ? 'green' : 'amber',
+      });
 
-    // Determine status based on cohort
-    if (count === 0) {
-      status = 'success';
-      summary = 'All patients are up-to-date with HbA1c testing';
-    } else {
+      // Determine status based on cohort
       status = 'warning';
       summary = `${count} patient${count !== 1 ? 's' : ''} identified for HbA1c testing gap`;
     }
