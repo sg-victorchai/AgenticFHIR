@@ -142,12 +142,18 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
 
   // Extract carePlansCreated from multiple possible locations
   let carePlansCreated = outputs.carePlansCreated;
-  
+
   // If not found in outputs, try parsing from summary (which may contain nested JSON)
-  if (!carePlansCreated && result.summary && typeof result.summary === 'string') {
+  if (
+    !carePlansCreated &&
+    result.summary &&
+    typeof result.summary === 'string'
+  ) {
     try {
       // The summary might be a markdown code block with JSON, e.g., ```json\n{...}\n```
-      const summaryText = result.summary.replace(/^```.*?\n/, '').replace(/\n```$/, '');
+      const summaryText = result.summary
+        .replace(/^```.*?\n/, '')
+        .replace(/\n```$/, '');
       const summaryJson = JSON.parse(summaryText);
       carePlansCreated = summaryJson?.parameters?.outputs?.carePlansCreated;
     } catch {

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IconSpinner } from './missionUi';
 import { useGetResourceByIdQuery } from '../../services/fhir/client';
+import { createFHIRClient } from '../../services/fhir/client';
 
 interface CarePlanModalProps {
   carePlanId: string;
@@ -23,8 +24,69 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
   });
 
   const [showFullText, setShowFullText] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [editedValues, setEditedValues] = useState<{
+    title?: string;
+    description?: string;
+    status?: string;
+  }>({});
 
   const carePlan = carePlanData as any;
+
+  // Initialize edited values when care plan loads
+  useEffect(() => {
+    if (carePlan) {
+      setEditedValues({
+        title: carePlan.title || '',
+        description: carePlan.description || '',
+        status: carePlan.status || 'draft',
+      });
+    }
+  }, [carePlan]);
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+
+      const client = await createFHIRClient();
+
+      // Update the care plan with edited values
+      const updatedCarePlan = {
+        ...carePlan,
+        title: editedValues.title || carePlan.title,
+        description: editedValues.description || carePlan.description,
+        status: editedValues.status || carePlan.status,
+      };
+
+      await client.update({
+        resourceType: 'CarePlan',
+        id: carePlanId,
+        body: updatedCarePlan,
+      });
+
+      setIsEditing(false);
+      setSaveError(null);
+    } catch (err: any) {
+      console.error('Error saving care plan:', err);
+      setSaveError(err.message || 'Failed to save care plan');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    // Reset to original values
+    setEditedValues({
+      title: carePlan?.title || '',
+      description: carePlan?.description || '',
+      status: carePlan?.status || 'draft',
+    });
+    setIsEditing(false);
+    setSaveError(null);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 sm:p-0">
@@ -33,7 +95,7 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
         <div className="flex items-start justify-between gap-3 p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 shrink-0">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
-              Care Plan
+              Care Plan {isEditing && <span className="text-sm text-blue-600">(Editing)</span>}
             </h2>
             <p className="text-xs sm:text-sm text-gray-600 mt-1 truncate">
               {patientName}
@@ -41,7 +103,8 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors shrink-0"
+            disabled={isSaving}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors shrink-0 disabled:opacity-50"
           >
             <svg
               className="h-5 w-5"
@@ -74,6 +137,12 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
                 Failed to load care plan. Please try again.
               </p>
             </div>
+          ) : saveError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-700">
+                Error saving changes: {saveError}
+              </p>
+            </div>
           ) : carePlan ? (
             <>
               {/* ID Section */}
@@ -86,15 +155,33 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
                 </p>
               </div>
 
-              {/* Status */}
-              {carePlan.status && (
+              {/* Status - Editable */}
+              {(carePlan.status || isEditing) && (
                 <div className="bg-gray-50 rounded-lg p-4 text-xs sm:text-sm">
-                  <label className="font-medium text-gray-700 block mb-1">
+                  <label className="font-medium text-gray-700 block mb-2">
                     Status
                   </label>
-                  <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                    {carePlan.status}
-                  </span>
+                  {isEditing ? (
+                    <select
+                      value={editedValues.status || 'draft'}
+                      onChange={(e) =>
+                        setEditedValues({
+                          ...editedValues,
+                          status: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="active">Active</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  ) : (
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                      {carePlan.status}
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -140,32 +227,62 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
                 </div>
               )}
 
-              {/* Title */}
-              {carePlan.title && (
+              {/* Title - Editable */}
+              {(carePlan.title || isEditing) && (
                 <div className="bg-gray-50 rounded-lg p-4 text-xs sm:text-sm">
-                  <label className="font-medium text-gray-700 block mb-1">
+                  <label className="font-medium text-gray-700 block mb-2">
                     Title
                   </label>
-                  <p className="text-gray-600">{carePlan.title}</p>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedValues.title || ''}
+                      onChange={(e) =>
+                        setEditedValues({
+                          ...editedValues,
+                          title: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter care plan title"
+                    />
+                  ) : (
+                    <p className="text-gray-600">{carePlan.title}</p>
+                  )}
                 </div>
               )}
 
-              {/* Description */}
-              {carePlan.description && (
+              {/* Description - Editable */}
+              {(carePlan.description || isEditing) && (
                 <div className="bg-gray-50 rounded-lg p-4 text-xs sm:text-sm">
                   <label className="font-medium text-gray-700 block mb-2">
                     Description
                   </label>
-                  <div
-                    className={`text-gray-600 whitespace-pre-wrap ${
-                      !showFullText && carePlan.description.length > 300
-                        ? 'line-clamp-4'
-                        : ''
-                    }`}
-                  >
-                    {carePlan.description}
-                  </div>
-                  {carePlan.description.length > 300 && (
+                  {isEditing ? (
+                    <textarea
+                      value={editedValues.description || ''}
+                      onChange={(e) =>
+                        setEditedValues({
+                          ...editedValues,
+                          description: e.target.value,
+                        })
+                      }
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter care plan description"
+                    />
+                  ) : (
+                    <div
+                      className={`text-gray-600 whitespace-pre-wrap ${
+                        !showFullText && carePlan.description.length > 300
+                          ? 'line-clamp-4'
+                          : ''
+                      }`}
+                    >
+                      {carePlan.description}
+                    </div>
+                  )}
+                  {!isEditing && carePlan.description.length > 300 && (
                     <button
                       onClick={() => setShowFullText(!showFullText)}
                       className="mt-2 text-blue-600 hover:text-blue-700 font-medium text-xs"
@@ -276,12 +393,42 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
 
         {/* Footer - Fixed */}
         <div className="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Close
-          </button>
+          {isEditing ? (
+            <>
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSaving && (
+                  <IconSpinner className="h-4 w-4 animate-spin" />
+                )}
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

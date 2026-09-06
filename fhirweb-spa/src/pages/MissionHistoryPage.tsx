@@ -37,7 +37,8 @@ const MissionHistoryPage: React.FC = () => {
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(
     null,
   );
-  const [selectedCarePlan, setSelectedCarePlan] = useState<CarePlanCreated | null>(null);
+  const [selectedCarePlan, setSelectedCarePlan] =
+    useState<CarePlanCreated | null>(null);
 
   const loadMissions = () => {
     setLoading(true);
