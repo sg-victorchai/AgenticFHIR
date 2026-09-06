@@ -152,6 +152,7 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
       executionTimeMs: outputs.executionTimeMs,
       tokensUsed: outputs.tokensUsed,
       costBreakdown: outputs.costBreakdown as CostBreakdown | undefined,
+      carePlansCreated: outputs.carePlansCreated,
     },
     failureReason:
       asObject.failureReason ||

@@ -103,6 +103,16 @@ export interface AgentEndpointConfig {
 }
 
 /**
+ * Care plan created by mission
+ */
+export interface CarePlanCreated {
+  patientId: string;
+  mrn: string;
+  name: string;
+  carePlanId: string;
+}
+
+/**
  * Mission execution result
  */
 export interface MissionExecutionResult {
@@ -123,6 +133,7 @@ export interface MissionExecutionResult {
     executionTimeMs?: number;
     tokensUsed?: number;
     costBreakdown?: CostBreakdown;
+    carePlansCreated?: CarePlanCreated[];
   };
   failureReason?: string;
   startedAt?: string;
