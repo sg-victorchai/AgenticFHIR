@@ -79,22 +79,23 @@ const parseOutcome = (response: string): ParsedOutcome => {
   }
 
   // Extract care-gap cohort count - multiple patterns
-  // Look for "4 in the final care-gap cohort" or "finalCohort: 4"
+  // Look for "4 in the final care-gap cohort" or "finalCohortSize": 4 or other formats
   const gapCohortMatch =
     response.match(/(\d+)\s+in\s+the\s+final\s+care-gap\s+cohort/i) ||
     response.match(/(?:Final\s+)?care-gap\s+cohort[^:]*:\s*(\d+)/i) ||
+    response.match(/finalCohort[^:]*[":]*\s*[=:]\s*(\d+)/i) ||
+    response.match(/"finalCohortSize"\s*:\s*(\d+)/i) ||
     response.match(/finalCohort.*?[=:]\s*(\d+)/i) ||
     response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
-  
+
   if (gapCohortMatch) {
     const count = parseInt(gapCohortMatch[1] || '0');
     // Validate that the count is reasonable (should be < 500 to avoid matching years like 1966)
-    // and > 0 to avoid false matches
     if (count > 0 && count < 500) {
       metrics.push({
         label: 'Care-Gap Cohort',
         value: count,
-        color: count === 0 ? 'green' : 'amber',
+        color: 'amber',
       });
 
       // Determine status based on cohort
