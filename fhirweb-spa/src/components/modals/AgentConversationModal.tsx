@@ -265,7 +265,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    // Use extended 60-second timeout for AI processing (can take time)
+    // Use extended timeout for AI processing (can involve complex FHIR queries)
     const response = await fetchWithTimeout(agentConfig.endpoint, {
       method: 'POST',
       headers,
@@ -276,7 +276,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           channel: 'patient-portal',
         },
       }),
-      timeout: 60000, // 60 seconds for AI processing
+      timeout: 75000, // 75 seconds for initial mission creation (with buffer for polling)
     });
 
     const parsed = parseJsonSafely(await response.text());
@@ -360,7 +360,10 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
   const startPollingMission = (missionId: string) => {
     let pollCount = 0;
-    const maxPolls = 60;
+    // Increased to 120 polls to handle longer-running AI queries (60s timeout)
+    // With 500ms interval: 120 * 0.5s = 60 seconds
+    // Accounts for: complex FHIR searches, LLM reasoning, budget iterations, and network latency
+    const maxPolls = 120;
     const pollInterval = 500;
 
     if (pollIntervalRef.current) {

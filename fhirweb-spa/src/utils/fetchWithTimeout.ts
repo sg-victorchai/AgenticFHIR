@@ -1,7 +1,7 @@
 /**
  * Fetch with configurable timeout support
  * Wraps native fetch with AbortController to enforce request timeouts
- * 
+ *
  * @param url - The URL to fetch
  * @param options - Fetch options (can include custom timeout via fetchWithTimeoutOptions)
  * @returns Promise resolving to Response
