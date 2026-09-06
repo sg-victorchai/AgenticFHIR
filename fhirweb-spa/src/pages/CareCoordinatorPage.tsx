@@ -55,7 +55,7 @@ const InterventionReviewPanel: React.FC<{
       <div className="flex items-start gap-2.5">
         <IconAlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          {intervention.question.includes('Drafted CarePlans') ? (
+          {intervention.question.toLowerCase().includes('careplan') ? (
             <CarePlanInterventionDisplay
               message={intervention.question}
               onSelectCarePlan={onSelectCarePlan}
