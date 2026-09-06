@@ -65,7 +65,10 @@ export const CarePlanFetchedInterventionDisplay: React.FC<{
             // Try to extract MRN from identifier
             if (carePlan.subject?.identifier?.value) {
               patientMRN = carePlan.subject.identifier.value;
-            } else if (carePlan.identifier && Array.isArray(carePlan.identifier)) {
+            } else if (
+              carePlan.identifier &&
+              Array.isArray(carePlan.identifier)
+            ) {
               const mrnId = carePlan.identifier.find(
                 (id: any) =>
                   id.type?.coding?.some((c: any) => c.code === 'MR') ||
@@ -113,9 +116,7 @@ export const CarePlanFetchedInterventionDisplay: React.FC<{
         {hitlTriggerReason && (
           <p className="text-sm text-gray-700">{hitlTriggerReason}</p>
         )}
-        {question && (
-          <p className="text-sm text-gray-700">{question}</p>
-        )}
+        {question && <p className="text-sm text-gray-700">{question}</p>}
       </div>
     );
   }

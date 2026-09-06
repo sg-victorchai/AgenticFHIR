@@ -13,9 +13,20 @@ interface ParsedOutcome {
   status: 'success' | 'warning' | 'info';
   summary?: string;
   details?: string[];
+  rawResponse: string;
 }
 
 const parseOutcome = (response: string): ParsedOutcome => {
+  if (!response || !response.trim()) {
+    return {
+      metrics: [],
+      status: 'info',
+      summary: 'No outcome information available',
+      details: [],
+      rawResponse: response,
+    };
+  }
+
   const metrics: OutcomeMetric[] = [];
   let status: 'success' | 'warning' | 'info' = 'info';
   let assessmentType = '';
@@ -31,8 +42,11 @@ const parseOutcome = (response: string): ParsedOutcome => {
     assessmentType = assessmentMatch[0];
   }
 
-  // Extract candidate patients count
-  const candidateMatch = response.match(/(\d+)\s+candidate\s+patients/i);
+  // Extract candidate patients count - multiple patterns
+  const candidateMatch =
+    response.match(/(\d+)\s+candidate\s+patients/i) ||
+    response.match(/Total.*?candidate[^:]*:\s*(\d+)/i) ||
+    response.match(/found.*?(\d+)\s+patient/i);
   if (candidateMatch) {
     metrics.push({
       label: 'Candidate Patients',
@@ -41,10 +55,13 @@ const parseOutcome = (response: string): ParsedOutcome => {
     });
   }
 
-  // Extract recent HbA1c count
-  const recentHbA1cMatch = response.match(
-    /candidatesWithRecentHbA1c\s*[=:]\s*(\d+)|already have a (?:recent|qualifying) HbA1c.*?[:\s](\d+)/is,
-  );
+  // Extract recent HbA1c count - multiple patterns
+  const recentHbA1cMatch =
+    response.match(
+      /candidatesWithRecentHbA1c\s*[=:]\s*(\d+)|already have a (?:recent|qualifying) HbA1c.*?[:\s](\d+)/is,
+    ) ||
+    response.match(/Had.*HbA1c.*?:\s*(\d+)/i) ||
+    response.match(/excluded.*?(\d+)/i);
   if (recentHbA1cMatch) {
     const count = recentHbA1cMatch[1] || recentHbA1cMatch[2] || '0';
     metrics.push({
@@ -54,10 +71,13 @@ const parseOutcome = (response: string): ParsedOutcome => {
     });
   }
 
-  // Extract care-gap cohort count
-  const gapCohortMatch = response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
+  // Extract care-gap cohort count - multiple patterns
+  const gapCohortMatch =
+    response.match(/(?:Final\s+)?care-gap\s+cohort[^:]*:\s*(\d+)/i) ||
+    response.match(/finalCohort.*?[=:]\s*(\d+)/i) ||
+    response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
   if (gapCohortMatch) {
-    const count = parseInt(gapCohortMatch[1]);
+    const count = parseInt(gapCohortMatch[1] || '0');
     metrics.push({
       label: 'Care-Gap Cohort',
       value: count,
@@ -70,14 +90,14 @@ const parseOutcome = (response: string): ParsedOutcome => {
       summary = 'All patients are up-to-date with HbA1c testing';
     } else {
       status = 'warning';
-      summary = `${count} patient${count !== 1 ? 's' : ''} need HbA1c testing`;
+      summary = `${count} patient${count !== 1 ? 's' : ''} identified for HbA1c testing gap`;
     }
   }
 
-  // Extract generated care plans count
-  const carePlansMatch = response.match(
-    /(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i,
-  );
+  // Extract generated care plans count - multiple patterns
+  const carePlansMatch =
+    response.match(/(?:Drafted|Generated)\s+(\d+)\s+CarePlan/i) ||
+    response.match(/(\d+)\s*care.?plans?\s*(?:were\s+)?(?:generated|drafted)/i);
   if (carePlansMatch) {
     metrics.push({
       label: 'Care Plans Generated',
@@ -86,15 +106,40 @@ const parseOutcome = (response: string): ParsedOutcome => {
     });
   }
 
+  // Extract existing plans excluded
+  const existingPlansMatch =
+    response.match(/Already had an active.*?(?:excluded|found)[^\d]*(\d+)/i) ||
+    response.match(/Existing.*?Plan.*?:\s*(\d+)/i);
+  if (existingPlansMatch) {
+    metrics.push({
+      label: 'Existing Plans',
+      value: existingPlansMatch[1],
+      color: 'gray',
+    });
+  }
+
   // Extract key details
   if (response.includes('no action needed')) {
     details.push('✓ No action required at this time');
   }
-  if (response.includes('care plans')) {
-    details.push('Care plans were reviewed and approved');
+  if (response.includes('care plans') && response.includes('reviewed')) {
+    details.push('✓ Care plans were reviewed and approved');
   }
-  if (response.includes('drafted')) {
-    details.push('Care plans were generated for review');
+  if (
+    response.includes('drafted') ||
+    response.includes('Drafted') ||
+    response.includes('created')
+  ) {
+    details.push('📋 Care plans were generated and await review');
+  }
+  if (
+    response.includes('HbA1c test') ||
+    response.includes('ordering an HbA1c')
+  ) {
+    details.push('📊 Recommends HbA1c testing');
+  }
+  if (response.includes('disclaimer') || response.includes('clinical review')) {
+    details.push('⚠️  Requires clinical review before action');
   }
 
   return {
@@ -103,7 +148,8 @@ const parseOutcome = (response: string): ParsedOutcome => {
     metrics,
     status,
     summary,
-    details,
+    details: details.length > 0 ? details : undefined,
+    rawResponse: response,
   };
 };
 
@@ -139,6 +185,20 @@ export const MissionOutcomeDisplay: React.FC<MissionOutcomeDisplayProps> = ({
   response,
 }) => {
   const parsed = parseOutcome(response);
+
+  // Fallback if no data was parsed
+  if (parsed.metrics.length === 0 && !parsed.summary) {
+    return (
+      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <p className="text-xs text-gray-600 mb-2">
+          <span className="font-semibold">Outcome Details:</span>
+        </p>
+        <div className="text-xs text-gray-700 whitespace-pre-wrap max-h-32 overflow-y-auto font-mono bg-white p-3 rounded border border-gray-200">
+          {response || 'No outcome information available'}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`border rounded-lg p-4 ${getStatusColor(parsed.status)}`}>
@@ -197,7 +257,7 @@ export const MissionOutcomeDisplay: React.FC<MissionOutcomeDisplayProps> = ({
           View full details
         </summary>
         <div className="mt-2 p-3 bg-white/50 rounded border border-gray-200 text-xs text-gray-600 whitespace-pre-wrap max-h-48 overflow-y-auto font-mono">
-          {response}
+          {parsed.rawResponse}
         </div>
       </details>
     </div>

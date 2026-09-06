@@ -211,8 +211,7 @@ const CareCoordinatorPage: React.FC = () => {
             ...(activeMission?.missionId === intervention.missionId &&
             activeMission?.outputs?.createdResourceIds
               ? {
-                  createdResourceIds:
-                    activeMission.outputs.createdResourceIds,
+                  createdResourceIds: activeMission.outputs.createdResourceIds,
                 }
               : {}),
           },
