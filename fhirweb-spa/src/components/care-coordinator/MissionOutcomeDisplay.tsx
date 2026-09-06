@@ -125,7 +125,10 @@ const parseOutcome = (response: string): ParsedOutcome => {
     }
 
     // Fallback: Structure 3: Legacy format with proposedPlan.steps
-    const { proposedPlan, createdResourceIds = [] } = jsonData;
+    // proposedPlan can be at root level (jsonData.proposedPlan) or nested in outputs
+    const proposedPlan = jsonData.proposedPlan || (outputsToUse && outputsToUse.proposedPlan);
+    const createdResourceIds = jsonData.createdResourceIds || (outputsToUse && outputsToUse.createdResourceIds) || [];
+    
     if (
       metrics.length === 0 &&
       proposedPlan &&
@@ -193,8 +196,8 @@ const parseOutcome = (response: string): ParsedOutcome => {
       });
     }
 
-    // Extract HITL trigger reason
-    const { hitlTriggerReason = '' } = jsonData;
+    // Extract HITL trigger reason (can be at root or in outputs)
+    const hitlTriggerReason = jsonData.hitlTriggerReason || (outputsToUse && outputsToUse.hitlTriggerReason) || '';
     if (hitlTriggerReason) {
       if (hitlTriggerReason.includes('Drafted')) {
         details.push('📋 Care plans were generated and await review');
