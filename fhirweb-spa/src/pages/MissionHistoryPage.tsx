@@ -70,7 +70,16 @@ const MissionHistoryPage: React.FC = () => {
   const selectedMission = missions.find(
     (m) => m.missionId === selectedMissionId,
   );
-  const generatedCarePlans = selectedMission?.outputs?.carePlansCreated || [];
+  
+  // Use carePlansCreated if available, otherwise create placeholder objects from createdResourceIds
+  const generatedCarePlans = selectedMission?.outputs?.carePlansCreated 
+    ? selectedMission.outputs.carePlansCreated
+    : (selectedMission?.outputs?.createdResourceIds || []).map((id) => ({
+        patientId: '',
+        mrn: '',
+        name: '',
+        carePlanId: id,
+      }));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -265,12 +274,20 @@ const MissionHistoryPage: React.FC = () => {
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors truncate text-sm">
-                                  {carePlan.name}
-                                </h4>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  MRN: {carePlan.mrn}
-                                </p>
+                                {carePlan.name ? (
+                                  <>
+                                    <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors truncate text-sm">
+                                      {carePlan.name}
+                                    </h4>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      MRN: {carePlan.mrn}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="text-xs text-gray-500">
+                                    CarePlan (Details loading...)
+                                  </p>
+                                )}
                                 <p className="text-xs text-gray-400 font-mono mt-1 truncate">
                                   {carePlan.carePlanId}
                                 </p>
