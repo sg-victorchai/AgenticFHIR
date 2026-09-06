@@ -131,6 +131,18 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
     result = asObject.result;
   }
 
+  // If result is empty, reconstruct it from asObject (handles flattened API responses)
+  if (Object.keys(result).length === 0) {
+    result = {
+      outputs: asObject.outputs,
+      success: asObject.success,
+      summary: asObject.summary,
+      failureReason: asObject.failureReason,
+      hitlTriggerReason: asObject.hitlTriggerReason,
+      proposedPlan: asObject.proposedPlan,
+    };
+  }
+
   const outputs = {
     ...(result.outputs && typeof result.outputs === 'object'
       ? result.outputs
