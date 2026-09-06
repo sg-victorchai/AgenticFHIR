@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { IconCheckCircle } from './missionUi';
+import { CarePlanCreated } from '../../types/agent';
 
 interface CohortSummary {
   totalCandidates: number;
@@ -26,6 +27,32 @@ interface ParsedCarePlanIntervention {
   carePlans: PatientCarePlan[];
   finalNote: string;
 }
+
+// Parse care plans from the new format: "1. Name (DOB: ..., MRN: ...) — CarePlan/id"
+const parseCarePlanFromMessage = (message: string): PatientCarePlan[] => {
+  const carePlans: PatientCarePlan[] = [];
+
+  // Pattern for new format: "1. Name (DOB: date, MRN: mrn) — CarePlan/id"
+  const newFormatPattern =
+    /(\d+)\.\s+([^\(]+?)\s+\(DOB:\s+([^,]+),\s+MRN:\s+([^\)]+)\)\s+—\s+CarePlan\/([^\s\n]+)/g;
+
+  let match;
+  while ((match = newFormatPattern.exec(message)) !== null) {
+    carePlans.push({
+      number: parseInt(match[1], 10),
+      name: match[2].trim(),
+      dob: match[3].trim(),
+      mrn: match[4].trim(),
+      carePlanId: match[5].trim(),
+      age: 0, // Will be calculated or extracted if available
+      gender: '', // Not provided in this format
+      lastHbA1cDate: '', // Not provided in this format
+      recommendation: '', // Not provided in this format
+    });
+  }
+
+  return carePlans;
+};
 
 const parseCarePlanIntervention = (
   message: string,
@@ -61,8 +88,8 @@ const parseCarePlanIntervention = (
   );
   const summary = summaryMatch ? summaryMatch[1] : '';
 
-  // Parse patient care plans
-  const carePlans: PatientCarePlan[] = [];
+  // Parse patient care plans - try old format first
+  let carePlans: PatientCarePlan[] = [];
   const planPattern =
     /(\d+)\.\s+([^\(]+?)\s+\(MRN:\s+([^,]+),\s+DOB:\s+([^,]+),\s+age\s+(\d+),\s+(\w+)\)\s+CarePlan ID:\s+([^\s]+)\s+Gap:\s+([^\|]+)\|\s+Recommendation:\s+([^\n]+)/g;
 
@@ -81,6 +108,11 @@ const parseCarePlanIntervention = (
     });
   }
 
+  // If old format didn't work, try new format
+  if (carePlans.length === 0) {
+    carePlans = parseCarePlanFromMessage(message);
+  }
+
   // Extract final note
   const finalNoteMatch = message.match(
     /All CarePlans are in draft status and require clinical review before any action is taken\..*/,
@@ -97,10 +129,11 @@ const parseCarePlanIntervention = (
 
 export const CarePlanInterventionDisplay: React.FC<{
   message: string;
-}> = ({ message }) => {
+  onSelectCarePlan?: (carePlan: CarePlanCreated) => void;
+}> = ({ message, onSelectCarePlan }) => {
   const parsed = useMemo(() => parseCarePlanIntervention(message), [message]);
 
-  if (!parsed.cohortSummary || parsed.carePlans.length === 0) {
+  if (!parsed.carePlans || parsed.carePlans.length === 0) {
     // Fallback to plain text if parsing fails
     return (
       <div className="text-sm text-gray-700 whitespace-pre-wrap break-words">
@@ -112,43 +145,47 @@ export const CarePlanInterventionDisplay: React.FC<{
   return (
     <div className="space-y-5">
       {/* Summary */}
-      <p className="text-sm font-medium text-gray-900">{parsed.summary}</p>
+      {parsed.summary && (
+        <p className="text-sm font-medium text-gray-900">{parsed.summary}</p>
+      )}
 
-      {/* Cohort Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Total Candidates
-          </p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
-            {parsed.cohortSummary.totalCandidates}
-          </p>
+      {/* Cohort Summary - Only show if available */}
+      {parsed.cohortSummary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Total Candidates
+            </p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">
+              {parsed.cohortSummary.totalCandidates}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Had Recent HbA1c
+            </p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">
+              {parsed.cohortSummary.withRecentHbA1c}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Existing Plan
+            </p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">
+              {parsed.cohortSummary.withExistingPlan}
+            </p>
+          </div>
+          <div className="bg-white border border-amber-200 rounded-lg p-3 bg-amber-50">
+            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+              Final Cohort
+            </p>
+            <p className="text-2xl font-bold text-amber-700 mt-1">
+              {parsed.cohortSummary.finalCohort}
+            </p>
+          </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Had Recent HbA1c
-          </p>
-          <p className="text-2xl font-bold text-emerald-600 mt-1">
-            {parsed.cohortSummary.withRecentHbA1c}
-          </p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Existing Plan
-          </p>
-          <p className="text-2xl font-bold text-blue-600 mt-1">
-            {parsed.cohortSummary.withExistingPlan}
-          </p>
-        </div>
-        <div className="bg-white border border-amber-200 rounded-lg p-3 bg-amber-50">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
-            Final Cohort
-          </p>
-          <p className="text-2xl font-bold text-amber-700 mt-1">
-            {parsed.cohortSummary.finalCohort}
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Care Plans List */}
       <div className="space-y-3">
@@ -159,9 +196,19 @@ export const CarePlanInterventionDisplay: React.FC<{
 
         <div className="space-y-2">
           {parsed.carePlans.map((plan) => (
-            <div
+            <button
               key={plan.carePlanId}
-              className="border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors p-3.5"
+              onClick={() => {
+                if (onSelectCarePlan) {
+                  onSelectCarePlan({
+                    patientId: '', // Not available in this format
+                    carePlanId: plan.carePlanId,
+                    name: plan.name,
+                    mrn: plan.mrn,
+                  });
+                }
+              }}
+              className="w-full text-left border border-gray-200 rounded-lg bg-white hover:bg-blue-50 hover:border-blue-300 transition-colors p-3.5 cursor-pointer"
             >
               <div className="flex items-start gap-3">
                 <div className="h-8 w-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-semibold shrink-0">
@@ -173,9 +220,11 @@ export const CarePlanInterventionDisplay: React.FC<{
                     <h5 className="font-semibold text-gray-900 text-sm">
                       {plan.name}
                     </h5>
-                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
-                      Age {plan.age} • {plan.gender}
-                    </span>
+                    {plan.age > 0 && (
+                      <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
+                        Age {plan.age} • {plan.gender}
+                      </span>
+                    )}
                   </div>
 
                   {/* Patient Details Grid */}
@@ -196,26 +245,43 @@ export const CarePlanInterventionDisplay: React.FC<{
                     </div>
                   </div>
 
-                  {/* Care Gap & Recommendation */}
-                  <div className="bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 space-y-1">
-                    <p className="text-xs">
-                      <span className="font-semibold text-amber-900">Gap:</span>{' '}
-                      <span className="text-amber-800">
-                        {plan.lastHbA1cDate}
+                  {/* Care Gap & Recommendation - Only show if available */}
+                  {(plan.lastHbA1cDate || plan.recommendation) && (
+                    <div className="bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 space-y-1">
+                      {plan.lastHbA1cDate && (
+                        <p className="text-xs">
+                          <span className="font-semibold text-amber-900">
+                            Gap:
+                          </span>{' '}
+                          <span className="text-amber-800">
+                            {plan.lastHbA1cDate}
+                          </span>
+                        </p>
+                      )}
+                      {plan.recommendation && (
+                        <p className="text-xs">
+                          <span className="font-semibold text-amber-900">
+                            Recommendation:
+                          </span>{' '}
+                          <span className="text-amber-800">
+                            {plan.recommendation}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* View/Edit badge */}
+                  {onSelectCarePlan && (
+                    <div className="mt-2 flex justify-end">
+                      <span className="inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        View/Edit
                       </span>
-                    </p>
-                    <p className="text-xs">
-                      <span className="font-semibold text-amber-900">
-                        Recommendation:
-                      </span>{' '}
-                      <span className="text-amber-800">
-                        {plan.recommendation}
-                      </span>
-                    </p>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>

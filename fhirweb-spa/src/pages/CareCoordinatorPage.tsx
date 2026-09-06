@@ -44,7 +44,8 @@ const InterventionReviewPanel: React.FC<{
   ) => void;
   resolving: boolean;
   error: string | null;
-}> = ({ intervention, onResolve, resolving, error }) => {
+  onSelectCarePlan?: (carePlan: CarePlanCreated) => void;
+}> = ({ intervention, onResolve, resolving, error, onSelectCarePlan }) => {
   const [requestChangesNotes, setRequestChangesNotes] = useState<string>('');
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const steps = intervention.context?.proposedPlan?.steps;
@@ -55,7 +56,10 @@ const InterventionReviewPanel: React.FC<{
         <IconAlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           {intervention.question.includes('Drafted CarePlans') ? (
-            <CarePlanInterventionDisplay message={intervention.question} />
+            <CarePlanInterventionDisplay
+              message={intervention.question}
+              onSelectCarePlan={onSelectCarePlan}
+            />
           ) : (
             <>
               <p className="text-sm font-semibold text-gray-900">
@@ -559,6 +563,7 @@ const CareCoordinatorPage: React.FC = () => {
                       resolvingInterventionId === activeIntervention.id
                     }
                     error={resolveError}
+                    onSelectCarePlan={setSelectedCarePlan}
                   />
                 ) : (
                   <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
