@@ -56,23 +56,32 @@ const parseOutcome = (response: string): ParsedOutcome => {
   }
 
   // Extract recent HbA1c count - multiple patterns
-  const recentHbA1cMatch =
-    response.match(
-      /candidatesWithRecentHbA1c\s*[=:]\s*(\d+)|already have a (?:recent|qualifying) HbA1c.*?[:\s](\d+)/is,
-    ) ||
-    response.match(/Had.*HbA1c.*?:\s*(\d+)/i) ||
-    response.match(/excluded.*?(\d+)/i);
+  // Look for "6 already had a recent HbA1c" (number BEFORE the phrase, not dates after)
+  let recentHbA1cMatch =
+    response.match(/(\d+)\s+already had a recent HbA1c/i) ||
+    response.match(/candidatesWithRecentHbA1c\s*[=:]\s*(\d+)/i) ||
+    response.match(/With\s+(?:recent\s+)?HbA1c[^:]*:\s*(\d+)/i) ||
+    response.match(/HbA1c.*?already.*?(\d+)/i);
+
   if (recentHbA1cMatch) {
-    const count = recentHbA1cMatch[1] || recentHbA1cMatch[2] || '0';
-    metrics.push({
-      label: 'With Recent HbA1c',
-      value: count,
-      color: 'green',
-    });
+    const count = recentHbA1cMatch[1] || '0';
+    // Validate that the count is reasonable (should be less than or equal to candidates)
+    // and not a year like 1966 from dates
+    const numValue = parseInt(count);
+    if (numValue > 0 && numValue < 500) {
+      // Avoid matching years from dates and skip 0 values
+      metrics.push({
+        label: 'With Recent HbA1c',
+        value: count,
+        color: 'green',
+      });
+    }
   }
 
   // Extract care-gap cohort count - multiple patterns
+  // Look for "4 in the final care-gap cohort" or "finalCohort: 4"
   const gapCohortMatch =
+    response.match(/(\d+)\s+in\s+the\s+final\s+care-gap\s+cohort/i) ||
     response.match(/(?:Final\s+)?care-gap\s+cohort[^:]*:\s*(\d+)/i) ||
     response.match(/finalCohort.*?[=:]\s*(\d+)/i) ||
     response.match(/gapCohort.*?[=:]\s*(\d+)\s*patients/i);
@@ -106,16 +115,26 @@ const parseOutcome = (response: string): ParsedOutcome => {
     });
   }
 
-  // Extract existing plans excluded
+  // Extract existing plans excluded - be specific to avoid matching dates
+  // Look for "0 of 4 gap-cohort" (number BEFORE the phrase)
   const existingPlansMatch =
-    response.match(/Already had an active.*?(?:excluded|found)[^\d]*(\d+)/i) ||
-    response.match(/Existing.*?Plan.*?:\s*(\d+)/i);
+    response.match(
+      /(\d+)\s+of\s+\d+\s+gap-cohort\s+patients\s+had\s+a\s+prior/i,
+    ) ||
+    response.match(/Already\s+had\s+an\s+active.*?CarePlan[^:]*:\s*(\d+)/i) ||
+    response.match(/Existing\s+care-gap\s+CarePlan[^:]*:\s*(\d+)/i);
+
   if (existingPlansMatch) {
-    metrics.push({
-      label: 'Existing Plans',
-      value: existingPlansMatch[1],
-      color: 'gray',
-    });
+    const count = existingPlansMatch[1] || '0';
+    const numValue = parseInt(count);
+    if (numValue < 500) {
+      // Avoid matching years from dates
+      metrics.push({
+        label: 'Existing Plans',
+        value: count,
+        color: 'gray',
+      });
+    }
   }
 
   // Extract key details
