@@ -24,6 +24,7 @@ import {
 } from '../components/care-coordinator/missionUi';
 import { MissionOutcomeDisplay } from '../components/care-coordinator/MissionOutcomeDisplay';
 import { CarePlanInterventionDisplay } from '../components/care-coordinator/CarePlanInterventionDisplay';
+import { CarePlanFetchedInterventionDisplay } from '../components/care-coordinator/CarePlanFetchedInterventionDisplay';
 import { CarePlanModal } from '../components/care-coordinator/CarePlanModal';
 
 const PERSONA_ID = 'diabetic-care-assessment-manager';
@@ -55,7 +56,15 @@ const InterventionReviewPanel: React.FC<{
       <div className="flex items-start gap-2.5">
         <IconAlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          {intervention.question.toLowerCase().includes('careplan') ? (
+          {intervention.context?.createdResourceIds &&
+          intervention.context.createdResourceIds.length > 0 ? (
+            <CarePlanFetchedInterventionDisplay
+              resourceIds={intervention.context.createdResourceIds}
+              hitlTriggerReason={intervention.context.hitlTriggerReason}
+              question={intervention.question}
+              onSelectCarePlan={onSelectCarePlan}
+            />
+          ) : intervention.question.toLowerCase().includes('careplan') ? (
             <CarePlanInterventionDisplay
               message={intervention.question}
               onSelectCarePlan={onSelectCarePlan}
@@ -192,7 +201,24 @@ const CareCoordinatorPage: React.FC = () => {
   const refreshInterventions = () => {
     agentMissionService
       .getPendingInterventions()
-      .then(setInterventions)
+      .then((interventions) => {
+        // Enrich interventions with mission data (e.g., createdResourceIds)
+        const enriched = interventions.map((intervention) => ({
+          ...intervention,
+          context: {
+            ...intervention.context,
+            // Add createdResourceIds from active mission if it matches this intervention
+            ...(activeMission?.missionId === intervention.missionId &&
+            activeMission?.outputs?.createdResourceIds
+              ? {
+                  createdResourceIds:
+                    activeMission.outputs.createdResourceIds,
+                }
+              : {}),
+          },
+        }));
+        setInterventions(enriched);
+      })
       .catch(() => {
         // Non-fatal — the last-known pending list stays visible.
       });

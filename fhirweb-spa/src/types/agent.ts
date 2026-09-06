@@ -134,6 +134,7 @@ export interface MissionExecutionResult {
     tokensUsed?: number;
     costBreakdown?: CostBreakdown;
     carePlansCreated?: CarePlanCreated[];
+    createdResourceIds?: string[]; // Resource IDs created by mission (e.g., ["CarePlan/id1", "CarePlan/id2"])
   };
   failureReason?: string;
   startedAt?: string;
@@ -179,6 +180,7 @@ export interface AgentInterventionRequest {
     proposedPlan?: {
       steps: ProposedPlanStep[];
     };
+    createdResourceIds?: string[]; // Resource IDs from mission output (e.g., ["CarePlan/id1", "CarePlan/id2"])
     [key: string]: unknown;
   };
 }

@@ -166,6 +166,12 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
     carePlansCreated = asObject.carePlansCreated;
   }
 
+  // Extract createdResourceIds - list of resource IDs created by the mission
+  let createdResourceIds = outputs.createdResourceIds;
+  if (!createdResourceIds) {
+    createdResourceIds = asObject.createdResourceIds;
+  }
+
   const normalized = {
     missionId: asObject.missionId || asObject.id || asObject.executionId || '',
     status: (asObject.status || 'PENDING') as MissionExecutionResult['status'],
@@ -179,6 +185,7 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
       tokensUsed: outputs.tokensUsed,
       costBreakdown: outputs.costBreakdown as CostBreakdown | undefined,
       carePlansCreated: carePlansCreated,
+      createdResourceIds: createdResourceIds,
     },
     failureReason:
       asObject.failureReason ||
