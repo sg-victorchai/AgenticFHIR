@@ -626,7 +626,7 @@ const CareCoordinatorPage: React.FC = () => {
                               </p>
                             </div>
                             <span className="inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 whitespace-nowrap">
-                              View
+                              View/Edit
                             </span>
                           </div>
                         </button>

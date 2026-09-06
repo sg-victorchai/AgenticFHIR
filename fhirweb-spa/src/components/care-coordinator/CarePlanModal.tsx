@@ -95,7 +95,10 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
         <div className="flex items-start justify-between gap-3 p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 shrink-0">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
-              Care Plan {isEditing && <span className="text-sm text-blue-600">(Editing)</span>}
+              Care Plan{' '}
+              {isEditing && (
+                <span className="text-sm text-blue-600">(Editing)</span>
+              )}
             </h2>
             <p className="text-xs sm:text-sm text-gray-600 mt-1 truncate">
               {patientName}
@@ -407,9 +410,7 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
                 disabled={isSaving}
                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
-                {isSaving && (
-                  <IconSpinner className="h-4 w-4 animate-spin" />
-                )}
+                {isSaving && <IconSpinner className="h-4 w-4 animate-spin" />}
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
             </>
