@@ -81,6 +81,7 @@ const MissionHistoryPage: React.FC = () => {
           patientId: '',
           mrn: '',
           name: '',
+          gender: '',
           carePlanId: planId,
         };
       });
@@ -280,17 +281,28 @@ const MissionHistoryPage: React.FC = () => {
                               <div className="flex-1 min-w-0">
                                 {carePlan.name ? (
                                   <>
-                                    <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors truncate text-sm">
+                                    <p className="text-xs text-gray-600 mb-2">
                                       {carePlan.name}
-                                    </h4>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      MRN: {carePlan.mrn}
+                                      {carePlan.mrn && (
+                                        <span className="text-gray-500">
+                                          {' '}
+                                          (MRN: {carePlan.mrn}
+                                          {carePlan.gender &&
+                                            `, ${carePlan.gender}`}
+                                          )
+                                        </span>
+                                      )}
                                     </p>
+                                    <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors text-sm">
+                                      Care Plan
+                                    </h4>
                                   </>
                                 ) : (
-                                  <p className="text-xs text-gray-500">
-                                    CarePlan (Details loading...)
-                                  </p>
+                                  <>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                      CarePlan (Details loading...)
+                                    </p>
+                                  </>
                                 )}
                                 <p className="text-xs text-gray-400 font-mono mt-1 truncate">
                                   {carePlan.carePlanId}

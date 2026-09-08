@@ -109,6 +109,7 @@ export interface CarePlanCreated {
   patientId: string;
   mrn: string;
   name: string;
+  gender?: string; // Patient gender (male | female | other | unknown)
   carePlanId: string;
 }
 
