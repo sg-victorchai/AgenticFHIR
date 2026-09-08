@@ -652,24 +652,30 @@ const CareCoordinatorPage: React.FC = () => {
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                {carePlan.name && (
-                                  <p className="text-xs text-gray-600 mb-2">
-                                    {carePlan.name}
-                                    {carePlan.mrn && (
-                                      <span className="text-gray-500">
-                                        {' '}
-                                        (MRN: {carePlan.mrn}
-                                        {carePlan.gender &&
-                                          `, ${carePlan.gender}`}
-                                        )
-                                      </span>
-                                    )}
-                                  </p>
+                                {carePlan.name && carePlan.name.trim() ? (
+                                  <>
+                                    <p className="text-xs text-gray-600 mb-2">
+                                      {carePlan.name}
+                                      {carePlan.mrn && (
+                                        <span className="text-gray-500">
+                                          {' '}
+                                          (MRN: {carePlan.mrn}
+                                          {carePlan.gender &&
+                                            `, ${carePlan.gender}`}
+                                          )
+                                        </span>
+                                      )}
+                                    </p>
+                                    <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors text-sm">
+                                      Care Plan
+                                    </h4>
+                                  </>
+                                ) : (
+                                  <h4 className="font-medium text-gray-900 text-sm mb-2">
+                                    Care Plan
+                                  </h4>
                                 )}
-                                <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors text-sm">
-                                  Care Plan
-                                </h4>
-                                <p className="text-xs text-gray-400 font-mono mt-1 truncate">
+                                <p className="text-xs text-gray-400 font-mono truncate">
                                   {carePlan.carePlanId}
                                 </p>
                               </div>
