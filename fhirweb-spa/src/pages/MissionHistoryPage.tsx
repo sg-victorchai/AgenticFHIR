@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { agentMissionService } from '../services/agentMissionService';
+import { useFHIR } from '../contexts/FHIRContext';
 import { MissionExecutionResult, CarePlanCreated } from '../types/agent';
 import {
   IconAlertTriangle,
@@ -39,6 +40,11 @@ const MissionHistoryPage: React.FC = () => {
   );
   const [selectedCarePlan, setSelectedCarePlan] =
     useState<CarePlanCreated | null>(null);
+  const [enrichedCarePlans, setEnrichedCarePlans] = useState<CarePlanCreated[]>(
+    [],
+  );
+
+  const { client: fhirClient } = useFHIR();
 
   const loadMissions = () => {
     setLoading(true);
@@ -71,20 +77,112 @@ const MissionHistoryPage: React.FC = () => {
     (m) => m.missionId === selectedMissionId,
   );
 
-  // Use carePlansCreated if available, otherwise create placeholder objects from createdResourceIds
+  // Fetch CarePlan details from FHIR to enrich care plan data with patient information
+  useEffect(() => {
+    if (!fhirClient || !selectedMission?.outputs?.createdResourceIds) {
+      setEnrichedCarePlans([]);
+      return;
+    }
+
+    const enrichCarePlans = async () => {
+      const planIds = (selectedMission.outputs?.createdResourceIds || []).map(
+        (id) => (id.includes('/') ? id.split('/').pop() || id : id),
+      );
+
+      const enriched: CarePlanCreated[] = [];
+
+      for (const planId of planIds) {
+        try {
+          const carePlan = await fhirClient.read({
+            resourceType: 'CarePlan',
+            id: planId,
+          });
+
+          // Extract patient reference
+          const patientRef = carePlan.subject?.reference;
+          if (patientRef) {
+            const patientId = patientRef.split('/').pop() || '';
+
+            // Fetch Patient resource to get name, gender, MRN
+            try {
+              const patient = await fhirClient.read({
+                resourceType: 'Patient',
+                id: patientId,
+              });
+
+              const name =
+                patient.name?.[0]?.given?.join(' ') && patient.name[0]?.family
+                  ? `${patient.name[0].given.join(' ')} ${patient.name[0].family}`
+                  : patient.name?.[0]?.text || '';
+
+              const mrn =
+                patient.identifier?.find(
+                  (id: any) => id.type?.coding?.[0]?.code === 'MR',
+                )?.value || '';
+
+              const gender = patient.gender || '';
+
+              enriched.push({
+                patientId,
+                mrn,
+                name,
+                gender,
+                carePlanId: planId,
+              });
+            } catch {
+              // If patient fetch fails, use placeholder
+              enriched.push({
+                patientId,
+                mrn: '',
+                name: '',
+                gender: '',
+                carePlanId: planId,
+              });
+            }
+          } else {
+            // No patient reference, use placeholder
+            enriched.push({
+              patientId: '',
+              mrn: '',
+              name: '',
+              gender: '',
+              carePlanId: planId,
+            });
+          }
+        } catch {
+          // If CarePlan fetch fails, use placeholder
+          enriched.push({
+            patientId: '',
+            mrn: '',
+            name: '',
+            gender: '',
+            carePlanId: planId,
+          });
+        }
+      }
+
+      setEnrichedCarePlans(enriched);
+    };
+
+    enrichCarePlans();
+  }, [fhirClient, selectedMission?.outputs?.createdResourceIds]);
+
+  // Use carePlansCreated if available, enriched from FHIR if available, otherwise create placeholder objects from createdResourceIds
   const generatedCarePlans = selectedMission?.outputs?.carePlansCreated
     ? selectedMission.outputs.carePlansCreated
-    : (selectedMission?.outputs?.createdResourceIds || []).map((id) => {
-        // Extract just the ID part if it's in the format "CarePlan/id" or "CarePlan/type/id"
-        const planId = id.includes('/') ? id.split('/').pop() || id : id;
-        return {
-          patientId: '',
-          mrn: '',
-          name: '',
-          gender: '',
-          carePlanId: planId,
-        };
-      });
+    : enrichedCarePlans.length > 0
+      ? enrichedCarePlans
+      : (selectedMission?.outputs?.createdResourceIds || []).map((id) => {
+          // Extract just the ID part if it's in the format "CarePlan/id" or "CarePlan/type/id"
+          const planId = id.includes('/') ? id.split('/').pop() || id : id;
+          return {
+            patientId: '',
+            mrn: '',
+            name: '',
+            gender: '',
+            carePlanId: planId,
+          };
+        });
 
   return (
     <div className="min-h-screen bg-gray-50">
