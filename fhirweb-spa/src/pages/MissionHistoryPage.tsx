@@ -103,7 +103,7 @@ const MissionHistoryPage: React.FC = () => {
           if (patientRef) {
             const patientId = patientRef.split('/').pop() || '';
 
-            // Fetch Patient resource to get name, gender, MRN
+            // Fetch Patient resource to get name, gender, MRN, DOB
             try {
               const patient = await fhirClient.read({
                 resourceType: 'Patient',
@@ -121,12 +121,14 @@ const MissionHistoryPage: React.FC = () => {
                 )?.value || '';
 
               const gender = patient.gender || '';
+              const dob = patient.birthDate || '';
 
               enriched.push({
                 patientId,
                 mrn,
                 name,
                 gender,
+                dob,
                 carePlanId: planId,
               });
             } catch {
@@ -136,6 +138,7 @@ const MissionHistoryPage: React.FC = () => {
                 mrn: '',
                 name: '',
                 gender: '',
+                dob: '',
                 carePlanId: planId,
               });
             }
@@ -146,6 +149,7 @@ const MissionHistoryPage: React.FC = () => {
               mrn: '',
               name: '',
               gender: '',
+              dob: '',
               carePlanId: planId,
             });
           }
@@ -156,6 +160,7 @@ const MissionHistoryPage: React.FC = () => {
             mrn: '',
             name: '',
             gender: '',
+            dob: '',
             carePlanId: planId,
           });
         }
@@ -180,6 +185,7 @@ const MissionHistoryPage: React.FC = () => {
             mrn: '',
             name: '',
             gender: '',
+            dob: '',
             carePlanId: planId,
           };
         });
@@ -379,18 +385,20 @@ const MissionHistoryPage: React.FC = () => {
                               <div className="flex-1 min-w-0">
                                 {carePlan.name && carePlan.name.trim() ? (
                                   <>
-                                    <p className="text-xs text-gray-600 mb-2">
+                                    <p className="text-xs text-gray-700 font-medium mb-1">
                                       {carePlan.name}
-                                      {carePlan.mrn && (
-                                        <span className="text-gray-500">
-                                          {' '}
-                                          (MRN: {carePlan.mrn}
-                                          {carePlan.gender &&
-                                            `, ${carePlan.gender}`}
-                                          )
-                                        </span>
-                                      )}
                                     </p>
+                                    <div className="text-xs text-gray-500 space-y-0.5 mb-2">
+                                      {carePlan.mrn && (
+                                        <p>MRN: {carePlan.mrn}</p>
+                                      )}
+                                      {carePlan.gender && (
+                                        <p>Gender: {carePlan.gender}</p>
+                                      )}
+                                      {carePlan.dob && (
+                                        <p>DOB: {carePlan.dob}</p>
+                                      )}
+                                    </div>
                                     <h4 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors text-sm">
                                       Care Plan
                                     </h4>

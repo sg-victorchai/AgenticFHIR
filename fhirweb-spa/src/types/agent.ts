@@ -110,6 +110,7 @@ export interface CarePlanCreated {
   mrn: string;
   name: string;
   gender?: string; // Patient gender (male | female | other | unknown)
+  dob?: string; // Patient date of birth (YYYY-MM-DD)
   carePlanId: string;
 }
 
