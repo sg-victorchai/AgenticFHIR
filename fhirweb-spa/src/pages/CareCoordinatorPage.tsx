@@ -8,6 +8,9 @@ import {
   AgentInterventionRequest,
   MissionExecutionResult,
   CarePlanCreated,
+  PersonaParametersResponse,
+  PersonaParameter,
+  RequiredContextKey,
 } from '../types/agent';
 import {
   IconAlertTriangle,
@@ -161,10 +164,19 @@ const InterventionReviewPanel: React.FC<{
 };
 
 const CareCoordinatorPage: React.FC = () => {
-  const [goal, setGoal] = useState(DEFAULT_GOAL);
+  const [goal, setGoal] = useState('');
   const [delegatedBy, setDelegatedBy] = useState(
     () => sessionStorage.getItem(DELEGATED_BY_STORAGE_KEY) || '',
   );
+  const [personaConfig, setPersonaConfig] =
+    useState<PersonaParametersResponse | null>(null);
+  const [requiredContextValues, setRequiredContextValues] = useState<
+    Record<string, any>
+  >({});
+  const [personaParamValues, setPersonaParamValues] = useState<
+    Record<string, any>
+  >({});
+  const [personaParamsLoading, setPersonaParamsLoading] = useState(true);
   const [activeMission, setActiveMission] =
     useState<MissionExecutionResult | null>(null);
   const [activeMissionLoading, setActiveMissionLoading] = useState(false);
@@ -186,6 +198,300 @@ const CareCoordinatorPage: React.FC = () => {
   );
 
   const { client: fhirClient } = useFHIR();
+
+  const updateRequiredContextValue = (key: string, value: any) => {
+    setRequiredContextValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const handleDelegatedByChange = (value: string) => {
+    setDelegatedBy(value);
+    setRequiredContextValues((prev) => ({
+      ...prev,
+      delegatedBy: value,
+    }));
+  };
+
+  const normalizeGoalText = (value?: string) =>
+    (value || '')
+      .replace(/\r\n|\r|\n/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+  const buildGoalFromCurrentValues = () => {
+    const baseGoal =
+      normalizeGoalText(personaConfig?.description) || DEFAULT_GOAL;
+    const paramEntries = Object.entries(personaParamValues).filter(
+      ([, value]) => value !== '' && value !== null && value !== undefined,
+    );
+
+    if (paramEntries.length === 0) {
+      return baseGoal;
+    }
+
+    const summary = paramEntries
+      .map(([key, value]) => {
+        const param = personaConfig?.params?.find(
+          (candidate) => candidate.id === key,
+        );
+        const label = param?.label || key;
+        const formattedValue =
+          typeof value === 'boolean'
+            ? value
+              ? 'true'
+              : 'false'
+            : Array.isArray(value)
+              ? value.join(', ')
+              : String(value);
+        return `${label}: ${formattedValue}`;
+      })
+      .join('; ');
+
+    return `${baseGoal} Current parameters: ${summary}.`;
+  };
+
+  const updatePersonaParamValue = (paramId: string, value: any) => {
+    setPersonaParamValues((prev) => ({
+      ...prev,
+      [paramId]: value,
+    }));
+  };
+
+  const renderRequiredContextField = (key: RequiredContextKey) => {
+    const id = key.key;
+    const inputValue = requiredContextValues[id] ?? '';
+
+    if (key.type === 'boolean') {
+      return (
+        <label
+          key={id}
+          className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5"
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(inputValue)}
+            onChange={(e) => updateRequiredContextValue(id, e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+          />
+          <span className="text-sm text-gray-700">{key.label || id}</span>
+        </label>
+      );
+    }
+
+    if (key.type === 'number' || key.type === 'integer') {
+      return (
+        <div key={id}>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            {key.label || id}
+          </label>
+          <input
+            type="number"
+            step={key.type === 'integer' ? '1' : 'any'}
+            value={inputValue}
+            onChange={(e) => {
+              const nextValue =
+                e.target.value === '' ? '' : Number(e.target.value);
+              updateRequiredContextValue(id, nextValue);
+            }}
+            className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800"
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div key={id}>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          {key.label || id}
+        </label>
+        <input
+          type="text"
+          value={String(inputValue ?? '')}
+          onChange={(e) => updateRequiredContextValue(id, e.target.value)}
+          className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800"
+        />
+      </div>
+    );
+  };
+
+  const renderPersonaParam = (param: PersonaParameter, index: number) => {
+    const baseFieldClass =
+      'w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800';
+
+    if (param.type === 'location-group') {
+      return (
+        <div
+          key={param.id || index}
+          className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
+        >
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+            {param.label}
+          </div>
+          {(param.fields || []).map((field) => (
+            <div key={field.id}>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                {field.label}
+              </label>
+              <input
+                type="text"
+                value={personaParamValues[field.id] ?? field.default ?? ''}
+                onChange={(e) =>
+                  updatePersonaParamValue(field.id, e.target.value)
+                }
+                className={baseFieldClass}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (param.type === 'boolean') {
+      return (
+        <label
+          key={param.id || index}
+          className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5"
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(
+              personaParamValues[param.id] ?? param.default ?? false,
+            )}
+            onChange={(e) =>
+              updatePersonaParamValue(param.id, e.target.checked)
+            }
+            className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+          />
+          <span className="text-sm text-gray-700">{param.label}</span>
+        </label>
+      );
+    }
+
+    if (param.type === 'select') {
+      return (
+        <div key={param.id || index}>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            {param.label}
+          </label>
+          <select
+            value={personaParamValues[param.id] ?? param.default ?? ''}
+            onChange={(e) => updatePersonaParamValue(param.id, e.target.value)}
+            className={baseFieldClass}
+          >
+            <option value="">Select an option</option>
+            {(param.options || []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (param.type === 'integer' || param.type === 'number') {
+      return (
+        <div key={param.id || index}>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            {param.label}
+          </label>
+          <input
+            type="number"
+            step={param.type === 'integer' ? '1' : 'any'}
+            min={param.min}
+            max={param.max}
+            value={personaParamValues[param.id] ?? param.default ?? ''}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const nextValue = raw === '' ? '' : Number(raw);
+              updatePersonaParamValue(param.id, nextValue);
+            }}
+            className={baseFieldClass}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div key={param.id || index}>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          {param.label}
+        </label>
+        <input
+          type="text"
+          value={personaParamValues[param.id] ?? param.default ?? ''}
+          onChange={(e) => updatePersonaParamValue(param.id, e.target.value)}
+          className={baseFieldClass}
+        />
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    setRequiredContextValues((prev) => ({
+      ...prev,
+      delegatedBy,
+    }));
+  }, [delegatedBy]);
+
+  const visibleRequiredContext = (personaConfig?.requiredContext || []).filter(
+    (contextKey) => contextKey.key !== 'delegatedBy',
+  );
+
+  useEffect(() => {
+    setGoal(buildGoalFromCurrentValues());
+  }, [personaConfig, personaParamValues]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPersonaParameters = async () => {
+      try {
+        const config =
+          await agentMissionService.getPersonaParameters(PERSONA_ID);
+        if (!active) return;
+        setPersonaConfig(config);
+
+        const contextDefaults: Record<string, any> = {
+          delegatedBy,
+        };
+        (config.requiredContext || []).forEach((contextKey) => {
+          if (contextKey.key && contextKey.key !== 'delegatedBy') {
+            contextDefaults[contextKey.key] = '';
+          }
+        });
+        setRequiredContextValues(contextDefaults);
+
+        const defaults: Record<string, any> = {};
+        (config.params || []).forEach((param) => {
+          if (param.default !== undefined) {
+            defaults[param.id] = param.default;
+          }
+          if (param.type === 'location-group') {
+            (param.fields || []).forEach((field) => {
+              if (field.default !== undefined) {
+                defaults[field.id] = field.default;
+              }
+            });
+          }
+        });
+        setPersonaParamValues(defaults);
+      } catch (error) {
+        console.error('Failed to load persona parameters:', error);
+      } finally {
+        if (active) {
+          setPersonaParamsLoading(false);
+        }
+      }
+    };
+
+    loadPersonaParameters();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const persistActiveMission = (mission: MissionExecutionResult) => {
     setActiveMission(mission);
@@ -443,10 +749,19 @@ const CareCoordinatorPage: React.FC = () => {
 
     try {
       sessionStorage.setItem(DELEGATED_BY_STORAGE_KEY, trimmedDelegatedBy);
+      const submissionContext = {
+        ...requiredContextValues,
+        delegatedBy: trimmedDelegatedBy,
+        ...personaParamValues,
+      };
+
       const mission = await agentMissionService.submitMission(
         PERSONA_ID,
-        goal.trim() || DEFAULT_GOAL,
+        normalizeGoalText(goal) ||
+          normalizeGoalText(personaConfig?.description) ||
+          DEFAULT_GOAL,
         trimmedDelegatedBy,
+        submissionContext,
       );
       persistActiveMission(mission);
     } catch (err: any) {
@@ -571,11 +886,12 @@ const CareCoordinatorPage: React.FC = () => {
               </label>
               <textarea
                 value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                rows={3}
-                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800 resize-none"
+                readOnly
+                rows={5}
+                className="w-full min-h-[120px] px-3.5 pt-2 pb-3 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm leading-7 text-gray-800 resize-none align-top"
               />
             </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                 Delegated by <span className="text-red-500">*</span>
@@ -583,11 +899,46 @@ const CareCoordinatorPage: React.FC = () => {
               <input
                 type="text"
                 value={delegatedBy}
-                onChange={(e) => setDelegatedBy(e.target.value)}
+                onChange={(e) => handleDelegatedByChange(e.target.value)}
                 placeholder="Practitioner or system delegating this mission"
                 className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-sm text-gray-800"
               />
             </div>
+
+            {personaParamsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <IconSpinner className="h-4 w-4 animate-spin" />
+                Loading mission parameters…
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {visibleRequiredContext.length > 0 && (
+                  <div className="border-t border-gray-200 pt-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                      Mission Context
+                    </h3>
+                    <div className="space-y-4">
+                      {visibleRequiredContext.map((contextKey) =>
+                        renderRequiredContextField(contextKey),
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {personaConfig?.params && personaConfig.params.length > 0 ? (
+                  <div className="border-t border-gray-200 pt-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                      Persona Parameters
+                    </h3>
+                    <div className="space-y-4">
+                      {personaConfig.params.map((param, index) =>
+                        renderPersonaParam(param, index),
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
 
           {submitError && (
@@ -730,6 +1081,7 @@ const CareCoordinatorPage: React.FC = () => {
                   </h3>
                   <MissionOutcomeDisplay
                     response={activeMission.outputs.response}
+                    cohortMetrics={activeMission.outputs.cohortMetrics}
                   />
                 </div>
               )}

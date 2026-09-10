@@ -137,6 +137,7 @@ export interface MissionExecutionResult {
     costBreakdown?: CostBreakdown;
     carePlansCreated?: CarePlanCreated[];
     createdResourceIds?: string[]; // Resource IDs created by mission (e.g., ["CarePlan/id1", "CarePlan/id2"])
+    cohortMetrics?: Record<string, number | string | boolean>;
   };
   failureReason?: string;
   startedAt?: string;
@@ -147,6 +148,54 @@ export interface MissionExecutionResult {
     toolCalls?: number;
     tokensUsed?: number;
   };
+}
+
+/**
+ * Required context key for mission submission
+ */
+export interface RequiredContextKey {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  description?: string;
+}
+
+/**
+ * Single parameter for mission submission form
+ */
+export interface PersonaParameter {
+  id: string;
+  label: string;
+  type:
+    | 'integer'
+    | 'number'
+    | 'boolean'
+    | 'string'
+    | 'select'
+    | 'location-group';
+  default?: any;
+  min?: number;
+  max?: number;
+  required?: boolean;
+  description?: string;
+  options?: Array<{ value: string; label: string }>;
+  fields?: PersonaParameter[]; // For location-group
+  dependsOn?: { param: string; value: any };
+}
+
+/**
+ * Persona parameters response from discovery endpoint
+ */
+export interface PersonaParametersResponse {
+  personaId: string;
+  personaName: string;
+  description?: string;
+  intendedUserRole?: string;
+  intendedChannels?: string[];
+  executionModes?: string[];
+  requiredContext?: RequiredContextKey[];
+  params?: PersonaParameter[];
 }
 
 /**

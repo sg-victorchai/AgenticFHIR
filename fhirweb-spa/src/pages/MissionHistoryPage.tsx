@@ -15,6 +15,7 @@ import {
   formatRelativeTime,
 } from '../components/care-coordinator/missionUi';
 import { MissionOutcomeDisplay } from '../components/care-coordinator/MissionOutcomeDisplay';
+import { MissionDetailPanel } from '../components/care-coordinator/MissionDetailPanel';
 import { CarePlanModal } from '../components/care-coordinator/CarePlanModal';
 
 const PERSONA_ID = 'diabetic-care-assessment-manager';
@@ -276,39 +277,50 @@ const MissionHistoryPage: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-100 overflow-y-auto max-h-[70vh]">
+              <div className="divide-y divide-gray-100 overflow-visible pb-[50vh] lg:overflow-y-auto lg:max-h-[70vh] lg:pb-0">
                 {filteredMissions.map((mission) => (
-                  <button
-                    key={mission.missionId}
-                    onClick={() => setSelectedMissionId(mission.missionId)}
-                    className={`w-full text-left px-5 py-3.5 hover:bg-gray-50 transition-colors ${
-                      selectedMissionId === mission.missionId
-                        ? 'bg-amber-50/70'
-                        : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <MissionStatusBadge status={mission.status} />
-                      <span className="text-xs text-gray-400">
-                        {formatRelativeTime(
-                          mission.completedAt || mission.startedAt,
-                        )}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-700 line-clamp-2">
-                      {mission.goal}
-                    </p>
-                    <p className="text-xs text-gray-400 font-mono mt-1 truncate">
-                      {mission.missionId}
-                    </p>
-                  </button>
+                  <React.Fragment key={mission.missionId}>
+                    <button
+                      onClick={() => setSelectedMissionId(mission.missionId)}
+                      className={`w-full text-left px-5 py-3.5 hover:bg-gray-50 transition-colors ${
+                        selectedMissionId === mission.missionId
+                          ? 'bg-amber-50/70'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <MissionStatusBadge status={mission.status} />
+                        <span className="text-xs text-gray-400">
+                          {formatRelativeTime(
+                            mission.completedAt || mission.startedAt,
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 line-clamp-2">
+                        {mission.goal}
+                      </p>
+                      <p className="text-xs text-gray-400 font-mono mt-1 truncate">
+                        {mission.missionId}
+                      </p>
+                    </button>
+                    {selectedMissionId === mission.missionId &&
+                      selectedMission && (
+                        <div className="fixed inset-x-0 bottom-0 z-40 h-[50vh] overflow-y-auto border-t border-gray-300 bg-gray-50 p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.12)] lg:hidden">
+                          <MissionDetailPanel
+                            mission={selectedMission}
+                            generatedCarePlans={generatedCarePlans}
+                            onSelectCarePlan={setSelectedCarePlan}
+                          />
+                        </div>
+                      )}
+                  </React.Fragment>
                 ))}
               </div>
             )}
           </div>
 
           {/* Mission detail */}
-          <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="hidden lg:block lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             {!selectedMission ? (
               <div className="h-full py-24 px-6 flex flex-col items-center text-center justify-center">
                 <div className="h-12 w-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mb-3">
@@ -359,6 +371,7 @@ const MissionHistoryPage: React.FC = () => {
                       </h3>
                       <MissionOutcomeDisplay
                         response={selectedMission.outputs.response}
+                        cohortMetrics={selectedMission.outputs.cohortMetrics}
                       />
                     </div>
                   )}

@@ -16,7 +16,36 @@ interface ParsedOutcome {
   rawResponse: string;
 }
 
-const parseOutcome = (response: string): ParsedOutcome => {
+type CohortMetrics = Record<string, number | string | boolean>;
+
+const formatMetricLabel = (key: string): string =>
+  key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+
+const getMetricColorForKey = (key: string): OutcomeMetric['color'] => {
+  if (/alreadyScreened|excluded|prior/i.test(key)) return 'green';
+  if (/gap|finalCohort/i.test(key)) return 'amber';
+  if (/total|demographic|scanned/i.test(key)) return 'blue';
+  return 'gray';
+};
+
+const getMetricDisplayPriority = (label: string): number => {
+  const demographicMetrics = [
+    'Total Patients Scanned',
+    'Demographic Cohort Size',
+    'Excluded Prior Care Plan',
+  ];
+  const priority = demographicMetrics.indexOf(label);
+  if (label === 'Final Cohort Size') return demographicMetrics.length + 1;
+  return priority === -1 ? demographicMetrics.length : priority;
+};
+
+const parseOutcome = (
+  response: string,
+  cohortMetrics?: CohortMetrics,
+): ParsedOutcome => {
   if (!response || !response.trim()) {
     return {
       metrics: [],
@@ -69,6 +98,30 @@ const parseOutcome = (response: string): ParsedOutcome => {
     // Structure 2: Direct outputs field
     if (!outputsToUse) {
       outputsToUse = jsonData.outputs;
+    }
+
+    const dynamicCohortMetrics = cohortMetrics || outputsToUse?.cohortMetrics;
+    if (dynamicCohortMetrics && typeof dynamicCohortMetrics === 'object') {
+      Object.entries(dynamicCohortMetrics).forEach(([key, value]) => {
+        if (
+          key !== 'parameters' &&
+          value !== null &&
+          value !== undefined &&
+          typeof value !== 'object'
+        ) {
+          metrics.push({
+            label: formatMetricLabel(key),
+            value: String(value),
+            color: getMetricColorForKey(key),
+          });
+        }
+      });
+
+      const gapCohortSize = dynamicCohortMetrics.finalGapCohortSize;
+      if (typeof gapCohortSize === 'number' && gapCohortSize > 0) {
+        status = 'success';
+        summary = `${gapCohortSize} patient${gapCohortSize !== 1 ? 's' : ''} with care-gap identified and drafted for review`;
+      }
     }
 
     let foundCarePlans: any[] = [];
@@ -347,7 +400,15 @@ const parseOutcome = (response: string): ParsedOutcome => {
   return {
     assessmentType,
     cohortCriteria,
-    metrics,
+    metrics: metrics
+      .map((metric, index) => ({ metric, index }))
+      .sort(
+        (left, right) =>
+          getMetricDisplayPriority(left.metric.label) -
+            getMetricDisplayPriority(right.metric.label) ||
+          left.index - right.index,
+      )
+      .map(({ metric }) => metric),
     status,
     summary,
     details: details.length > 0 ? details : undefined,
@@ -381,12 +442,14 @@ const getMetricColor = (
 
 interface MissionOutcomeDisplayProps {
   response: string;
+  cohortMetrics?: CohortMetrics;
 }
 
 export const MissionOutcomeDisplay: React.FC<MissionOutcomeDisplayProps> = ({
   response,
+  cohortMetrics,
 }) => {
-  const parsed = parseOutcome(response);
+  const parsed = parseOutcome(response, cohortMetrics);
 
   // Fallback if no data was parsed
   if (parsed.metrics.length === 0 && !parsed.summary) {

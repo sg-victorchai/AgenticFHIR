@@ -7,6 +7,7 @@ import {
   AgentSource,
   CostBreakdown,
   MissionExecutionResult,
+  PersonaParametersResponse,
 } from '../types/agent';
 
 // Agent/AI API base URL (separate from FHIR server URL)
@@ -200,6 +201,10 @@ const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
       costBreakdown: outputs.costBreakdown as CostBreakdown | undefined,
       carePlansCreated: carePlansCreated,
       createdResourceIds: createdResourceIds,
+      cohortMetrics:
+        outputs.cohortMetrics && typeof outputs.cohortMetrics === 'object'
+          ? outputs.cohortMetrics
+          : undefined,
     },
     failureReason:
       asObject.failureReason ||
@@ -225,12 +230,39 @@ const extractList = (parsed: any): any[] => {
 };
 
 export const agentMissionService = {
+  async getPersonaParameters(
+    personaId: string,
+  ): Promise<PersonaParametersResponse> {
+    const headers = await buildAuthHeaders();
+    delete headers['Content-Type'];
+
+    const response = await fetch(
+      `${AGENT_API_BASE_URL}/api/agent/AgentPersona/${encodeURIComponent(personaId)}/$parameters`,
+      { headers },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch persona parameters (${response.status})`,
+      );
+    }
+
+    return parseJsonSafely(await response.text());
+  },
+
   async submitMission(
     personaId: string,
     goal: string,
     delegatedBy: string,
+    context?: Record<string, any>,
   ): Promise<MissionExecutionResult> {
     const headers = await buildAuthHeaders();
+
+    const missionContext = {
+      delegatedBy,
+      channel: 'care-coordinator-portal',
+      ...(context || {}),
+    };
 
     const response = await fetch(
       `${AGENT_API_BASE_URL}/api/agent/AgentPersona/${personaId}/AgentMission`,
@@ -239,7 +271,7 @@ export const agentMissionService = {
         headers,
         body: JSON.stringify({
           goal,
-          context: { delegatedBy, channel: 'care-coordinator-portal' },
+          context: missionContext,
         }),
       },
     );
