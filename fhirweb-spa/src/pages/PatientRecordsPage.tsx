@@ -2125,6 +2125,7 @@ const PatientRecordsPage: React.FC = () => {
   const patientAgentConfig: AgentEndpointConfig = {
     endpoint: `${AGENT_API_BASE_URL}/api/agent/AgentPersona/digital-twin/AgentMission`,
     personaId: 'digital-twin',
+    executionMode: 'foreground',
     headers: agentExtraHeaders,
     supportsContinuation: true,
   };

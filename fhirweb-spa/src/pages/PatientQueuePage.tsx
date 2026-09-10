@@ -956,15 +956,15 @@ const PatientQueuePage: React.FC = () => {
           <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs sm:text-sm font-medium w-full md:w-auto">
             <button
               onClick={() => setModeAndSave('today')}
-              className={`flex-1 px-3 sm:px-4 py-2 transition-colors text-center ${mode === 'today' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`flex-1 px-3 sm:px-4 py-2 transition-all text-center font-medium rounded-md ${mode === 'today' ? 'bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.28)]' : 'bg-gradient-to-b from-gray-100 to-gray-200 text-gray-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(15,23,42,0.08)] border border-gray-200 hover:bg-gradient-to-b hover:from-blue-50 hover:to-blue-100 hover:text-blue-700 hover:border-blue-200 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_2px_6px_rgba(59,130,246,0.12)]'}`}
             >
-              Today
+              Today&apos;s patients
             </button>
             <button
               onClick={() => setModeAndSave('range')}
-              className={`flex-1 px-3 sm:px-4 py-2 transition-colors text-center ${mode === 'range' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`flex-1 px-3 sm:px-4 py-2 transition-all text-center font-medium rounded-md ${mode === 'range' ? 'bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.28)]' : 'bg-gradient-to-b from-gray-100 to-gray-200 text-gray-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(15,23,42,0.08)] border border-gray-200 hover:bg-gradient-to-b hover:from-blue-50 hover:to-blue-100 hover:text-blue-700 hover:border-blue-200 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_2px_6px_rgba(59,130,246,0.12)]'}`}
             >
-              Range
+              Past days&apos; patients
             </button>
           </div>
 
