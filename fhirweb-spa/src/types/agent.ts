@@ -97,7 +97,6 @@ export interface RawAgentResponse {
 export interface AgentEndpointConfig {
   endpoint: string; // Full API URL: /api/agent/AgentPersona/{personaId}/AgentMission
   personaId: string; // e.g., 'digital-twin'
-  executionMode?: 'background' | 'foreground';
   headers?: Record<string, string>; // Additional headers (tenant, patient ID, auth)
   parser?: (raw: RawAgentResponse) => AgentResponse; // Custom response parser
   supportsContinuation?: boolean; // Can agent handle follow-up questions?

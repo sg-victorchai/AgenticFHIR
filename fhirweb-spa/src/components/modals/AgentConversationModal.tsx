@@ -271,7 +271,6 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       headers,
       body: JSON.stringify({
         goal,
-        executionMode: agentConfig.executionMode,
         context: {
           patientId,
           channel: 'patient-portal',
