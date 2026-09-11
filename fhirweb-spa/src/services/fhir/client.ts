@@ -290,8 +290,25 @@ export const fhirApi = createApi({
           );
 
           if (nextLink) {
-            // Use standard nextPage if link exists
-            const results = await client.nextPage({ bundle });
+            // Keep the configured FHIR base URL instead of following the
+            // server-generated absolute link, which may contain an invalid
+            // host or port in deployed environments.
+            const nextUrl = new URL(nextLink.url, 'http://dummy.com');
+            const pathParts = nextUrl.pathname.split('/').filter(Boolean);
+            const resourceType = pathParts[pathParts.length - 1];
+            if (!resourceType) {
+              throw new Error('Cannot determine resource type from next link');
+            }
+
+            const searchParams: Record<string, string> = {};
+            nextUrl.searchParams.forEach((value, key) => {
+              searchParams[key] = value;
+            });
+
+            const results = await client.search({
+              resourceType,
+              searchParams,
+            });
             return { data: results as Bundle<Resource> };
           } else {
             // Fallback: manually construct next page query using offset
