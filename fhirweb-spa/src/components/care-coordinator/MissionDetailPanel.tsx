@@ -12,15 +12,32 @@ interface MissionDetailPanelProps {
   mission: MissionExecutionResult;
   generatedCarePlans: CarePlanCreated[];
   onSelectCarePlan: (carePlan: CarePlanCreated) => void;
+  onDragStart?: React.TouchEventHandler<HTMLDivElement>;
+  onDragMove?: React.TouchEventHandler<HTMLDivElement>;
+  onDragEnd?: React.TouchEventHandler<HTMLDivElement>;
+  isDragging?: boolean;
 }
 
 export const MissionDetailPanel: React.FC<MissionDetailPanelProps> = ({
   mission,
   generatedCarePlans,
   onSelectCarePlan,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  isDragging = false,
 }) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <div className="px-6 py-5 border-b border-gray-100">
+    <div
+      className={`px-6 py-5 border-b border-gray-100 ${onDragStart ? 'cursor-grab touch-none select-none active:cursor-grabbing' : ''}`}
+      onTouchStart={onDragStart}
+      onTouchMove={onDragMove}
+      onTouchEnd={onDragEnd}
+      style={isDragging ? { cursor: 'grabbing' } : undefined}
+    >
+      {onDragStart && (
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-gray-300" />
+      )}
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <h2 className="text-base font-semibold text-gray-900">
           Mission Detail

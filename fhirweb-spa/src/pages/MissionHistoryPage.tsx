@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { agentMissionService } from '../services/agentMissionService';
 import { useFHIR } from '../contexts/FHIRContext';
@@ -41,6 +41,9 @@ const MissionHistoryPage: React.FC = () => {
   );
   const [selectedCarePlan, setSelectedCarePlan] =
     useState<CarePlanCreated | null>(null);
+  const [mobilePanelOffset, setMobilePanelOffset] = useState(0);
+  const [isDraggingMobilePanel, setIsDraggingMobilePanel] = useState(false);
+  const mobilePanelStartY = useRef<number | null>(null);
   const [enrichedCarePlans, setEnrichedCarePlans] = useState<CarePlanCreated[]>(
     [],
   );
@@ -77,6 +80,39 @@ const MissionHistoryPage: React.FC = () => {
   const selectedMission = missions.find(
     (m) => m.missionId === selectedMissionId,
   );
+
+  const handleMobilePanelDragStart = (
+    event: React.TouchEvent<HTMLDivElement>,
+  ) => {
+    mobilePanelStartY.current = event.touches[0]?.clientY ?? null;
+    setIsDraggingMobilePanel(true);
+  };
+
+  const handleMobilePanelDragMove = (
+    event: React.TouchEvent<HTMLDivElement>,
+  ) => {
+    if (mobilePanelStartY.current === null) return;
+    const currentY = event.touches[0]?.clientY;
+    if (currentY === undefined) return;
+    setMobilePanelOffset(
+      Math.max(
+        0,
+        Math.min(
+          window.innerHeight * 0.5,
+          currentY - mobilePanelStartY.current,
+        ),
+      ),
+    );
+  };
+
+  const handleMobilePanelDragEnd = () => {
+    if (mobilePanelOffset > 100) {
+      setSelectedMissionId(null);
+    }
+    setMobilePanelOffset(0);
+    setIsDraggingMobilePanel(false);
+    mobilePanelStartY.current = null;
+  };
 
   // Fetch CarePlan details from FHIR to enrich care plan data with patient information
   useEffect(() => {
@@ -281,7 +317,10 @@ const MissionHistoryPage: React.FC = () => {
                 {filteredMissions.map((mission) => (
                   <React.Fragment key={mission.missionId}>
                     <button
-                      onClick={() => setSelectedMissionId(mission.missionId)}
+                      onClick={() => {
+                        setSelectedMissionId(mission.missionId);
+                        setMobilePanelOffset(0);
+                      }}
                       className={`w-full text-left px-5 py-3.5 hover:bg-gray-50 transition-colors ${
                         selectedMissionId === mission.missionId
                           ? 'bg-amber-50/70'
@@ -305,11 +344,20 @@ const MissionHistoryPage: React.FC = () => {
                     </button>
                     {selectedMissionId === mission.missionId &&
                       selectedMission && (
-                        <div className="fixed inset-x-0 bottom-0 z-40 h-[50vh] overflow-y-auto border-t border-gray-300 bg-gray-50 p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.12)] lg:hidden">
+                        <div
+                          className={`fixed inset-x-0 bottom-0 z-40 h-[50vh] overflow-y-auto border-t border-gray-300 bg-gray-50 p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.12)] lg:hidden ${isDraggingMobilePanel ? '' : 'transition-transform duration-200'}`}
+                          style={{
+                            transform: `translateY(${mobilePanelOffset}px)`,
+                          }}
+                        >
                           <MissionDetailPanel
                             mission={selectedMission}
                             generatedCarePlans={generatedCarePlans}
                             onSelectCarePlan={setSelectedCarePlan}
+                            onDragStart={handleMobilePanelDragStart}
+                            onDragMove={handleMobilePanelDragMove}
+                            onDragEnd={handleMobilePanelDragEnd}
+                            isDragging={isDraggingMobilePanel}
                           />
                         </div>
                       )}
