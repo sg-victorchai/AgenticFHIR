@@ -120,20 +120,42 @@ export function Pagination<T extends Resource>({
       className={`flex items-center justify-between ${position === 'top' ? 'border-b' : 'border-t'} border-gray-200 bg-white px-4 py-3 sm:px-6`}
     >
       <div className="flex flex-1 justify-between sm:hidden">
-        {/* Mobile view - minimal navigation with Previous/Next only */}
+        {/* Mobile view */}
+        <button
+          onClick={onFirstPage}
+          disabled={!hasFirst || isLoading}
+          className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="First page"
+        >
+          <span aria-hidden="true">|&lt;</span>
+          <span className="sr-only">First</span>
+        </button>
         <button
           onClick={onPreviousPage}
           disabled={!hasPrevious || isLoading}
-          className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative ml-1 inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Previous page"
         >
-          {isLoading ? 'Loading...' : 'Previous'}
+          <span aria-hidden="true">&lt;</span>
+          <span className="sr-only">Previous</span>
         </button>
         <button
           onClick={onNextPage}
           disabled={!hasNext || isLoading}
-          className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative ml-1 inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Next page"
         >
-          {isLoading ? 'Loading...' : 'Next'}
+          <span aria-hidden="true">&gt;</span>
+          <span className="sr-only">Next</span>
+        </button>
+        <button
+          onClick={onLastPage}
+          disabled={!hasLast || isLoading}
+          className="relative ml-1 inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Last page"
+        >
+          <span aria-hidden="true">&gt;|</span>
+          <span className="sr-only">Last</span>
         </button>
       </div>
 

@@ -345,7 +345,7 @@ const MissionHistoryPage: React.FC = () => {
                     {selectedMissionId === mission.missionId &&
                       selectedMission && (
                         <div
-                          className={`fixed inset-x-0 bottom-0 z-40 h-[50vh] overflow-y-auto border-t border-gray-300 bg-gray-50 p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.12)] lg:hidden ${isDraggingMobilePanel ? '' : 'transition-transform duration-200'}`}
+                          className={`fixed inset-x-0 bottom-0 z-40 h-[50vh] overflow-hidden border-t border-gray-300 bg-gray-50 p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.12)] lg:hidden ${isDraggingMobilePanel ? '' : 'transition-transform duration-200'}`}
                           style={{
                             transform: `translateY(${mobilePanelOffset}px)`,
                           }}

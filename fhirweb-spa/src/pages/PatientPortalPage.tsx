@@ -168,13 +168,17 @@ const PatientPortalPage: React.FC = () => {
             Patient Portal
           </h1>
           <p className="text-gray-600">
-            View your records, upload medical reports and ask AI to check your health conditions
+            View your records, upload medical reports and ask AI to check your
+            health conditions
           </p>
         </div>
 
         {/* Search Card */}
         <div className="bg-white rounded-2xl shadow-md p-4 sm:p-8 mb-6">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <form
+            onSubmit={handleSearch}
+            className="flex flex-col sm:flex-row gap-2 sm:gap-3"
+          >
             <input
               type="text"
               placeholder="Enter your name to search..."
@@ -222,11 +226,24 @@ const PatientPortalPage: React.FC = () => {
           )}
 
           {!patientListLoading && patientOptions.length === 0 && (
-            <p className="text-center text-gray-500 py-8">
-              {hasSearched && searchTerm.trim()
-                ? 'No patient records found.'
-                : 'No patients available.'}
-            </p>
+            <div className="py-8 text-center">
+              <p className="text-gray-500">
+                {hasSearched && searchTerm.trim()
+                  ? 'No patient records found.'
+                  : 'No patients available.'}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/patient/new', {
+                    state: { backTo: '/patient-portal' },
+                  })
+                }
+                className="mt-4 inline-flex items-center justify-center rounded-md bg-violet-600 px-5 py-2 font-medium text-white transition-colors hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2"
+              >
+                Create New Patient
+              </button>
+            </div>
           )}
 
           {!patientListLoading && patientOptions.length > 0 && (

@@ -89,7 +89,7 @@ const AppRoutes: React.FC = () => {
           <Route
             path="/patient/new"
             element={
-              <RoleGuard allowed={['psa']}>
+              <RoleGuard allowed={['psa', 'patient']}>
                 <PatientCrudPage />
               </RoleGuard>
             }

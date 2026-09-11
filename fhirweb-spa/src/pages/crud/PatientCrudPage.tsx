@@ -482,9 +482,10 @@ const PatientCrudPage: React.FC = () => {
       };
 
       if (isNew) {
-        // Create new resource, then go straight to encounter registration
+        // Return to the originating workflow after creating the resource.
         const newPatient = await createPatient(cleanedFormData).unwrap();
-        navigate(`/patient/${newPatient.id}/visit/new`);
+        const backTo = (location.state as any)?.backTo;
+        navigate(backTo ?? `/patient/${newPatient.id}/visit/new`);
         return;
       } else {
         // Update existing resource
@@ -519,7 +520,8 @@ const PatientCrudPage: React.FC = () => {
   // Handle cancel
   const handleCancel = () => {
     if (isNew) {
-      navigate('/patients');
+      const backTo = (location.state as any)?.backTo;
+      navigate(backTo ?? '/patients');
     } else {
       setMode('view');
       if (patientData) {
@@ -537,9 +539,12 @@ const PatientCrudPage: React.FC = () => {
   // Determine back button label based on where we're navigating to
   const backTo = (location.state as any)?.backTo;
   const isFromRegistration = backTo?.includes('/visit/new');
-  const backButtonLabel = isFromRegistration
-    ? 'Back to Registration'
-    : 'Back to Patient Search';
+  const backButtonLabel =
+    backTo === '/patient-portal'
+      ? 'Back to Patient Portal'
+      : isFromRegistration
+        ? 'Back to Registration'
+        : 'Back to Patient Search';
 
   // Add new telecom
   const addTelecom = () => {
