@@ -1435,10 +1435,7 @@ const PatientRecordsPage: React.FC = () => {
   const pollRunIdRef = useRef(0);
   const uploadPollRunIdRef = useRef(0);
 
-  const [activeTab, setActiveTab] = useState<TabId>(() => {
-    const saved = sessionStorage.getItem('activeTab');
-    return (saved as TabId) || 'encounter';
-  });
+  const [activeTab, setActiveTab] = useState<TabId>('encounter');
   const [medSubTab, setMedSubTab] = useState<MedSubTab>('request');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -1456,11 +1453,6 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Persist active tab to sessionStorage
-  useEffect(() => {
-    sessionStorage.setItem('activeTab', activeTab);
-  }, [activeTab]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -2608,6 +2600,12 @@ const PatientRecordsPage: React.FC = () => {
                                 {cond.id}
                               </div>
                               <div>
+                                <span className="font-medium">Code Text:</span>{' '}
+                                {cond.code?.text ||
+                                  cond.code?.coding?.[0]?.display ||
+                                  '—'}
+                              </div>
+                              <div>
                                 <span className="font-medium">
                                   Verification:
                                 </span>{' '}
@@ -2749,6 +2747,12 @@ const PatientRecordsPage: React.FC = () => {
                       <div className="space-y-3">
                         <div>
                           <span className="font-medium">ID:</span> {cond.id}
+                        </div>
+                        <div>
+                          <span className="font-medium">Code Text:</span>{' '}
+                          {cond.code?.text ||
+                            cond.code?.coding?.[0]?.display ||
+                            '—'}
                         </div>
                         <div>
                           <span className="font-medium">Verification:</span>{' '}
@@ -3194,6 +3198,12 @@ const PatientRecordsPage: React.FC = () => {
                               colSpan={7}
                               className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
                             >
+                              <div className="mb-3">
+                                <span className="font-medium">Code Text:</span>{' '}
+                                {obs.code?.text ||
+                                  obs.code?.coding?.[0]?.display ||
+                                  '—'}
+                              </div>
                               {obs.component?.length ? (
                                 <div>
                                   <p className="font-medium mb-2">
@@ -3381,6 +3391,12 @@ const PatientRecordsPage: React.FC = () => {
                       <div className="space-y-3">
                         <div>
                           <span className="font-medium">ID:</span> {obs.id}
+                        </div>
+                        <div>
+                          <span className="font-medium">Code Text:</span>{' '}
+                          {obs.code?.text ||
+                            obs.code?.coding?.[0]?.display ||
+                            '—'}
                         </div>
                         <div>
                           <span className="font-medium">Reference Range:</span>{' '}
