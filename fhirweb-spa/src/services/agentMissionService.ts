@@ -2,6 +2,7 @@
 // (patient-agnostic — no X-Patient-ID; mirrors the digital-twin mission contract
 // used by AgentConversationModal, minus per-patient scoping)
 import FHIR from 'fhirclient';
+import { getAuthenticatedHeaders } from './auth/oidc';
 import {
   AgentInterventionRequest,
   AgentSource,
@@ -102,7 +103,7 @@ const buildAuthHeaders = async (): Promise<Record<string, string>> => {
     headers['x-api-key'] = API_KEY;
   }
 
-  return headers;
+  return getAuthenticatedHeaders(headers);
 };
 
 const parseJsonSafely = (text: string): any => {

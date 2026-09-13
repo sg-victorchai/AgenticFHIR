@@ -3,6 +3,11 @@ import Client from 'fhir-kit-client';
 
 // Check if we're in a SMART context
 export const isSMARTContext = (): boolean => {
+  // The first-party OIDC callback also contains `state`; it is not a SMART
+  // launch and must be handled by AuthCallbackPage instead.
+  if (window.location.pathname.endsWith('/callback')) {
+    return false;
+  }
   // Check URL parameters - if we have 'state' param, we're returning from OAuth
   const urlParams = new URLSearchParams(window.location.search);
   const hasStateParam = urlParams.has('state');

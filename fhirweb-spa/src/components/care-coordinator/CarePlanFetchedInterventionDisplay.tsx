@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { IconCheckCircle, IconSpinner } from './missionUi';
 import { CarePlanCreated } from '../../types/agent';
+import { getAuthenticatedHeaders } from '../../services/auth/oidc';
 
 interface CarePlanFetch {
   id: string;
@@ -48,7 +49,8 @@ export const CarePlanFetchedInterventionDisplay: React.FC<{
             : resourceRef;
 
           const response = await fetch(
-            `/fhir/CarePlan/${encodeURIComponent(carePlanId)}`,
+            `${import.meta.env.VITE_FHIR_BASE_URL || '/fhir'}/CarePlan/${encodeURIComponent(carePlanId)}`,
+            { headers: await getAuthenticatedHeaders() },
           );
 
           if (response.ok) {

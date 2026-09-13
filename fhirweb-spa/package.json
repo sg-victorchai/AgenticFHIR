@@ -20,6 +20,7 @@
     "@tanstack/react-query-devtools": "^5.90.2",
     "fhir-kit-client": "^1.9.2",
     "fhirclient": "^2.6.3",
+    "oidc-client-ts": "^3.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-redux": "^9.0.2",

@@ -29,21 +29,37 @@ import EncounterCrudPage from './pages/crud/EncounterCrudPage';
 import PatientCrudPage from './pages/crud/PatientCrudPage';
 import NotFound from './pages/NotFound';
 import LaunchPage from './pages/LaunchPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
+import SilentRenewPage from './pages/SilentRenewPage';
 import RoleGuard from './components/common/RoleGuard';
 
 const AppRoutes: React.FC = () => {
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated,
   );
+  const authLoading = useSelector((state: RootState) => state.auth.loading);
 
   return (
     <Routes>
       {/* Login page — public */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/callback" element={<AuthCallbackPage />} />
+      <Route path="/silent-renew" element={<SilentRenewPage />} />
 
       {/* Redirect to login if not authenticated */}
       {!isAuthenticated && (
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route
+          path="*"
+          element={
+            authLoading ? (
+              <div className="flex min-h-[60vh] items-center justify-center text-gray-600">
+                Checking sign-in…
+              </div>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
       )}
 
       {/* Protected routes */}

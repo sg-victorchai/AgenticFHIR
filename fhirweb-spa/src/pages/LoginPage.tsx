@@ -1,32 +1,22 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { loginSuccess, loginFailure } from '../store/slices/authSlice';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import { signIn } from '../services/auth/oidc';
 
 const LoginPage: React.FC = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const authError = useSelector((state: RootState) => state.auth.error);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    // Simple credential validation
-    if (username === 'superagent' && password === 'Savi2000') {
-      // Simulate successful login
-      dispatch(
-        loginSuccess({
-          token: 'mock-token-' + Date.now(),
-          user: { id: '1', name: 'SuperAgent' },
-        }),
-      );
-      navigate('/');
-    } else {
-      setError('Invalid username or password');
-      dispatch(loginFailure('Invalid credentials'));
+  const handleLogin = async () => {
+    setError(null);
+    setIsRedirecting(true);
+    try {
+      await signIn();
+    } catch (signInError) {
+      console.error('Unable to start OIDC sign-in:', signInError);
+      setIsRedirecting(false);
+      setError('Unable to connect to the sign-in service. Please try again.');
     }
   };
 
@@ -40,54 +30,23 @@ const LoginPage: React.FC = () => {
           <p className="text-gray-600">You ask and agents work for you</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-            />
+        {(error || authError === 'Sign-in failed. Please try again.') && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            {error || authError}
           </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-            />
-          </div>
-
+        )}
+        <div className="space-y-6">
           <button
-            type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200"
+            type="button"
+            onClick={() => void handleLogin()}
+            disabled={isRedirecting}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium py-2 px-4 rounded-lg transition duration-200"
           >
-            Sign In
+            {isRedirecting
+              ? 'Redirecting to sign in…'
+              : 'Sign in with fhir4java IdP'}
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );

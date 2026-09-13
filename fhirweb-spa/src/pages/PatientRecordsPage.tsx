@@ -12,6 +12,7 @@ import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
 import { AgentEndpointConfig } from '../types/agent';
+import { getAuthenticatedHeaders } from '../services/auth/oidc';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2071,14 +2072,15 @@ const PatientRecordsPage: React.FC = () => {
 
     if (accessToken) {
       headers.Authorization = `Bearer ${accessToken}`;
-      return { headers, channel: 'patient-portal' };
+    } else if (API_KEY) {
+      headers['x-api-key'] = API_KEY;
     }
 
-    // Independent in-app mode fallback (non-SMART).
-    if (API_KEY) {
-      headers['x-api-key'] = API_KEY;
-      return { headers, channel: 'in-app' };
+    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
+    if (authenticatedHeaders.Authorization) {
+      return { headers: authenticatedHeaders, channel: 'patient-portal' };
     }
+    if (API_KEY) return { headers: authenticatedHeaders, channel: 'in-app' };
 
     throw new Error(
       'No authentication context available. Please sign in or configure API key access.',
@@ -2136,13 +2138,16 @@ const PatientRecordsPage: React.FC = () => {
     setSearchError(null);
     try {
       const resourceTypes = getResourceTypesFromQuery(query);
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
       if (API_KEY) {
         headers['x-api-key'] = API_KEY;
       }
+      const authenticatedHeaders = await getAuthenticatedHeaders(headers);
       const res = await fetch(`${AGENT_API_BASE_URL}/api/ai/hybrid-search`, {
         method: 'POST',
-        headers,
+        headers: authenticatedHeaders,
         body: JSON.stringify({
           query,
           scope: 'PATIENT',

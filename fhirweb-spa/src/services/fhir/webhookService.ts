@@ -1,4 +1,5 @@
 // Webhook service for managing FHIR server webhooks
+import { getAuthenticatedHeaders } from '../auth/oidc';
 
 let FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
@@ -49,14 +50,14 @@ export interface WebhookEvent {
   resourceId: string;
 }
 
-const getHeaders = (): HeadersInit => {
+const getHeaders = async (): Promise<HeadersInit> => {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   if (API_KEY) {
     headers['x-api-key'] = API_KEY;
   }
-  return headers;
+  return getAuthenticatedHeaders(headers);
 };
 
 export const webhookService = {
@@ -64,7 +65,7 @@ export const webhookService = {
   async listWebhooks(): Promise<Webhook[]> {
     const response = await fetch(`${getWebhookBaseUrl()}/api/webhooks`, {
       method: 'GET',
-      headers: getHeaders(),
+      headers: await getHeaders(),
     });
 
     if (!response.ok) {
@@ -78,7 +79,7 @@ export const webhookService = {
   async getWebhook(id: string): Promise<Webhook> {
     const response = await fetch(`${getWebhookBaseUrl()}/api/webhooks/${id}`, {
       method: 'GET',
-      headers: getHeaders(),
+      headers: await getHeaders(),
     });
 
     if (!response.ok) {
@@ -92,7 +93,7 @@ export const webhookService = {
   async createWebhook(webhook: CreateWebhookRequest): Promise<Webhook> {
     const response = await fetch(`${getWebhookBaseUrl()}/api/webhooks`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify(webhook),
     });
 
@@ -110,7 +111,7 @@ export const webhookService = {
       `${getWebhookBaseUrl()}/api/webhooks/${id}/enable`,
       {
         method: 'POST',
-        headers: getHeaders(),
+        headers: await getHeaders(),
       },
     );
 
@@ -125,7 +126,7 @@ export const webhookService = {
       `${getWebhookBaseUrl()}/api/webhooks/${id}/disable`,
       {
         method: 'POST',
-        headers: getHeaders(),
+        headers: await getHeaders(),
       },
     );
 
@@ -138,7 +139,7 @@ export const webhookService = {
   async deleteWebhook(id: string): Promise<void> {
     const response = await fetch(`${getWebhookBaseUrl()}/api/webhooks/${id}`, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: await getHeaders(),
     });
 
     if (!response.ok) {

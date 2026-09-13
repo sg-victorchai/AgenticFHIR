@@ -1,5 +1,6 @@
 import Client from 'fhir-kit-client';
 import { createAuthenticatedFHIRClient, isSMARTContext } from './smartClient';
+import { getAuthenticatedHeaders } from '../auth/oidc';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import {
   Patient,
@@ -15,11 +16,6 @@ import {
 let FHIR_BASE_URL =
   import.meta.env.VITE_FHIR_BASE_URL || 'http://localhost:8080/fhir';
 const API_KEY = import.meta.env.VITE_API_KEY;
-if (!API_KEY && import.meta.env.DEV) {
-  console.warn(
-    'VITE_API_KEY environment variable is not set. Some FHIR operations may fail.',
-  );
-}
 
 // Helper function - CORS now enabled on Azure server, so no proxy needed
 const getProxyUrl = (url: string): string => {
@@ -46,13 +42,14 @@ export const createFHIRClient = async (): Promise<Client> => {
   }
 
   console.log('Creating non-SMART FHIR client');
-  const headers: { 'x-api-key'?: string } = {};
+  const headers: Record<string, string> = {};
   if (API_KEY) {
     headers['x-api-key'] = API_KEY;
   }
+  const authenticatedHeaders = await getAuthenticatedHeaders(headers);
   return new Client({
     baseUrl: FHIR_BASE_URL,
-    customHeaders: headers as any,
+    customHeaders: authenticatedHeaders as any,
   });
 };
 

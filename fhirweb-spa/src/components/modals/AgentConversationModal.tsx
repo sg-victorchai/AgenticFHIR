@@ -10,6 +10,7 @@ import {
   extractMissionId,
 } from '../../utils/agentResponseParser';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { getAuthenticatedHeaders } from '../../services/auth/oidc';
 
 interface AgentConversationModalProps {
   isOpen: boolean;
@@ -265,10 +266,12 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
+    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
+
     // Use extended timeout for AI processing (can involve complex FHIR queries)
     const response = await fetchWithTimeout(agentConfig.endpoint, {
       method: 'POST',
-      headers,
+      headers: authenticatedHeaders,
       body: JSON.stringify({
         goal,
         context: {
@@ -302,6 +305,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
+    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
+
     const endpoint = agentConfig.endpoint;
     const missionStatusPath = `/api/agent/AgentMission/${encodeURIComponent(missionId)}`;
     let statusUrl = missionStatusPath;
@@ -324,7 +329,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
     // Use 10-second timeout for status checks
     const response = await fetchWithTimeout(statusUrl, {
-      headers,
+      headers: authenticatedHeaders,
       timeout: 10000, // 10 seconds for status polling
     });
 
