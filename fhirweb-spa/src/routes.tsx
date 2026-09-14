@@ -32,12 +32,16 @@ import LaunchPage from './pages/LaunchPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import SilentRenewPage from './pages/SilentRenewPage';
 import RoleGuard from './components/common/RoleGuard';
+import { isSMARTContext } from './services/fhir/smartClient';
 
 const AppRoutes: React.FC = () => {
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated,
   );
   const authLoading = useSelector((state: RootState) => state.auth.loading);
+  // A live SMART on FHIR launch session is a separate identity from our
+  // first-party OIDC login; treat it as authenticated for routing purposes.
+  const allowUnauthenticated = isAuthenticated || isSMARTContext();
 
   return (
     <Routes>
@@ -45,9 +49,12 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/callback" element={<AuthCallbackPage />} />
       <Route path="/silent-renew" element={<SilentRenewPage />} />
+      {/* SMART EHR launch entry point — public; the EHR redirects here before
+          the user has a first-party OIDC session */}
+      <Route path="/launch" element={<LaunchPage />} />
 
       {/* Redirect to login if not authenticated */}
-      {!isAuthenticated && (
+      {!allowUnauthenticated && (
         <Route
           path="*"
           element={
@@ -63,13 +70,12 @@ const AppRoutes: React.FC = () => {
       )}
 
       {/* Protected routes */}
-      {isAuthenticated && (
+      {allowUnauthenticated && (
         <>
           {/* Landing — role selection */}
           <Route path="/" element={<RoleSelectionPage />} />
 
           {/* Shared */}
-          <Route path="/launch" element={<LaunchPage />} />
           <Route path="/queue" element={<PatientQueuePage />} />
           <Route path="/webhooks" element={<WebhookManagementPage />} />
           <Route path="/events" element={<EventMonitorPage />} />

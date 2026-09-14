@@ -34,8 +34,8 @@ const RoleSelectionPage: React.FC = () => {
           const patientId = smartClient.patient.id;
           if (patientId)
             sessionStorage.setItem(SMART_PATIENT_ID_KEY, patientId);
-          // SMART launches are always clinician context → skip role selection
-          dispatch(setRole('clinician'));
+          // SMART launches are treated as patient context — skip role selection
+          dispatch(setRole('patient'));
           navigate(`/patient/${patientId}/records`);
         } catch (error) {
           console.error('Error handling OAuth callback:', error);
