@@ -25,7 +25,7 @@ const LoginPage: React.FC = () => {
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Agents Platform
+            Semantic Agents Platform
           </h1>
           <p className="text-gray-600">You ask and agents work for you</p>
         </div>
@@ -44,7 +44,7 @@ const LoginPage: React.FC = () => {
           >
             {isRedirecting
               ? 'Redirecting to sign in…'
-              : 'Sign in with fhir4java IdP'}
+              : 'Sign in to your Identity Provider'}
           </button>
         </div>
       </div>
