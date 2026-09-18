@@ -12,12 +12,11 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   }
   kind: 'StorageV2'
   properties: {
-    supportsHttpsTrafficOnly: false
+    supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: true
-    minimumTlsVersion: 'TLS1_0'
+    minimumTlsVersion: 'TLS1_2'
   }
 }
 
 output storageAccountName string = storageAccount.name
 output webEndpointHttps string = storageAccount.properties.primaryEndpoints.web
-output webEndpointHttp string = replace(storageAccount.properties.primaryEndpoints.web, 'https://', 'http://')

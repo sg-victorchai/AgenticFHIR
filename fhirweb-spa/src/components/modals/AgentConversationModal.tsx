@@ -368,10 +368,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     setConversations((prev) => [...prev, agentMessage]);
   };
 
-  // Digital-twin missions run multiple sequential LLM calls (reasoning +
-  // post-mission skills), regularly taking 60-90s; give ample headroom.
-  const MISSION_WAIT_TIMEOUT_MS = 180000;
-  // Fallback poll cadence — only used once the SSE wait times out.
+  // Give SSE a short head start, then use polling if the stream misses an event.
+  const MISSION_WAIT_TIMEOUT_MS = 15000;
+  // Fallback poll cadence after the primary SSE wait times out.
   const FALLBACK_POLL_INTERVAL_MS = 3000;
   // Extra polling window after the primary SSE wait times out, before
   // reporting a timeout to the user.

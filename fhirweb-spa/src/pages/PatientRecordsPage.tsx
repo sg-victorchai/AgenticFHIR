@@ -358,7 +358,7 @@ let AGENT_API_BASE_URL =
 // Helper function - CORS now enabled on Azure server, so no proxy needed
 const getApiProxyUrl = (url: string): string => {
   // Return URL as-is since CORS is now enabled on the Azure server
-  return url;
+  return url.replace(/\/+$/, '');
 };
 
 // Use proxy URL in development mode

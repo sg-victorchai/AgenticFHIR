@@ -8,7 +8,7 @@ const API_KEY = import.meta.env.VITE_API_KEY;
 // Helper function - CORS now enabled on Azure server, so no proxy needed
 const getSseProxyUrl = (url: string): string => {
   // Return URL as-is since CORS is now enabled on the Azure server
-  return url;
+  return url.replace(/\/+$/, '');
 };
 
 // Use proxy URL in development mode
@@ -66,6 +66,8 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
   const connect = async () => {
     // Close existing connection if any
     disconnect();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const url = new URL(`${SSE_BASE_URL}/api/events/stream`);
@@ -83,8 +85,7 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
       }
 
       const headers = await getAuthenticatedHeaders(requestHeaders);
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      if (abortController.signal.aborted) return;
       const response = await fetch(url, {
         headers,
         signal: abortController.signal,

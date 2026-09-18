@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "dev:azure": "vite --mode azure",
+    "dev:azure-staging": "vite --mode azure-staging",
     "build": "tsc && vite build",
     "build:azure": "tsc && vite build --mode azure",
+    "build:azure-staging": "tsc && vite build --mode azure-staging",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "vitest run",
