@@ -1,4 +1,10 @@
-import { AgentResponse, RawAgentResponse, AgentSource } from '../types/agent';
+import {
+  AgentResponse,
+  RawAgentResponse,
+  AgentSource,
+  GroundingEvidence,
+  ReasoningTraceStep,
+} from '../types/agent';
 
 /**
  * Agent Response Parser Utility
@@ -30,6 +36,8 @@ export function parseAgentResponse(raw: RawAgentResponse): AgentResponse {
   const tokensUsed = extractTokensUsed(raw);
   const costBreakdown = extractCostBreakdown(raw);
   const riskFlags = extractRiskFlags(raw);
+  const groundingEvidence = extractGroundingEvidence(raw);
+  const reasoningTrace = extractReasoningTrace(raw);
 
   return {
     text,
@@ -40,7 +48,19 @@ export function parseAgentResponse(raw: RawAgentResponse): AgentResponse {
     tokensUsed,
     costBreakdown,
     riskFlags,
+    groundingEvidence,
+    reasoningTrace,
   };
+}
+
+function extractGroundingEvidence(raw: RawAgentResponse): GroundingEvidence[] {
+  const evidence = raw.metadata?.groundingEvidence;
+  return Array.isArray(evidence) ? (evidence as GroundingEvidence[]) : [];
+}
+
+function extractReasoningTrace(raw: RawAgentResponse): ReasoningTraceStep[] {
+  const trace = raw.metadata?.reasoningTrace;
+  return Array.isArray(trace) ? (trace as ReasoningTraceStep[]) : [];
 }
 
 /**

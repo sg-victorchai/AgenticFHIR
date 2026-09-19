@@ -1,5 +1,11 @@
 import React from 'react';
-import { AgentResponse, ResponseType, RiskFlag } from '../../types/agent';
+import {
+  AgentResponse,
+  GroundingEvidence,
+  ReasoningTraceStep,
+  ResponseType,
+  RiskFlag,
+} from '../../types/agent';
 
 interface AgentResponseFormatterProps {
   response: AgentResponse;
@@ -75,9 +81,82 @@ export const AgentResponseFormatter: React.FC<AgentResponseFormatterProps> = ({
           costBreakdown={response.costBreakdown}
         />
       )}
+
+      <GroundingEvidenceRenderer evidence={response.groundingEvidence || []} />
+
+      <ReasoningTraceRenderer steps={response.reasoningTrace || []} />
     </div>
   );
 };
+
+const GroundingEvidenceRenderer: React.FC<{
+  evidence: GroundingEvidence[];
+}> = ({ evidence }) => (
+  <details className="rounded-lg border border-emerald-200 bg-emerald-50/60">
+    <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-emerald-900">
+      Grounding Evidence ({evidence.length})
+    </summary>
+    <div className="space-y-2 border-t border-emerald-200 px-3 py-3">
+      {evidence.length === 0 && (
+        <p className="text-xs text-gray-600">
+          No grounding evidence was provided for this response.
+        </p>
+      )}
+      {evidence.map((item, index) => (
+        <div
+          key={`${item.resourceType}-${item.resourceId || index}-${item.field}`}
+          className="rounded border border-emerald-100 bg-white px-3 py-2"
+        >
+          <p className="text-sm font-medium text-gray-900">{item.claim}</p>
+          <p className="mt-1 text-xs text-gray-600">
+            {item.resourceType}
+            {item.resourceId ? `/${item.resourceId}` : ''} · {item.field}:{' '}
+            {item.value}
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            {[item.system, item.code, `Source: ${item.toolCall}`]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </div>
+      ))}
+    </div>
+  </details>
+);
+
+const ReasoningTraceRenderer: React.FC<{ steps: ReasoningTraceStep[] }> = ({
+  steps,
+}) => (
+  <details className="rounded-lg border border-indigo-200 bg-indigo-50/60">
+    <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-indigo-900">
+      Reasoning Trace ({steps.length} steps)
+    </summary>
+    <ol className="space-y-3 border-t border-indigo-200 px-3 py-3">
+      {steps.length === 0 && (
+        <li className="text-xs text-gray-600">
+          No reasoning trace was provided for this response.
+        </li>
+      )}
+      {steps.map((step, index) => (
+        <li key={`${step.iteration}-${index}`} className="flex gap-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700">
+            {step.iteration + 1}
+          </span>
+          <div className="min-w-0">
+            <p className="whitespace-pre-wrap text-sm text-gray-800">
+              {step.thought}
+            </p>
+            {step.toolsCalled && (
+              <p className="mt-1 break-words font-mono text-xs text-indigo-700">
+                {step.toolsCalled}
+              </p>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  </details>
+);
 
 /**
  * Detect response type by analyzing content structure

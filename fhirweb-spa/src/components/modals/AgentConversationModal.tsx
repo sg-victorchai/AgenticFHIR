@@ -111,19 +111,37 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           ? (payloadOutputs as any).confidence
           : typeof (resultOutputs as any).confidence === 'number'
             ? (resultOutputs as any).confidence
-            : undefined,
+            : typeof parsedResult?.confidence === 'number'
+              ? parsedResult.confidence
+              : typeof asObject.confidence === 'number'
+                ? asObject.confidence
+                : undefined,
       sources:
         (payloadOutputs as any).sources || (resultOutputs as any).sources,
       disclaimer:
         (payloadOutputs as any).disclaimer || (resultOutputs as any).disclaimer,
       executionTimeMs:
         (payloadOutputs as any).executionTimeMs ||
-        (resultOutputs as any).executionTimeMs,
+        (resultOutputs as any).executionTimeMs ||
+        parsedResult?.durationMs ||
+        asObject.durationMs,
       tokensUsed:
         (payloadOutputs as any).tokensUsed || (resultOutputs as any).tokensUsed,
       costBreakdown:
         (payloadOutputs as any).costBreakdown ||
         (resultOutputs as any).costBreakdown,
+      groundingEvidence:
+        (payloadOutputs as any).groundingEvidence ||
+        (resultOutputs as any).groundingEvidence ||
+        parsedResult?.groundingEvidence ||
+        parsedResult?.parameters?.groundingEvidence ||
+        asObject.groundingEvidence,
+      reasoningTrace:
+        (payloadOutputs as any).reasoningTrace ||
+        (resultOutputs as any).reasoningTrace ||
+        parsedResult?.reasoningTrace ||
+        parsedResult?.parameters?.reasoningTrace ||
+        asObject.reasoningTrace,
     };
 
     const missionIdFromHeader = headers
@@ -145,8 +163,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       missionIdFromHeader ||
       '';
 
-    const status = (asObject.status ||
-      'PENDING') as MissionExecutionResult['status'];
+    const status = String(
+      asObject.status || parsedResult?.status || 'PENDING',
+    ).toUpperCase() as MissionExecutionResult['status'];
     const failureReason =
       asObject.failureReason ||
       parsedResult?.failureReason ||
@@ -362,6 +381,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         executionTimeMs: parsed.executionTimeMs,
         tokensUsed: parsed.tokensUsed,
         costBreakdown: parsed.costBreakdown,
+        groundingEvidence: parsed.groundingEvidence,
+        reasoningTrace: parsed.reasoningTrace,
       },
     };
 
@@ -584,6 +605,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                       executionTimeMs: msg.metadata?.executionTimeMs,
                       tokensUsed: msg.metadata?.tokensUsed,
                       costBreakdown: msg.metadata?.costBreakdown,
+                      groundingEvidence: msg.metadata?.groundingEvidence,
+                      reasoningTrace: msg.metadata?.reasoningTrace,
                     }}
                     compact={true}
                   />
