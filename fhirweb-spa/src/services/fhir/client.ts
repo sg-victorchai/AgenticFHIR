@@ -799,15 +799,19 @@ export const fhirApi = createApi({
 
     getResourceById: builder.query<
       Resource,
-      { resourceType: string; id: string }
+      { resourceType: string; id: string; summary?: boolean }
     >({
-      queryFn: async ({ resourceType, id }) => {
+      queryFn: async ({ resourceType, id, summary }) => {
         try {
           const client = await createFHIRClient();
-          const resource = await client.read({
-            resourceType,
-            id,
-          });
+          const resource = summary
+            ? await client.request(
+                `${encodeURIComponent(resourceType)}/${encodeURIComponent(id)}?_summary=true`,
+              )
+            : await client.read({
+                resourceType,
+                id,
+              });
           return { data: resource as Resource };
         } catch (error: any) {
           console.error('Error fetching resource by ID:', error);
@@ -1224,6 +1228,7 @@ export const {
   useUpdateResourceMutation,
   useDeleteResourceMutation,
   useGetResourceByIdQuery,
+  useLazyGetResourceByIdQuery,
   useCreatePatientMutation,
   useUpdatePatientMutation,
   useGetPractitionersQuery,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   AgentResponse,
   GroundingEvidence,
@@ -6,6 +7,7 @@ import {
   ResponseType,
   RiskFlag,
 } from '../../types/agent';
+import { useLazyGetResourceByIdQuery } from '../../services/fhir/client';
 
 interface AgentResponseFormatterProps {
   response: AgentResponse;
@@ -91,38 +93,363 @@ export const AgentResponseFormatter: React.FC<AgentResponseFormatterProps> = ({
 
 const GroundingEvidenceRenderer: React.FC<{
   evidence: GroundingEvidence[];
-}> = ({ evidence }) => (
-  <details className="rounded-lg border border-emerald-200 bg-emerald-50/60">
-    <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-emerald-900">
-      Grounding Evidence ({evidence.length})
-    </summary>
-    <div className="space-y-2 border-t border-emerald-200 px-3 py-3">
-      {evidence.length === 0 && (
-        <p className="text-xs text-gray-600">
-          No grounding evidence was provided for this response.
-        </p>
-      )}
-      {evidence.map((item, index) => (
-        <div
-          key={`${item.resourceType}-${item.resourceId || index}-${item.field}`}
-          className="rounded border border-emerald-100 bg-white px-3 py-2"
-        >
-          <p className="text-sm font-medium text-gray-900">{item.claim}</p>
-          <p className="mt-1 text-xs text-gray-600">
-            {item.resourceType}
-            {item.resourceId ? `/${item.resourceId}` : ''} · {item.field}:{' '}
-            {item.value}
-          </p>
-          <p className="mt-1 text-xs text-gray-500">
-            {[item.system, item.code, `Source: ${item.toolCall}`]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
+}> = ({ evidence }) => {
+  const [selectedResource, setSelectedResource] = React.useState<{
+    resourceType: string;
+    resourceId: string;
+  } | null>(null);
+  const [fetchResource, resourceQuery] = useLazyGetResourceByIdQuery();
+
+  const openResource = (item: GroundingEvidence) => {
+    if (!item.resourceId) return;
+    const selection = {
+      resourceType: item.resourceType,
+      resourceId: item.resourceId,
+    };
+    setSelectedResource(selection);
+    void fetchResource({
+      resourceType: selection.resourceType,
+      id: selection.resourceId,
+      summary: true,
+    });
+  };
+
+  return (
+    <>
+      <details className="rounded-lg border border-emerald-200 bg-emerald-50/60">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-emerald-900">
+          Grounding Evidence ({evidence.length})
+        </summary>
+        <div className="space-y-2 border-t border-emerald-200 px-3 py-3">
+          {evidence.length === 0 && (
+            <p className="text-xs text-gray-600">
+              No grounding evidence was provided for this response.
+            </p>
+          )}
+          {evidence.map((item, index) => (
+            <div
+              key={`${item.resourceType}-${item.resourceId || index}-${item.field}`}
+              className="rounded border border-emerald-100 bg-white px-3 py-2"
+            >
+              <p className="text-sm font-medium text-gray-900">{item.claim}</p>
+              <p className="mt-1 text-xs text-gray-600">
+                {item.resourceId ? (
+                  <button
+                    type="button"
+                    onClick={() => openResource(item)}
+                    className="font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-900"
+                    title={`View summary of ${item.resourceType}/${item.resourceId}`}
+                  >
+                    {item.resourceType}/{item.resourceId}
+                  </button>
+                ) : (
+                  item.resourceType
+                )}{' '}
+                · {item.field}: {item.value}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {[item.system, item.code, `Source: ${item.toolCall}`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          ))}
         </div>
-      ))}
+      </details>
+
+      {selectedResource && (
+        <ResourceSummaryDialog
+          resourceType={selectedResource.resourceType}
+          resourceId={selectedResource.resourceId}
+          resource={resourceQuery.data}
+          isLoading={resourceQuery.isFetching}
+          hasError={resourceQuery.isError}
+          onClose={() => setSelectedResource(null)}
+        />
+      )}
+    </>
+  );
+};
+
+const formatFieldLabel = (field: string) =>
+  field
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/^./, (character) => character.toUpperCase());
+
+const formatDate = (value?: string): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString(undefined, {
+        dateStyle: 'medium',
+        ...(value.includes('T') ? { timeStyle: 'short' as const } : {}),
+      });
+};
+
+const getConceptText = (concept: any): string =>
+  concept?.text ||
+  concept?.coding?.find((coding: any) => coding.display)?.display ||
+  concept?.coding?.[0]?.code ||
+  '';
+
+const formatHumanValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) {
+    return value
+      .map(formatHumanValue)
+      .filter((item) => item !== '—')
+      .join('; ');
+  }
+
+  const objectValue = value as Record<string, any>;
+  const conceptText = getConceptText(objectValue);
+  if (conceptText) return conceptText;
+  if (objectValue.value !== undefined) {
+    return `${objectValue.value}${objectValue.unit ? ` ${objectValue.unit}` : ''}`;
+  }
+  if (objectValue.display || objectValue.reference) {
+    return objectValue.display || objectValue.reference;
+  }
+  if (objectValue.start || objectValue.end) {
+    return [formatDate(objectValue.start), formatDate(objectValue.end)]
+      .filter((item) => item !== '—')
+      .join(' to ');
+  }
+
+  return Object.entries(objectValue)
+    .filter(([field]) => !['id', 'extension'].includes(field))
+    .map(
+      ([field, nestedValue]) =>
+        `${formatFieldLabel(field)}: ${formatHumanValue(nestedValue)}`,
+    )
+    .join(' · ');
+};
+
+const SummaryRow: React.FC<{ label: string; value: unknown }> = ({
+  label,
+  value,
+}) => {
+  const displayValue = formatHumanValue(value);
+  if (!displayValue || displayValue === '—') return null;
+  return (
+    <div className="grid gap-1 border-b border-gray-100 py-3 last:border-b-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-xs font-semibold text-gray-500">{label}</dt>
+      <dd className="min-w-0 break-words text-sm text-gray-800">
+        {displayValue}
+      </dd>
     </div>
-  </details>
+  );
+};
+
+const StatusBadge: React.FC<{ value?: string }> = ({ value }) => {
+  if (!value) return null;
+  return (
+    <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold capitalize text-emerald-800">
+      {value.replace(/-/g, ' ')}
+    </span>
+  );
+};
+
+const ConditionSummary: React.FC<{ condition: any }> = ({ condition }) => {
+  const clinicalStatus = getConceptText(condition.clinicalStatus);
+  const verificationStatus = getConceptText(condition.verificationStatus);
+  return (
+    <div>
+      <div className="border-b border-gray-200 pb-4">
+        <p className="text-lg font-semibold text-gray-900">
+          {getConceptText(condition.code) || 'Condition'}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <StatusBadge value={clinicalStatus} />
+          {verificationStatus && verificationStatus !== clinicalStatus && (
+            <StatusBadge value={verificationStatus} />
+          )}
+        </div>
+      </div>
+      <dl>
+        <SummaryRow label="Severity" value={condition.severity} />
+        <SummaryRow label="Category" value={condition.category} />
+        <SummaryRow
+          label="Onset"
+          value={
+            condition.onsetDateTime ||
+            condition.onsetPeriod ||
+            condition.onsetString
+          }
+        />
+        <SummaryRow
+          label="Recorded"
+          value={formatDate(condition.recordedDate)}
+        />
+        <SummaryRow label="Body site" value={condition.bodySite} />
+        <SummaryRow label="Notes" value={condition.note} />
+      </dl>
+    </div>
+  );
+};
+
+const getObservationValue = (observation: any): string => {
+  if (observation.valueQuantity) {
+    return formatHumanValue(observation.valueQuantity);
+  }
+  return (
+    observation.valueString ||
+    getConceptText(observation.valueCodeableConcept) ||
+    (observation.component?.length
+      ? `${observation.component.length} measured values`
+      : '—')
+  );
+};
+
+const formatReferenceRange = (ranges?: any[]): string => {
+  if (!ranges?.length) return '—';
+  return ranges
+    .map((range) => {
+      if (range.text) return range.text;
+      const low = range.low ? formatHumanValue(range.low) : '';
+      const high = range.high ? formatHumanValue(range.high) : '';
+      return [low, high].filter(Boolean).join(' to ');
+    })
+    .filter(Boolean)
+    .join('; ');
+};
+
+const ObservationSummary: React.FC<{ observation: any }> = ({
+  observation,
+}) => (
+  <div>
+    <div className="border-b border-gray-200 pb-4">
+      <p className="text-sm font-medium text-gray-600">
+        {getConceptText(observation.code) || 'Observation'}
+      </p>
+      <p className="mt-1 text-2xl font-semibold text-gray-900">
+        {getObservationValue(observation)}
+      </p>
+      <div className="mt-2">
+        <StatusBadge value={observation.status} />
+      </div>
+    </div>
+    <dl>
+      <SummaryRow
+        label="Date"
+        value={formatDate(observation.effectiveDateTime || observation.issued)}
+      />
+      <SummaryRow label="Category" value={observation.category} />
+      <SummaryRow label="Interpretation" value={observation.interpretation} />
+      <SummaryRow
+        label="Reference range"
+        value={formatReferenceRange(observation.referenceRange)}
+      />
+      <SummaryRow label="Measured values" value={observation.component} />
+      <SummaryRow label="Notes" value={observation.note} />
+    </dl>
+  </div>
 );
+
+const GenericResourceSummary: React.FC<{ resource: any }> = ({ resource }) => {
+  const fields = Object.entries(resource).filter(
+    ([field]) =>
+      !['resourceType', 'id', 'meta', 'text', 'contained'].includes(field),
+  );
+  return (
+    <dl>
+      {fields.map(([field, value]) => (
+        <SummaryRow key={field} label={formatFieldLabel(field)} value={value} />
+      ))}
+    </dl>
+  );
+};
+
+const ResourceSummaryContent: React.FC<{ resource: any }> = ({ resource }) => {
+  if (resource.resourceType === 'Condition') {
+    return <ConditionSummary condition={resource} />;
+  }
+  if (resource.resourceType === 'Observation') {
+    return <ObservationSummary observation={resource} />;
+  }
+  return <GenericResourceSummary resource={resource} />;
+};
+
+const ResourceSummaryDialog: React.FC<{
+  resourceType: string;
+  resourceId: string;
+  resource?: object;
+  isLoading: boolean;
+  hasError: boolean;
+  onClose: () => void;
+}> = ({ resourceType, resourceId, resource, isLoading, hasError, onClose }) => {
+  React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="resource-summary-title"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 sm:py-4">
+          <div className="min-w-0">
+            <h2
+              id="resource-summary-title"
+              className="text-base font-semibold text-gray-900"
+            >
+              {resourceType} Summary
+            </h2>
+            <p className="mt-1 break-all font-mono text-xs text-gray-500">
+              {resourceType}/{resourceId}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-2xl text-gray-500 hover:bg-gray-100 hover:text-gray-800 sm:h-8 sm:w-8 sm:text-xl"
+            aria-label="Close resource summary"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 overscroll-contain overflow-y-auto px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
+          {isLoading ? (
+            <p className="text-sm text-gray-600">Loading resource summary…</p>
+          ) : hasError ? (
+            <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Unable to load this resource summary.
+            </p>
+          ) : resource ? (
+            <ResourceSummaryContent resource={resource} />
+          ) : (
+            <p className="text-sm text-gray-600">
+              No summary fields were returned for this resource.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
 
 const ReasoningTraceRenderer: React.FC<{ steps: ReasoningTraceStep[] }> = ({
   steps,
