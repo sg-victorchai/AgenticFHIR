@@ -51,6 +51,12 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
   const [events, setEvents] = useState<FHIREventNotification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectAttemptRef = useRef(0);
+  // Whether the hook should keep the stream alive across drops; distinct from
+  // abortControllerRef so a mid-stream reconnect isn't mistaken for a stop.
+  const shouldStayConnectedRef = useRef(false);
+  const MAX_RECONNECT_DELAY_MS = 15000;
 
   const handleEvent = (eventData: string) => {
     try {
@@ -63,9 +69,33 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
     }
   };
 
+  const scheduleReconnect = () => {
+    if (!shouldStayConnectedRef.current || reconnectTimeoutRef.current) return;
+    const delayMs = Math.min(
+      1000 * 2 ** reconnectAttemptRef.current++,
+      MAX_RECONNECT_DELAY_MS,
+    );
+    reconnectTimeoutRef.current = setTimeout(() => {
+      reconnectTimeoutRef.current = undefined;
+      if (shouldStayConnectedRef.current) void connect();
+    }, delayMs);
+  };
+
+  // Closes the current socket only; does not stop the reconnect loop.
+  const closeCurrentConnection = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = undefined;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
   const connect = async () => {
-    // Close existing connection if any
-    disconnect();
+    closeCurrentConnection();
+    shouldStayConnectedRef.current = true;
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
@@ -98,6 +128,7 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
       console.log('SSE connection opened:', url.toString());
       setIsConnected(true);
       setError(null);
+      reconnectAttemptRef.current = 0;
       onOpen?.();
 
       const reader = response.body.getReader();
@@ -118,24 +149,27 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
           if (data) handleEvent(data);
         });
       }
+      // Server or an intermediate proxy closed the stream — reconnect so
+      // events published after the drop are not missed.
+      if (!abortController.signal.aborted) {
+        setIsConnected(false);
+        scheduleReconnect();
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       console.error('SSE connection error:', err);
       setIsConnected(false);
-      setError('Connection error. Attempting to reconnect...');
+      setError('Connection error. Reconnecting…');
       onError?.(new Event('error'));
-    } finally {
-      setIsConnected(false);
+      scheduleReconnect();
     }
   };
 
   const disconnect = () => {
-    if (abortControllerRef.current) {
-      console.log('Closing SSE connection');
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsConnected(false);
-    }
+    console.log('Closing SSE connection');
+    shouldStayConnectedRef.current = false;
+    closeCurrentConnection();
+    setIsConnected(false);
   };
 
   const clearEvents = () => {

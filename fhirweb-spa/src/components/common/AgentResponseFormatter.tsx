@@ -628,56 +628,274 @@ const JsonObjectRenderer: React.FC<{ data: Record<string, any> }> = ({
 );
 
 /**
- * Markdown renderer (basic support)
+ * Render **bold** and *italic* inline markdown spans within a line of text.
+ */
+const renderInlineMarkdown = (
+  text: string,
+  keyPrefix: string,
+): React.ReactNode[] => {
+  const parts: React.ReactNode[] = [];
+  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let partIndex = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[1] !== undefined) {
+      parts.push(
+        <strong key={`${keyPrefix}-b-${partIndex++}`}>{match[1]}</strong>,
+      );
+    } else {
+      parts.push(<em key={`${keyPrefix}-i-${partIndex++}`}>{match[2]}</em>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+};
+
+const isTableSeparatorRow = (line: string): boolean =>
+  /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(line.trim());
+
+const parseMarkdownTableRow = (line: string): string[] =>
+  line
+    .trim()
+    .replace(/^\||\|$/g, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+/**
+ * Parse a markdown response into block-level elements: headings, tables,
+ * lists, horizontal rules, fenced code blocks (e.g. ASCII charts), and
+ * paragraphs with inline bold/italic support.
+ */
+const renderMarkdownBlocks = (text: string): React.ReactNode[] => {
+  const lines = text.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+  let blockIndex = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Fenced code block — rendered verbatim so ASCII charts stay aligned.
+    if (/^```/.test(trimmed)) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i].trim())) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing fence
+      blocks.push(
+        <div
+          key={`block-${blockIndex++}`}
+          className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900 p-3"
+        >
+          <pre className="whitespace-pre font-mono text-xs leading-relaxed text-gray-100">
+            {codeLines.join('\n')}
+          </pre>
+        </div>,
+      );
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+      blocks.push(
+        <hr key={`block-${blockIndex++}`} className="my-1 border-gray-200" />,
+      );
+      i++;
+      continue;
+    }
+
+    // Markdown table (header row followed by a separator row)
+    if (
+      /^\|.*\|$/.test(trimmed) &&
+      lines[i + 1] !== undefined &&
+      isTableSeparatorRow(lines[i + 1])
+    ) {
+      const headerCells = parseMarkdownTableRow(line);
+      const currentBlockIndex = blockIndex++;
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        rows.push(parseMarkdownTableRow(lines[i]));
+        i++;
+      }
+      blocks.push(
+        <div key={`block-${currentBlockIndex}`} className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {headerCells.map((cell, idx) => (
+                  <th
+                    key={idx}
+                    className="px-3 py-2 text-left font-semibold text-gray-700"
+                  >
+                    {renderInlineMarkdown(
+                      cell,
+                      `th-${currentBlockIndex}-${idx}`,
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx}>
+                  {row.map((cell, cellIdx) => (
+                    <td
+                      key={cellIdx}
+                      className="px-3 py-2 align-top text-gray-800"
+                    >
+                      {renderInlineMarkdown(
+                        cell,
+                        `td-${currentBlockIndex}-${rowIdx}-${cellIdx}`,
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    // Headings
+    if (/^#{1,3}\s+/.test(line)) {
+      const level = /^###/.test(line) ? 4 : /^##/.test(line) ? 3 : 2;
+      const headingText = line.replace(/^#+\s+/, '');
+      const currentBlockIndex = blockIndex++;
+      const content = renderInlineMarkdown(
+        headingText,
+        `h-${currentBlockIndex}`,
+      );
+      blocks.push(
+        level === 4 ? (
+          <h4
+            key={`block-${currentBlockIndex}`}
+            className="mt-2 font-bold text-gray-900"
+          >
+            {content}
+          </h4>
+        ) : level === 3 ? (
+          <h3
+            key={`block-${currentBlockIndex}`}
+            className="mt-2 text-base font-bold text-gray-900"
+          >
+            {content}
+          </h3>
+        ) : (
+          <h2
+            key={`block-${currentBlockIndex}`}
+            className="mt-2 text-lg font-bold text-gray-900"
+          >
+            {content}
+          </h2>
+        ),
+      );
+      i++;
+      continue;
+    }
+
+    // Unordered lists
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      const currentBlockIndex = blockIndex++;
+      blocks.push(
+        <ul
+          key={`block-${currentBlockIndex}`}
+          className="ml-5 list-disc space-y-1 text-gray-800"
+        >
+          {items.map((item, idx) => (
+            <li key={idx}>
+              {renderInlineMarkdown(item, `ul-${currentBlockIndex}-${idx}`)}
+            </li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    // Ordered lists
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      const currentBlockIndex = blockIndex++;
+      blocks.push(
+        <ol
+          key={`block-${currentBlockIndex}`}
+          className="ml-5 list-decimal space-y-1 text-gray-800"
+        >
+          {items.map((item, idx) => (
+            <li key={idx}>
+              {renderInlineMarkdown(item, `ol-${currentBlockIndex}-${idx}`)}
+            </li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    // Blank line — just a separator between blocks
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    // Paragraph — accumulate consecutive plain lines
+    const paraLines: string[] = [line];
+    i++;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^```/.test(lines[i].trim()) &&
+      !/^\|.*\|$/.test(lines[i].trim()) &&
+      !/^#{1,3}\s+/.test(lines[i]) &&
+      !/^\s*[-*]\s+/.test(lines[i]) &&
+      !/^\s*\d+\.\s+/.test(lines[i]) &&
+      !/^(-{3,}|\*{3,})$/.test(lines[i].trim())
+    ) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    const currentBlockIndex = blockIndex++;
+    blocks.push(
+      <p
+        key={`block-${currentBlockIndex}`}
+        className="leading-relaxed text-gray-800"
+      >
+        {renderInlineMarkdown(paraLines.join(' '), `p-${currentBlockIndex}`)}
+      </p>,
+    );
+  }
+
+  return blocks;
+};
+
+/**
+ * Markdown renderer — headings, tables, lists, horizontal rules, and fenced
+ * code blocks (used for ASCII charts) with inline bold/italic support.
  */
 const MarkdownResponseRenderer: React.FC<{ text: string }> = ({ text }) => (
-  <div className="prose prose-sm max-w-none">
-    <div className="text-sm text-gray-800 space-y-2">
-      {text.split('\n').map((line, idx) => {
-        // Headers
-        if (line.startsWith('###')) {
-          return (
-            <h4 key={idx} className="font-bold text-gray-900 mt-2">
-              {line.replace(/^#+\s/, '')}
-            </h4>
-          );
-        }
-        if (line.startsWith('##')) {
-          return (
-            <h3 key={idx} className="font-bold text-gray-900 mt-2">
-              {line.replace(/^#+\s/, '')}
-            </h3>
-          );
-        }
-        if (line.startsWith('#')) {
-          return (
-            <h2 key={idx} className="font-bold text-lg text-gray-900 mt-2">
-              {line.replace(/^#+\s/, '')}
-            </h2>
-          );
-        }
-
-        // Lists
-        if (line.match(/^\s*[-*]\s/)) {
-          return (
-            <li key={idx} className="ml-4 text-gray-800">
-              {line.replace(/^\s*[-*]\s/, '')}
-            </li>
-          );
-        }
-
-        // Regular paragraph
-        if (line.trim()) {
-          return (
-            <p key={idx} className="text-gray-800 leading-relaxed">
-              {line}
-            </p>
-          );
-        }
-
-        return <br key={idx} />;
-      })}
-    </div>
+  <div className="prose prose-sm max-w-none space-y-3 text-sm">
+    {renderMarkdownBlocks(text)}
   </div>
 );
 

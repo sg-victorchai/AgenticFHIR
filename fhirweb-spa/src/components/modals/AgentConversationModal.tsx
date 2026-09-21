@@ -592,7 +592,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                 className={
                   msg.role === 'user'
                     ? 'max-w-xs md:max-w-md lg:max-w-lg rounded-lg px-4 py-2 bg-blue-600 text-white'
-                    : 'w-full max-w-[90%]'
+                    : 'w-full min-w-0 max-w-[90%]'
                 }
               >
                 {msg.role === 'agent' ? (
