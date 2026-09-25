@@ -7,6 +7,7 @@ import {
   useDeleteResourceMutation,
 } from '../../services/fhir/client';
 import { CarePlan } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 const CarePlanCrudPage: React.FC = () => {
   const { id: patientId, resourceId } = useParams<{
@@ -73,8 +74,9 @@ const CarePlanCrudPage: React.FC = () => {
       const [parent, child] = name.split('.');
       setFormData((prev) => {
         // Create a safe copy of the parent object or initialize a new one
-        const parentObj = prev[parent as keyof typeof prev] as Record<string, any> || {};
-        
+        const parentObj =
+          (prev[parent as keyof typeof prev] as Record<string, any>) || {};
+
         return {
           ...prev,
           [parent]: {
@@ -115,7 +117,10 @@ const CarePlanCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/careplan`);
     } catch (error) {
       console.error('Error saving care plan:', error);
-      alert('Failed to save care plan. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to save care plan. Please try again.',
+      );
     }
   };
 
@@ -136,7 +141,10 @@ const CarePlanCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/careplan`);
     } catch (error) {
       console.error('Error deleting care plan:', error);
-      alert('Failed to delete care plan. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to delete care plan. Please try again.',
+      );
     }
   };
 
@@ -165,8 +173,11 @@ const CarePlanCrudPage: React.FC = () => {
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h2 className="text-xl font-semibold">
-            {!resourceId ? 'Create New Care Plan' : 
-            isEditMode ? 'Edit Care Plan' : 'Care Plan Details'}
+            {!resourceId
+              ? 'Create New Care Plan'
+              : isEditMode
+                ? 'Edit Care Plan'
+                : 'Care Plan Details'}
           </h2>
           <p className="text-gray-600">
             {!resourceId
@@ -179,8 +190,8 @@ const CarePlanCrudPage: React.FC = () => {
             type="button"
             onClick={toggleEditMode}
             className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-              isEditMode 
-                ? 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500' 
+              isEditMode
+                ? 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500'
                 : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
             }`}
           >
@@ -193,23 +204,33 @@ const CarePlanCrudPage: React.FC = () => {
       {resourceId && !isEditMode ? (
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 space-y-4">
           <div>
-            <h3 className="text-lg font-medium">{formData.title || 'Untitled Care Plan'}</h3>
+            <h3 className="text-lg font-medium">
+              {formData.title || 'Untitled Care Plan'}
+            </h3>
             <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-500">Status</p>
-                <p className="font-medium capitalize">{formData.status || 'Unknown'}</p>
+                <p className="font-medium capitalize">
+                  {formData.status || 'Unknown'}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Intent</p>
-                <p className="font-medium capitalize">{formData.intent || 'Unknown'}</p>
+                <p className="font-medium capitalize">
+                  {formData.intent || 'Unknown'}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Start Date</p>
-                <p className="font-medium">{formatDate(formData.period?.start)}</p>
+                <p className="font-medium">
+                  {formatDate(formData.period?.start)}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">End Date</p>
-                <p className="font-medium">{formatDate(formData.period?.end)}</p>
+                <p className="font-medium">
+                  {formatDate(formData.period?.end)}
+                </p>
               </div>
             </div>
             {formData.description && (
@@ -219,7 +240,7 @@ const CarePlanCrudPage: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           <div className="flex justify-between pt-4 border-t border-gray-200">
             <div>
               <button
@@ -367,7 +388,8 @@ const CarePlanCrudPage: React.FC = () => {
               id="period.end"
               name="period.end"
               value={
-                (formData.period?.end && formData.period.end.substring(0, 10)) ||
+                (formData.period?.end &&
+                  formData.period.end.substring(0, 10)) ||
                 ''
               }
               onChange={handleChange}
@@ -380,7 +402,11 @@ const CarePlanCrudPage: React.FC = () => {
             <div>
               <button
                 type="button"
-                onClick={() => resourceId ? toggleEditMode() : navigate(`/patient/${patientId}/careplan`)}
+                onClick={() =>
+                  resourceId
+                    ? toggleEditMode()
+                    : navigate(`/patient/${patientId}/careplan`)
+                }
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
               >
                 {resourceId ? 'Cancel' : 'Back'}
@@ -406,8 +432,8 @@ const CarePlanCrudPage: React.FC = () => {
               {isCreating || isUpdating
                 ? 'Saving...'
                 : resourceId
-                ? 'Update Care Plan'
-                : 'Create Care Plan'}
+                  ? 'Update Care Plan'
+                  : 'Create Care Plan'}
             </button>
           </div>
         </form>

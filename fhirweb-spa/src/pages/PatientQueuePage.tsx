@@ -8,6 +8,7 @@ import {
   useUpdateResourceMutation,
 } from '../services/fhir/client';
 import { RootState } from '../store';
+import { getOperationOutcomeMessage } from '../utils/fhirError';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1074,7 +1075,8 @@ const PatientQueuePage: React.FC = () => {
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 sm:px-5 py-3 sm:py-4 mb-6 text-sm">
-          Failed to load encounters. Please refresh.
+          {getOperationOutcomeMessage(error) ||
+            'Failed to load encounters. Please refresh.'}
         </div>
       )}
 

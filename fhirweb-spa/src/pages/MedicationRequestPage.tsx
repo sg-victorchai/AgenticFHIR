@@ -10,6 +10,7 @@ import {
   useGoToPageMutation,
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
+import { getOperationOutcomeMessage } from '../utils/fhirError';
 
 interface MedicationRequest {
   id: string;
@@ -165,7 +166,9 @@ const MedicationRequestPage: React.FC = () => {
   }, [currentBundle]);
 
   // Handle error state
-  const error = apiError ? 'Failed to load medication data' : null;
+  const error = apiError
+    ? getOperationOutcomeMessage(apiError) || 'Failed to load medication data'
+    : null;
 
   const handleViewDetails = (medicationRequestId: string) => {
     if (id) {

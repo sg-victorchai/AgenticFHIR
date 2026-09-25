@@ -7,6 +7,7 @@ import {
   useDeleteResourceMutation,
 } from '../../services/fhir/client';
 import { Observation } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 const ObservationCrudPage: React.FC = () => {
   const { id: patientId, resourceId } = useParams<{
@@ -322,7 +323,10 @@ const ObservationCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/observation`);
     } catch (error) {
       console.error('Error saving observation:', error);
-      alert('Failed to save observation. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to save observation. Please try again.',
+      );
     }
   };
 
@@ -343,7 +347,10 @@ const ObservationCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/observation`);
     } catch (error) {
       console.error('Error deleting observation:', error);
-      alert('Failed to delete observation. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to delete observation. Please try again.',
+      );
     }
   };
 
@@ -360,10 +367,10 @@ const ObservationCrudPage: React.FC = () => {
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h2 className="text-xl font-semibold">
-            {!resourceId 
-              ? 'Create New Observation' 
-              : isEditMode 
-                ? 'Edit Observation' 
+            {!resourceId
+              ? 'Create New Observation'
+              : isEditMode
+                ? 'Edit Observation'
                 : 'Observation Details'}
           </h2>
           <p className="text-gray-600">
@@ -372,7 +379,7 @@ const ObservationCrudPage: React.FC = () => {
               : `Observation for ${patient?.name?.[0]?.given?.[0]} ${patient?.name?.[0]?.family}`}
           </p>
         </div>
-        
+
         {resourceId && !isEditMode && (
           <button
             type="button"
@@ -397,11 +404,15 @@ const ObservationCrudPage: React.FC = () => {
                 <p className="text-sm font-medium text-gray-700 mb-1">
                   Display Name
                 </p>
-                <p className="text-gray-900">{getObservationCodeText() || '-'}</p>
+                <p className="text-gray-900">
+                  {getObservationCodeText() || '-'}
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-1">Code</p>
-                <p className="text-gray-900">{formData.code?.coding?.[0]?.code || '-'}</p>
+                <p className="text-gray-900">
+                  {formData.code?.coding?.[0]?.code || '-'}
+                </p>
               </div>
             </div>
           </div>
@@ -414,43 +425,72 @@ const ObservationCrudPage: React.FC = () => {
             {valueType === 'quantity' && formData.valueQuantity && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm font-medium text-gray-700 mb-1">Value</p>
-                  <p className="text-gray-900">{formData.valueQuantity.value || '-'}</p>
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Value
+                  </p>
+                  <p className="text-gray-900">
+                    {formData.valueQuantity.value || '-'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-1">Unit</p>
-                  <p className="text-gray-900">{formData.valueQuantity.unit || '-'}</p>
+                  <p className="text-gray-900">
+                    {formData.valueQuantity.unit || '-'}
+                  </p>
                 </div>
               </div>
             )}
-            
+
             {valueType === 'string' && (
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">Text Value</p>
-                <p className="text-gray-900 whitespace-pre-wrap">{formData.valueString || '-'}</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  Text Value
+                </p>
+                <p className="text-gray-900 whitespace-pre-wrap">
+                  {formData.valueString || '-'}
+                </p>
               </div>
             )}
-            
+
             {valueType === 'boolean' && (
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">Yes/No Value</p>
-                <p className="text-gray-900">{formData.valueBoolean === true ? 'Yes' : formData.valueBoolean === false ? 'No' : '-'}</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  Yes/No Value
+                </p>
+                <p className="text-gray-900">
+                  {formData.valueBoolean === true
+                    ? 'Yes'
+                    : formData.valueBoolean === false
+                      ? 'No'
+                      : '-'}
+                </p>
               </div>
             )}
-            
+
             {valueType === 'integer' && (
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">Integer Value</p>
-                <p className="text-gray-900">{formData.valueInteger !== undefined ? formData.valueInteger : '-'}</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  Integer Value
+                </p>
+                <p className="text-gray-900">
+                  {formData.valueInteger !== undefined
+                    ? formData.valueInteger
+                    : '-'}
+                </p>
               </div>
             )}
-            
-            {valueType === 'codeableConcept' && formData.valueCodeableConcept && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">Coded Value Text</p>
-                <p className="text-gray-900">{formData.valueCodeableConcept.text || '-'}</p>
-              </div>
-            )}
+
+            {valueType === 'codeableConcept' &&
+              formData.valueCodeableConcept && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Coded Value Text
+                  </p>
+                  <p className="text-gray-900">
+                    {formData.valueCodeableConcept.text || '-'}
+                  </p>
+                </div>
+              )}
           </div>
 
           {/* Status Display */}
@@ -461,10 +501,12 @@ const ObservationCrudPage: React.FC = () => {
 
           {/* Effective Date Time Display */}
           <div className="border-b border-gray-200 pb-4">
-            <p className="text-sm font-medium text-gray-700 mb-1">Effective Date/Time</p>
+            <p className="text-sm font-medium text-gray-700 mb-1">
+              Effective Date/Time
+            </p>
             <p className="text-gray-900">
-              {formData.effectiveDateTime 
-                ? new Date(formData.effectiveDateTime).toLocaleString() 
+              {formData.effectiveDateTime
+                ? new Date(formData.effectiveDateTime).toLocaleString()
                 : '-'}
             </p>
           </div>
@@ -820,8 +862,8 @@ const ObservationCrudPage: React.FC = () => {
               {isCreating || isUpdating
                 ? 'Saving...'
                 : resourceId
-                ? 'Update Observation'
-                : 'Create Observation'}
+                  ? 'Update Observation'
+                  : 'Create Observation'}
             </button>
           </div>
         </form>

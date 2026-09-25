@@ -10,6 +10,7 @@ import {
   extractMissionId,
 } from '../../utils/agentResponseParser';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { extractOperationOutcomeText } from '../../utils/fhirError';
 import { getAuthenticatedHeaders } from '../../services/auth/oidc';
 import { useSSESubscription } from '../../hooks/useSSESubscription';
 
@@ -310,7 +311,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
     if (!response.ok) {
       throw new Error(
-        parsed.message || `Failed to create mission (${response.status})`,
+        extractOperationOutcomeText(parsed) ||
+          parsed.message ||
+          `Failed to create mission (${response.status})`,
       );
     }
 
@@ -358,7 +361,11 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Status check failed (${response.status})`);
+      const parsed = parseJsonSafely(await response.text());
+      throw new Error(
+        extractOperationOutcomeText(parsed) ||
+          `Status check failed (${response.status})`,
+      );
     }
 
     const parsed = parseJsonSafely(await response.text());

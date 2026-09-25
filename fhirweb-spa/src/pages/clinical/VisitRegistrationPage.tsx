@@ -5,6 +5,7 @@ import {
   useCreateResourceMutation,
 } from '../../services/fhir/client';
 import { Encounter } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 const COMMON_COMPLAINTS = [
   'Shortness of breath',
@@ -125,7 +126,10 @@ const VisitRegistrationPage: React.FC = () => {
     if ('data' in result && result.data?.id) {
       navigate('/queue');
     } else {
-      setError('Failed to register visit. Please try again.');
+      setError(
+        ('error' in result && getOperationOutcomeMessage(result.error)) ||
+          'Failed to register visit. Please try again.',
+      );
     }
   };
 

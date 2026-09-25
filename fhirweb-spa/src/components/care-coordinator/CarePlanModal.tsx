@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IconSpinner } from './missionUi';
 import { useGetResourceByIdQuery } from '../../services/fhir/client';
 import { createFHIRClient } from '../../services/fhir/client';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 interface CarePlanModalProps {
   carePlanId: string;
@@ -71,7 +72,11 @@ export const CarePlanModal: React.FC<CarePlanModalProps> = ({
       setSaveError(null);
     } catch (err: any) {
       console.error('Error saving care plan:', err);
-      setSaveError(err.message || 'Failed to save care plan');
+      setSaveError(
+        getOperationOutcomeMessage(err) ||
+          err.message ||
+          'Failed to save care plan',
+      );
     } finally {
       setIsSaving(false);
     }

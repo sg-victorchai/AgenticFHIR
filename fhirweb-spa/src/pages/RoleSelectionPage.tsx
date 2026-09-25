@@ -92,7 +92,7 @@ const RoleSelectionPage: React.FC = () => {
         </p>
         {currentRole && (
           <p className="text-sm text-blue-600 mt-2">
-            Currently signed in as:{' '}
+            Currently assumed role:{' '}
             <span className="font-semibold capitalize">
               {roleLabelMap[currentRole]}
             </span>

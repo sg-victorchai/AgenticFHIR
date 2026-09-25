@@ -3,6 +3,7 @@
 // used by AgentConversationModal, minus per-patient scoping)
 import FHIR from 'fhirclient';
 import { getAuthenticatedHeaders } from './auth/oidc';
+import { extractOperationOutcomeText } from '../utils/fhirError';
 import {
   AgentInterventionRequest,
   AgentSource,
@@ -114,6 +115,11 @@ const parseJsonSafely = (text: string): any => {
     return { message: text };
   }
 };
+
+// Builds a user-facing message from a failed response, preferring the
+// backend's OperationOutcome diagnostics when present.
+const buildResponseErrorMessage = (parsed: any, fallback: string): string =>
+  extractOperationOutcomeText(parsed) || parsed?.message || fallback;
 
 const normalizeMissionPayload = (payload: any): MissionExecutionResult => {
   const asObject = payload && typeof payload === 'object' ? payload : {};
@@ -243,8 +249,12 @@ export const agentMissionService = {
     );
 
     if (!response.ok) {
+      const parsed = parseJsonSafely(await response.text());
       throw new Error(
-        `Failed to fetch persona parameters (${response.status})`,
+        buildResponseErrorMessage(
+          parsed,
+          `Failed to fetch persona parameters (${response.status})`,
+        ),
       );
     }
 
@@ -281,7 +291,10 @@ export const agentMissionService = {
 
     if (!response.ok) {
       throw new Error(
-        parsed.message || `Failed to submit mission (${response.status})`,
+        buildResponseErrorMessage(
+          parsed,
+          `Failed to submit mission (${response.status})`,
+        ),
       );
     }
 
@@ -298,7 +311,13 @@ export const agentMissionService = {
     );
 
     if (!response.ok) {
-      throw new Error(`Status check failed (${response.status})`);
+      const parsed = parseJsonSafely(await response.text());
+      throw new Error(
+        buildResponseErrorMessage(
+          parsed,
+          `Status check failed (${response.status})`,
+        ),
+      );
     }
 
     const parsed = parseJsonSafely(await response.text());
@@ -317,7 +336,13 @@ export const agentMissionService = {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to load missions (${response.status})`);
+      const parsed = parseJsonSafely(await response.text());
+      throw new Error(
+        buildResponseErrorMessage(
+          parsed,
+          `Failed to load missions (${response.status})`,
+        ),
+      );
     }
 
     const parsed = parseJsonSafely(await response.text());
@@ -334,7 +359,13 @@ export const agentMissionService = {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to cancel mission (${response.status})`);
+      const parsed = parseJsonSafely(await response.text());
+      throw new Error(
+        buildResponseErrorMessage(
+          parsed,
+          `Failed to cancel mission (${response.status})`,
+        ),
+      );
     }
   },
 
@@ -348,7 +379,13 @@ export const agentMissionService = {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to load interventions (${response.status})`);
+      const parsed = parseJsonSafely(await response.text());
+      throw new Error(
+        buildResponseErrorMessage(
+          parsed,
+          `Failed to load interventions (${response.status})`,
+        ),
+      );
     }
 
     const parsed = parseJsonSafely(await response.text());
@@ -379,7 +416,10 @@ export const agentMissionService = {
     if (!response.ok) {
       const parsed = parseJsonSafely(await response.text());
       throw new Error(
-        parsed.message || `Failed to resolve intervention (${response.status})`,
+        buildResponseErrorMessage(
+          parsed,
+          `Failed to resolve intervention (${response.status})`,
+        ),
       );
     }
   },

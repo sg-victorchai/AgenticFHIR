@@ -12,6 +12,7 @@ import {
   useGetLocationsQuery,
 } from '../../services/fhir/client';
 import { Encounter, Practitioner } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 // Interface for form group structure
 interface FormGroup {
@@ -1066,7 +1067,9 @@ const EncounterCrudPage: React.FC = () => {
       console.error('Error saving encounter:', error);
 
       // Initialize error information
-      let errorMsg = 'Failed to save encounter. Please try again.';
+      let errorMsg =
+        getOperationOutcomeMessage(error) ||
+        'Failed to save encounter. Please try again.';
       let statusCode = '';
       let operationOutcome = null;
 
@@ -1081,12 +1084,6 @@ const EncounterCrudPage: React.FC = () => {
         error.data?.issue
       ) {
         operationOutcome = error.data;
-        // Extract the first issue's details if available
-        if (error.data.issue[0]?.details?.text) {
-          errorMsg = error.data.issue[0].details.text;
-        } else if (error.data.issue[0]?.diagnostics) {
-          errorMsg = error.data.issue[0].diagnostics;
-        }
       } else if (error.data?.message) {
         errorMsg = error.data.message;
       } else if (error.message) {
@@ -1126,7 +1123,10 @@ const EncounterCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/encounter`);
     } catch (error) {
       console.error('Error deleting encounter:', error);
-      alert('Failed to delete encounter. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to delete encounter. Please try again.',
+      );
     }
   };
 
@@ -2685,8 +2685,8 @@ const EncounterCrudPage: React.FC = () => {
             {!resourceId
               ? 'Create New Encounter'
               : isEditMode
-              ? 'Edit Encounter'
-              : 'Encounter Details'}
+                ? 'Edit Encounter'
+                : 'Encounter Details'}
           </h2>
           <p className="text-gray-600">
             {!resourceId
@@ -2694,10 +2694,10 @@ const EncounterCrudPage: React.FC = () => {
                 ? `Creating new encounter for ${getPatientDisplayName(patient)}`
                 : 'Creating new encounter'
               : formData?.subject?.display
-              ? `Encounter for ${formData.subject.display}`
-              : getPatientDisplayName(patient)
-              ? `Encounter for ${getPatientDisplayName(patient)}`
-              : 'Encounter details'}
+                ? `Encounter for ${formData.subject.display}`
+                : getPatientDisplayName(patient)
+                  ? `Encounter for ${getPatientDisplayName(patient)}`
+                  : 'Encounter details'}
           </p>
         </div>
 
@@ -2788,8 +2788,8 @@ const EncounterCrudPage: React.FC = () => {
               {isCreating || isUpdating
                 ? 'Saving...'
                 : resourceId
-                ? 'Save Changes'
-                : 'Create Encounter'}
+                  ? 'Save Changes'
+                  : 'Create Encounter'}
             </button>
           </div>
         </form>
