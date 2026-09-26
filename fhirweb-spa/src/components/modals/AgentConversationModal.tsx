@@ -283,7 +283,6 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Tenant-ID': tenantId,
-      'X-Patient-ID': patientId,
       ...(agentConfig.headers || {}),
     };
 
