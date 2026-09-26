@@ -118,12 +118,29 @@ export const getOidcUserName = (user: User): string =>
       'User',
   );
 
-// The SMART on FHIR `fhirUser` OIDC claim directly encodes the caller's FHIR
-// identity, e.g. "Patient/abc-123" or "Practitioner/xyz-789" — this is the
-// actual role/identity signal issued by this realm (confirmed from a live
-// token; there is no `realm_access.roles` or `launch` claim in practice).
-export const getUserFhirUserReference = (user: User | null): string | null =>
-  (user?.profile as { fhirUser?: string } | undefined)?.fhirUser ?? null;
+// Identity providers may expose the FHIR patient reference as `fhirUser` or
+// `patient`; both claims are issued by the supported local/Azure realms.
+export const getUserFhirUserReference = (user: User | null): string | null => {
+  const profile = user?.profile as
+    | { fhirUser?: string; patient?: string }
+    | undefined;
+  let tokenPatient: string | undefined;
+  try {
+    const payload = user?.access_token?.split('.')[1];
+    if (payload) {
+      const claims = JSON.parse(
+        atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
+      ) as { patient?: string };
+      tokenPatient = claims.patient;
+    }
+  } catch {
+    tokenPatient = undefined;
+  }
+
+  const reference = profile?.fhirUser || profile?.patient || tokenPatient;
+  if (!reference) return null;
+  return reference.includes('/') ? reference : `Patient/${reference}`;
+};
 
 // True when the signed-in user's own FHIR identity is a Patient resource.
 export const isPatientFhirUser = (user: User | null): boolean =>
