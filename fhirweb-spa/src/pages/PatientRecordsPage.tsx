@@ -6954,7 +6954,7 @@ const PatientRecordsPage: React.FC = () => {
                         )}
                       </div>
                       <div className="flex flex-col gap-2 border-t border-gray-200 px-4 py-3">
-                        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                        <div className="flex w-full flex-wrap items-center gap-2">
                           <div className="flex flex-wrap items-center gap-2">
                             {!isAddingHarmonizerRecord &&
                               selectedHarmonizerRecord.recordId && (
@@ -7024,51 +7024,6 @@ const PatientRecordsPage: React.FC = () => {
                                 </>
                               )}
                           </div>
-                          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                            {!isEditingHarmonizerRecord ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setIsEditingHarmonizerRecord(true)
-                                }
-                                className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
-                              >
-                                Edit resource
-                              </button>
-                            ) : (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setIsEditingHarmonizerRecord(false)
-                                  }
-                                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                                >
-                                  Cancel edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void saveHarmonizerRecord()}
-                                  disabled={isSavingHarmonizerRecord}
-                                  className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-                                >
-                                  {isSavingHarmonizerRecord
-                                    ? 'Saving…'
-                                    : 'Save resource'}
-                                </button>
-                              </>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedHarmonizerRecord(null);
-                                setIsEditingHarmonizerRecord(false);
-                              }}
-                              className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                            >
-                              Close
-                            </button>
-                          </div>
                         </div>
                         {!isAddingHarmonizerRecord &&
                           selectedHarmonizerRecord.recordId &&
@@ -7091,6 +7046,49 @@ const PatientRecordsPage: React.FC = () => {
                               />
                             </label>
                           )}
+                        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2">
+                          {!isEditingHarmonizerRecord ? (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingHarmonizerRecord(true)}
+                              className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+                            >
+                              Edit resource
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setIsEditingHarmonizerRecord(false)
+                                }
+                                className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Cancel edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void saveHarmonizerRecord()}
+                                disabled={isSavingHarmonizerRecord}
+                                className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                              >
+                                {isSavingHarmonizerRecord
+                                  ? 'Saving…'
+                                  : 'Save resource'}
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedHarmonizerRecord(null);
+                              setIsEditingHarmonizerRecord(false);
+                            }}
+                            className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                          >
+                            Close
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
