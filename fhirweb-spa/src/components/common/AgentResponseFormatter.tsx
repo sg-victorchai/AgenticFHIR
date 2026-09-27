@@ -246,133 +246,110 @@ const SummaryRow: React.FC<{ label: string; value: unknown }> = ({
   );
 };
 
-const StatusBadge: React.FC<{ value?: string }> = ({ value }) => {
-  if (!value) return null;
-  return (
-    <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold capitalize text-emerald-800">
-      {value.replace(/-/g, ' ')}
-    </span>
-  );
-};
-
-const ConditionSummary: React.FC<{ condition: any }> = ({ condition }) => {
-  const clinicalStatus = getConceptText(condition.clinicalStatus);
-  const verificationStatus = getConceptText(condition.verificationStatus);
-  return (
-    <div>
-      <div className="border-b border-gray-200 pb-4">
-        <p className="text-lg font-semibold text-gray-900">
-          {getConceptText(condition.code) || 'Condition'}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <StatusBadge value={clinicalStatus} />
-          {verificationStatus && verificationStatus !== clinicalStatus && (
-            <StatusBadge value={verificationStatus} />
-          )}
+const FriendlyResourceAttributes: React.FC<{ resource: any }> = ({
+  resource,
+}) => {
+  const renderValue = (
+    value: any,
+    label: string,
+    path: string,
+  ): React.ReactNode => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value !== 'object') {
+      return (
+        <div
+          key={path}
+          className="grid gap-1 border-b border-gray-100 py-3 last:border-b-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4"
+        >
+          <dt className="text-xs font-semibold text-gray-500">{label}</dt>
+          <dd className="min-w-0 break-words text-sm text-gray-800">
+            {String(value)}
+          </dd>
         </div>
+      );
+    }
+
+    if (Array.isArray(value)) {
+      return (
+        <div
+          key={path}
+          className="border-b border-gray-100 py-3 last:border-b-0"
+        >
+          <dt className="text-xs font-semibold text-gray-500">{label}</dt>
+          <dd className="mt-2 space-y-2">
+            {value.length === 0 ? (
+              <p className="text-sm text-gray-500">No entries</p>
+            ) : (
+              value.map((item, index) =>
+                renderValue(item, `${label} ${index + 1}`, `${path}.${index}`),
+              )
+            )}
+          </dd>
+        </div>
+      );
+    }
+
+    if ('coding' in value) {
+      return (
+        <div
+          key={path}
+          className="border-b border-gray-100 py-3 last:border-b-0"
+        >
+          <dt className="text-xs font-semibold text-gray-500">{label}</dt>
+          <dd className="mt-2 grid gap-2 sm:grid-cols-3">
+            {value.coding?.map((coding: any, index: number) => (
+              <React.Fragment key={`${path}.coding.${index}`}>
+                <SummaryRow label="Code" value={coding.code} />
+                <SummaryRow label="System" value={coding.system} />
+                <SummaryRow label="Display" value={coding.display} />
+              </React.Fragment>
+            ))}
+            <SummaryRow label="Text" value={value.text} />
+            {Object.entries(value)
+              .filter(([field]) => !['coding', 'text'].includes(field))
+              .map(([field, nestedValue]) =>
+                renderValue(
+                  nestedValue,
+                  formatFieldLabel(field),
+                  `${path}.${field}`,
+                ),
+              )}
+          </dd>
+        </div>
+      );
+    }
+
+    return (
+      <div key={path} className="border-b border-gray-100 py-3 last:border-b-0">
+        <dt className="text-xs font-semibold text-gray-500">{label}</dt>
+        <dd className="mt-2 rounded-md bg-gray-50 px-3">
+          {Object.entries(value).map(([field, nestedValue]) =>
+            renderValue(
+              nestedValue,
+              formatFieldLabel(field),
+              `${path}.${field}`,
+            ),
+          )}
+        </dd>
       </div>
-      <dl>
-        <SummaryRow label="Severity" value={condition.severity} />
-        <SummaryRow label="Category" value={condition.category} />
-        <SummaryRow
-          label="Onset"
-          value={
-            condition.onsetDateTime ||
-            condition.onsetPeriod ||
-            condition.onsetString
-          }
-        />
-        <SummaryRow
-          label="Recorded"
-          value={formatDate(condition.recordedDate)}
-        />
-        <SummaryRow label="Body site" value={condition.bodySite} />
-        <SummaryRow label="Notes" value={condition.note} />
-      </dl>
-    </div>
-  );
-};
+    );
+  };
 
-const getObservationValue = (observation: any): string => {
-  if (observation.valueQuantity) {
-    return formatHumanValue(observation.valueQuantity);
-  }
-  return (
-    observation.valueString ||
-    getConceptText(observation.valueCodeableConcept) ||
-    (observation.component?.length
-      ? `${observation.component.length} measured values`
-      : '—')
-  );
-};
-
-const formatReferenceRange = (ranges?: any[]): string => {
-  if (!ranges?.length) return '—';
-  return ranges
-    .map((range) => {
-      if (range.text) return range.text;
-      const low = range.low ? formatHumanValue(range.low) : '';
-      const high = range.high ? formatHumanValue(range.high) : '';
-      return [low, high].filter(Boolean).join(' to ');
-    })
-    .filter(Boolean)
-    .join('; ');
-};
-
-const ObservationSummary: React.FC<{ observation: any }> = ({
-  observation,
-}) => (
-  <div>
-    <div className="border-b border-gray-200 pb-4">
-      <p className="text-sm font-medium text-gray-600">
-        {getConceptText(observation.code) || 'Observation'}
-      </p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">
-        {getObservationValue(observation)}
-      </p>
-      <div className="mt-2">
-        <StatusBadge value={observation.status} />
-      </div>
-    </div>
-    <dl>
-      <SummaryRow
-        label="Date"
-        value={formatDate(observation.effectiveDateTime || observation.issued)}
-      />
-      <SummaryRow label="Category" value={observation.category} />
-      <SummaryRow label="Interpretation" value={observation.interpretation} />
-      <SummaryRow
-        label="Reference range"
-        value={formatReferenceRange(observation.referenceRange)}
-      />
-      <SummaryRow label="Measured values" value={observation.component} />
-      <SummaryRow label="Notes" value={observation.note} />
-    </dl>
-  </div>
-);
-
-const GenericResourceSummary: React.FC<{ resource: any }> = ({ resource }) => {
-  const fields = Object.entries(resource).filter(
-    ([field]) =>
-      !['resourceType', 'id', 'meta', 'text', 'contained'].includes(field),
-  );
   return (
     <dl>
-      {fields.map(([field, value]) => (
-        <SummaryRow key={field} label={formatFieldLabel(field)} value={value} />
-      ))}
+      {Object.entries(resource)
+        .filter(([field]) => !['resourceType', 'id'].includes(field))
+        .map(([field, value]) =>
+          renderValue(value, formatFieldLabel(field), field),
+        )}
     </dl>
   );
 };
 
-const ResourceSummaryContent: React.FC<{ resource: any }> = ({ resource }) => {
-  if (resource.resourceType === 'Condition') {
-    return <ConditionSummary condition={resource} />;
-  }
-  if (resource.resourceType === 'Observation') {
-    return <ObservationSummary observation={resource} />;
-  }
-  return <GenericResourceSummary resource={resource} />;
+export const ResourceSummaryContent: React.FC<{ resource: any }> = ({
+  resource,
+}) => {
+  return <FriendlyResourceAttributes resource={resource} />;
 };
 
 const ResourceSummaryDialog: React.FC<{

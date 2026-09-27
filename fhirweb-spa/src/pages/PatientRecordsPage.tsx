@@ -10,6 +10,7 @@ import {
 } from '../services/fhir/client';
 import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
+import { ResourceSummaryContent } from '../components/common/AgentResponseFormatter';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
 import { AgentEndpointConfig } from '../types/agent';
 import { getAuthenticatedHeaders } from '../services/auth/oidc';
@@ -17,6 +18,11 @@ import {
   extractOperationOutcomeText,
   getOperationOutcomeMessage,
 } from '../utils/fhirError';
+import {
+  createHarmonizerReviewService,
+  HarmonizerPendingMission,
+  HarmonizerReviewRecord,
+} from '../services/harmonizerReviewService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +73,8 @@ interface HarmonizerJobStatusResponse {
   error?: string;
   message?: string;
   pollUrl?: string;
+  reviewUrl?: string;
+  interventionId?: string;
 }
 
 interface HarmonizerStepResult {
@@ -374,6 +382,8 @@ const HARMONIZER_IMPORT_URL =
 const HARMONIZER_STATUS_URL_BASE =
   import.meta.env.VITE_HARMONIZER_STATUS_URL_BASE ||
   `${AGENT_API_BASE_URL}/api/persona/DataPipelinePersona/${HARMONIZER_PERSONA_ID}/$status`;
+const harmonizerReviewService =
+  createHarmonizerReviewService(AGENT_API_BASE_URL);
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 if (!API_KEY && import.meta.env.DEV) {
@@ -506,6 +516,276 @@ const ErrorState: React.FC<{ error: unknown }> = ({ error }) => (
     </div>
   </div>
 );
+
+const friendlyFieldLabel = (field: string) =>
+  field
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/^./, (character) => character.toUpperCase());
+
+const FriendlyHarmonizerEditor: React.FC<{
+  resource: Record<string, any>;
+  onChange: (resource: Record<string, any>) => void;
+}> = ({ resource, onChange }) => {
+  const update = (path: Array<string | number>, value: unknown) => {
+    const next = JSON.parse(JSON.stringify(resource));
+    let target = next;
+    path.slice(0, -1).forEach((key) => {
+      target[key] = target[key] || {};
+      target = target[key];
+    });
+    target[path[path.length - 1]] = value;
+    onChange(next);
+  };
+
+  const inputClass =
+    'mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30';
+
+  const temporalFieldPattern =
+    /(^|date|time|datetime|issued|authored|recorded|effective|onset|performed|occurrence|created|updated|start|end)$/i;
+
+  const isTemporalField = (path: Array<string | number>, value: unknown) => {
+    const field = String(path[path.length - 1]);
+    return (
+      temporalFieldPattern.test(field) ||
+      (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T|$)/.test(value))
+    );
+  };
+
+  const toDateInputValue = (value: string, dateTime: boolean) =>
+    dateTime ? value.slice(0, 16) : value.slice(0, 10);
+
+  const isReadOnlyReferenceField = (path: Array<string | number>) => {
+    const field = String(path[path.length - 1]).toLowerCase();
+    return (
+      field === 'id' ||
+      field.endsWith('id') ||
+      field === 'reference' ||
+      field.endsWith('reference') ||
+      field === 'resourcetype'
+    );
+  };
+
+  const renderCodeableConcept = (
+    value: Record<string, any>,
+    path: Array<string | number>,
+    label: string,
+  ): React.ReactNode => {
+    const coding = Array.isArray(value.coding) ? value.coding : [];
+    return (
+      <fieldset
+        key={path.join('.')}
+        className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3"
+      >
+        {coding.map((entry: Record<string, any>, index: number) => (
+          <div
+            key={`${path.join('.')}.coding.${index}`}
+            className="grid gap-3 rounded-md border border-gray-200 bg-white p-3 sm:grid-cols-3"
+          >
+            <label className="block text-xs font-semibold text-gray-600">
+              Code
+              <input
+                className={inputClass}
+                value={entry.code || ''}
+                onChange={(event) =>
+                  update([...path, 'coding', index, 'code'], event.target.value)
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold text-gray-600">
+              System
+              <input
+                className={inputClass}
+                value={entry.system || ''}
+                onChange={(event) =>
+                  update(
+                    [...path, 'coding', index, 'system'],
+                    event.target.value,
+                  )
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold text-gray-600">
+              Display
+              <input
+                className={inputClass}
+                value={entry.display || ''}
+                onChange={(event) =>
+                  update(
+                    [...path, 'coding', index, 'display'],
+                    event.target.value,
+                  )
+                }
+              />
+            </label>
+          </div>
+        ))}
+        <label className="block text-xs font-semibold text-gray-600">
+          Text
+          <input
+            className={inputClass}
+            value={value.text || ''}
+            onChange={(event) => update([...path, 'text'], event.target.value)}
+          />
+        </label>
+        {coding.length === 0 && !value.text && (
+          <p className="text-xs text-gray-500">No code or text supplied.</p>
+        )}
+        {label === 'Code' && (
+          <p className="text-[11px] text-gray-500">
+            Update the clinical code, terminology system, display label, or free
+            text.
+          </p>
+        )}
+      </fieldset>
+    );
+  };
+
+  const renderValue = (
+    value: any,
+    path: Array<string | number>,
+    label: string,
+    depth = 0,
+  ): React.ReactNode => {
+    if (value === null || value === undefined) {
+      const isTemporal = isTemporalField(path, value);
+      const readOnly = isReadOnlyReferenceField(path);
+      return (
+        <label
+          key={path.join('.')}
+          className="block text-xs font-semibold text-gray-600"
+        >
+          {label}
+          <input
+            type={isTemporal ? 'date' : 'text'}
+            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-100 text-gray-500' : ''}`}
+            value=""
+            readOnly={readOnly}
+            onChange={(event) => update(path, event.target.value)}
+          />
+        </label>
+      );
+    }
+
+    if (typeof value === 'object') {
+      if (
+        !Array.isArray(value) &&
+        ('coding' in value ||
+          (typeof value.text === 'string' &&
+            [
+              'code',
+              'category',
+              'severity',
+              'clinicalStatus',
+              'verificationStatus',
+              'interpretation',
+            ].includes(String(path[path.length - 1]))))
+      ) {
+        return renderCodeableConcept(value, path, label);
+      }
+      if (Array.isArray(value)) {
+        return (
+          <fieldset
+            key={path.join('.')}
+            className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3"
+          >
+            <legend className="px-1 text-xs font-semibold text-gray-600">
+              {label}
+            </legend>
+            {value.length === 0 ? (
+              <p className="text-xs text-gray-500">No entries</p>
+            ) : (
+              value.map((item, index) =>
+                renderValue(
+                  item,
+                  [...path, index],
+                  `${label} ${index + 1}`,
+                  depth + 1,
+                ),
+              )
+            )}
+          </fieldset>
+        );
+      }
+
+      return (
+        <fieldset
+          key={path.join('.')}
+          className={`space-y-3 rounded-md border border-gray-200 p-3 ${depth > 0 ? 'bg-gray-50' : 'bg-white'}`}
+        >
+          <legend className="px-1 text-xs font-semibold text-gray-600">
+            {label}
+          </legend>
+          {Object.entries(value).map(([field, nestedValue]) =>
+            renderValue(
+              nestedValue,
+              [...path, field],
+              friendlyFieldLabel(field),
+              depth + 1,
+            ),
+          )}
+        </fieldset>
+      );
+    }
+
+    const isBoolean = typeof value === 'boolean';
+    const isNumber = typeof value === 'number';
+    const isTemporal = isTemporalField(path, value);
+    const isDateTime = isTemporal && String(value).includes('T');
+    const readOnly = isReadOnlyReferenceField(path);
+    return (
+      <label
+        key={path.join('.')}
+        className="block text-xs font-semibold text-gray-600"
+      >
+        {label}
+        {isBoolean ? (
+          <select
+            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-100 text-gray-500' : ''}`}
+            value={String(value)}
+            disabled={readOnly}
+            onChange={(event) => update(path, event.target.value === 'true')}
+          >
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        ) : (
+          <input
+            type={
+              isNumber
+                ? 'number'
+                : isDateTime
+                  ? 'datetime-local'
+                  : isTemporal
+                    ? 'date'
+                    : 'text'
+            }
+            value={
+              isTemporal
+                ? toDateInputValue(String(value), isDateTime)
+                : String(value)
+            }
+            readOnly={readOnly}
+            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-100 text-gray-500' : ''}`}
+            onChange={(event) =>
+              update(
+                path,
+                isNumber ? Number(event.target.value) : event.target.value,
+              )
+            }
+          />
+        )}
+      </label>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(resource).map(([field, value]) =>
+        renderValue(value, [field], friendlyFieldLabel(field)),
+      )}
+    </div>
+  );
+};
 
 const parseReference = (
   reference?: string,
@@ -1520,15 +1800,45 @@ const PatientRecordsPage: React.FC = () => {
     useState<HarmonizerJobSummaryResponse | null>(null);
   const [isLoadingNoteUploadSummary, setIsLoadingNoteUploadSummary] =
     useState(false);
+  const [harmonizerReviewRecords, setHarmonizerReviewRecords] = useState<
+    HarmonizerReviewRecord[]
+  >([]);
+  const [harmonizerReviewEtag, setHarmonizerReviewEtag] = useState<string>();
+  const [isLoadingHarmonizerReview, setIsLoadingHarmonizerReview] =
+    useState(false);
+  const [selectedHarmonizerRecord, setSelectedHarmonizerRecord] =
+    useState<HarmonizerReviewRecord | null>(null);
+  const [isEditingHarmonizerRecord, setIsEditingHarmonizerRecord] =
+    useState(false);
+  const [harmonizerRecordDraftObject, setHarmonizerRecordDraftObject] =
+    useState<Record<string, any>>({});
+  const [harmonizerRecordDraft, setHarmonizerRecordDraft] = useState('');
+  const [isSavingHarmonizerRecord, setIsSavingHarmonizerRecord] =
+    useState(false);
+  const [harmonizerReviewActionError, setHarmonizerReviewActionError] =
+    useState<string | null>(null);
+  const [pendingHarmonizerMissions, setPendingHarmonizerMissions] = useState<
+    HarmonizerPendingMission[]
+  >([]);
+  const [
+    isLoadingPendingHarmonizerMissions,
+    setIsLoadingPendingHarmonizerMissions,
+  ] = useState(false);
+  const [showPendingHarmonizerMissions, setShowPendingHarmonizerMissions] =
+    useState(false);
+  const [harmonizerPanelTab, setHarmonizerPanelTab] = useState<
+    'upload' | 'review'
+  >('upload');
 
   // ── Upload panel resize state ──
-  const [uploadPanelWidth, setUploadPanelWidth] = useState(30); // Default 30% width
+  const [uploadPanelWidth, setUploadPanelWidth] = useState(40); // Default 40% width
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ── Ask AI panel mobile resize state ──
   const [agentPanelHeight, setAgentPanelHeight] = useState(50); // Default 50vh
   const agentPanelRef = useRef<HTMLDivElement>(null);
+  const [uploadPanelHeight, setUploadPanelHeight] = useState(50); // Default 50vh
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true);
@@ -1574,6 +1884,22 @@ const PatientRecordsPage: React.FC = () => {
 
   const handleCollapsePanel = () => {
     setAgentPanelHeight((prev) => {
+      if (prev >= 80) return 50;
+      if (prev > 30) return 30;
+      return 30;
+    });
+  };
+
+  const handleExpandUploadPanel = () => {
+    setUploadPanelHeight((prev) => {
+      if (prev <= 30) return 50;
+      if (prev < 80) return 80;
+      return 80;
+    });
+  };
+
+  const handleCollapseUploadPanel = () => {
+    setUploadPanelHeight((prev) => {
       if (prev >= 80) return 50;
       if (prev > 30) return 30;
       return 30;
@@ -1755,6 +2081,144 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const loadHarmonizerReview = async (jobId: string) => {
+    setIsLoadingHarmonizerReview(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      const result = await harmonizerReviewService.getReview(jobId);
+      setHarmonizerReviewEtag(result.etag);
+      const payload = result.data as any;
+      setHarmonizerReviewRecords(
+        payload.records || payload.items || payload.review || [],
+      );
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to load generated resources for review.',
+      );
+    } finally {
+      setIsLoadingHarmonizerReview(false);
+    }
+  };
+
+  const loadPendingHarmonizerMissions = async () => {
+    setHarmonizerPanelTab('review');
+    setShowPendingHarmonizerMissions(true);
+    setIsLoadingPendingHarmonizerMissions(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      const missions = await harmonizerReviewService.getPendingMissions();
+      setPendingHarmonizerMissions(missions);
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to load pending document reviews.',
+      );
+    } finally {
+      setIsLoadingPendingHarmonizerMissions(false);
+    }
+  };
+
+  const openPendingHarmonizerMission = async (
+    mission: HarmonizerPendingMission,
+  ) => {
+    setNoteUploadJobId(mission.missionId);
+    setNoteUploadJobStatus('AWAITING_REVIEW');
+    setNoteUploadMessage('Generated resources are ready for review.');
+    setShowPendingHarmonizerMissions(false);
+    await loadHarmonizerReview(mission.missionId);
+  };
+
+  const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
+    setSelectedHarmonizerRecord(record);
+    setIsEditingHarmonizerRecord(false);
+    const resource = (record.resource || record) as Record<string, any>;
+    setHarmonizerRecordDraftObject(JSON.parse(JSON.stringify(resource)));
+    setHarmonizerRecordDraft(JSON.stringify(resource, null, 2));
+  };
+
+  const saveHarmonizerRecord = async () => {
+    if (!noteUploadJobId || !selectedHarmonizerRecord) return;
+    setIsSavingHarmonizerRecord(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      const resource = JSON.parse(harmonizerRecordDraft) as Record<
+        string,
+        unknown
+      >;
+      await harmonizerReviewService.updateRecord(
+        noteUploadJobId,
+        selectedHarmonizerRecord.recordId,
+        resource,
+        harmonizerReviewEtag,
+      );
+      setSelectedHarmonizerRecord(null);
+      setIsEditingHarmonizerRecord(false);
+      await loadHarmonizerReview(noteUploadJobId);
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error instanceof SyntaxError
+          ? 'The resource draft is not valid JSON.'
+          : error?.message || 'Unable to save this generated resource.',
+      );
+    } finally {
+      setIsSavingHarmonizerRecord(false);
+    }
+  };
+
+  const approveHarmonizerReview = async () => {
+    if (!noteUploadJobId) return;
+    setIsNoteUploadPolling(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      await harmonizerReviewService.approve(
+        noteUploadJobId,
+        'Generated FHIR resources reviewed and approved.',
+        harmonizerReviewEtag,
+      );
+      setHarmonizerReviewRecords([]);
+      setNoteUploadJobStatus('RUNNING');
+      setNoteUploadMessage('Review approved. Resuming Harmonizer…');
+      await pollHarmonizerJobStatus(
+        noteUploadJobId,
+        await buildMissionRequestConfig().then((result) => result.headers),
+        uploadPollRunIdRef.current,
+      );
+    } catch (error: any) {
+      setIsNoteUploadPolling(false);
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to approve generated resources.',
+      );
+    }
+  };
+
+  const rejectHarmonizerReview = async (mode: 'REVISE' | 'DISCARD') => {
+    if (!noteUploadJobId) return;
+    const instructions =
+      mode === 'REVISE'
+        ? window.prompt('Describe the changes required:', '')?.trim()
+        : 'Discard this document import.';
+    if (mode === 'REVISE' && !instructions) return;
+    setHarmonizerReviewActionError(null);
+    try {
+      await harmonizerReviewService.reject(
+        noteUploadJobId,
+        mode,
+        instructions || '',
+        harmonizerReviewEtag,
+      );
+      setHarmonizerReviewRecords([]);
+      setNoteUploadJobStatus(mode === 'REVISE' ? 'RUNNING' : 'FAILED');
+      setNoteUploadMessage(
+        mode === 'REVISE'
+          ? 'Changes requested. Harmonizer is regenerating…'
+          : 'Document import discarded.',
+      );
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to submit the review decision.',
+      );
+    }
+  };
+
   const pollHarmonizerJobStatus = async (
     jobId: string,
     headers: Record<string, string>,
@@ -1825,6 +2289,14 @@ const PatientRecordsPage: React.FC = () => {
               ? payload.progress.percentComplete
               : null,
           );
+
+          if (normalizeHarmonizerStatus(payload.status) === 'AWAITING_REVIEW') {
+            setNoteUploadJobStatus('AWAITING_REVIEW');
+            setIsNoteUploadPolling(false);
+            setNoteUploadMessage('Generated resources are ready for review.');
+            await loadHarmonizerReview(jobId);
+            return;
+          }
 
           if (mappedStatus === 'COMPLETED') {
             setNoteUploadJobStatus('COMPLETED');
@@ -5611,12 +6083,12 @@ const PatientRecordsPage: React.FC = () => {
             <div
               className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
-              w-screen md:w-auto h-1/3 md:h-auto max-h-screen z-40 md:z-auto
+              w-screen md:w-auto md:h-auto max-h-screen z-40 md:z-auto
               border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
               style={{
-                ...(!window.matchMedia('(min-width: 768px)').matches
-                  ? {}
-                  : { width: `${uploadPanelWidth}%` }),
+                ...(window.matchMedia('(min-width: 768px)').matches
+                  ? { width: `${uploadPanelWidth}%` }
+                  : { height: `${uploadPanelHeight}vh` }),
               }}
             >
               {/* Mobile drag handle */}
@@ -5632,6 +6104,75 @@ const PatientRecordsPage: React.FC = () => {
                   <p className="text-xs text-emerald-800 mt-1">
                     Select a scanned file (PDF/image) to extract clinical data
                   </p>
+                  <div className="mt-3 flex rounded-lg border border-emerald-200 bg-white p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHarmonizerPanelTab('upload');
+                        setShowPendingHarmonizerMissions(false);
+                      }}
+                      className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        harmonizerPanelTab === 'upload'
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Upload
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void loadPendingHarmonizerMissions()}
+                      className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        harmonizerPanelTab === 'review'
+                          ? 'bg-amber-500 text-white'
+                          : 'text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Review
+                    </button>
+                  </div>
+                </div>
+                <div className="md:hidden flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleExpandUploadPanel}
+                    className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
+                    title="Expand upload panel"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      stroke="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 19V5m0 0l-7 7m7-7l7 7"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleCollapseUploadPanel}
+                    className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
+                    title="Collapse upload panel"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      stroke="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 5v14m0 0l-7-7m7 7l7-7"
+                      />
+                    </svg>
+                  </button>
                 </div>
                 <button
                   onClick={() => setShowClinicianUpload(false)}
@@ -5656,117 +6197,386 @@ const PatientRecordsPage: React.FC = () => {
               </div>
 
               <div className="p-4 space-y-4">
-                <form
-                  onSubmit={handleUploadScannedNotes}
-                  className="flex flex-col gap-2"
-                >
-                  <input
-                    type="file"
-                    accept=".pdf,image/*"
-                    onChange={(e) =>
-                      setSelectedNoteFile(e.target.files?.[0] ?? null)
-                    }
-                    className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!selectedNoteFile || isUploadingNotes}
-                    className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {isUploadingNotes ? 'Uploading...' : 'Upload Report'}
-                  </button>
-                </form>
-
-                {selectedNoteFile && (
-                  <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
-                    {selectedNoteFile.name}
-                  </p>
-                )}
-
-                {noteUploadMessage && (
-                  <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
-                    {noteUploadMessage}
-                  </div>
-                )}
-
-                {noteUploadJobId && noteUploadJobStatus && (
-                  <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
-                    <p className="font-medium text-emerald-800 mb-1">
-                      Job: {noteUploadJobId.substring(0, 12)}...
-                    </p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {HARMONIZER_STATUS_STEPS.map((step, index) => {
-                        const mappedStatus =
-                          mapHarmonizerStatusToStep(noteUploadJobStatus);
-                        const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
-                          mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
-                        );
-                        const reached =
-                          mappedStatus === 'FAILED'
-                            ? index <= 2
-                            : currentIndex >= index;
-                        const active = mappedStatus === step;
-                        return (
-                          <React.Fragment key={step}>
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
-                                active || reached
-                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                                  : 'bg-gray-100 text-gray-500 border-gray-300'
-                              }`}
-                            >
-                              {step}
-                            </span>
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                    {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
-                      'FAILED' && (
-                      <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
-                        FAILED
-                      </p>
-                    )}
-                    {noteUploadStepResults.length > 0 && (
-                      <div className="mt-1">
-                        <p className="text-gray-700 font-medium text-xs">
-                          Completed
+                {harmonizerPanelTab === 'review' &&
+                  showPendingHarmonizerMissions && (
+                    <div className="space-y-2 rounded-lg border border-emerald-200 bg-white p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold text-emerald-900">
+                          Pending document reviews
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowPendingHarmonizerMissions(false)
+                          }
+                          className="text-xs text-gray-500 hover:text-gray-800"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      {isLoadingPendingHarmonizerMissions ? (
+                        <p className="text-xs text-gray-600">
+                          Loading pending reviews…
                         </p>
-                        <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
-                          {noteUploadStepResults.map((step, idx) => (
-                            <li
-                              key={`${step.stepName || step.step || 'step'}-${idx}`}
+                      ) : pendingHarmonizerMissions.length === 0 ? (
+                        <p className="text-xs text-gray-600">
+                          No document imports are waiting for your review.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {pendingHarmonizerMissions.map((mission) => (
+                            <button
+                              key={mission.missionId}
+                              type="button"
+                              onClick={() =>
+                                void openPendingHarmonizerMission(mission)
+                              }
+                              className="w-full rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-left hover:border-emerald-400"
                             >
-                              • {step.stepName || step.step || step.name}
-                            </li>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-gray-800">
+                                  Document import
+                                </span>
+                                <span className="text-[11px] font-medium text-amber-700">
+                                  Awaiting review
+                                </span>
+                              </div>
+                              <p className="mt-1 truncate font-mono text-[11px] text-gray-500">
+                                {mission.missionId}
+                              </p>
+                              {mission.submittedAt || mission.createdAt ? (
+                                <p className="mt-1 text-[11px] text-gray-600">
+                                  Submitted{' '}
+                                  {fmt(
+                                    mission.submittedAt || mission.createdAt,
+                                  )}
+                                </p>
+                              ) : null}
+                            </button>
                           ))}
-                        </ul>
-                      </div>
-                    )}
-                    {noteUploadPercent !== null && (
-                      <div className="mt-1">
-                        <progress
-                          className="mt-0.5 h-1 w-full"
-                          value={Math.max(0, Math.min(100, noteUploadPercent))}
-                          max={100}
-                        />
-                        <p className="text-gray-500 text-xs mt-0.5">
-                          {Math.round(noteUploadPercent)}%
-                        </p>
-                      </div>
-                    )}
-                    {isNoteUploadPolling && (
-                      <p className="mt-1 text-gray-500 text-xs">Polling...</p>
-                    )}
-                    {isLoadingNoteUploadSummary && (
-                      <p className="mt-1 text-gray-500 text-xs">
-                        Loading summary...
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                {harmonizerPanelTab === 'upload' && (
+                  <>
+                    <form
+                      onSubmit={handleUploadScannedNotes}
+                      className="flex flex-col gap-2"
+                    >
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        onChange={(e) =>
+                          setSelectedNoteFile(e.target.files?.[0] ?? null)
+                        }
+                        className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!selectedNoteFile || isUploadingNotes}
+                        className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {isUploadingNotes ? 'Uploading...' : 'Upload Report'}
+                      </button>
+                    </form>
+
+                    {selectedNoteFile && (
+                      <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
+                        {selectedNoteFile.name}
                       </p>
                     )}
+
+                    {noteUploadMessage && (
+                      <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
+                        {noteUploadMessage}
+                      </div>
+                    )}
+
+                    {noteUploadJobId && noteUploadJobStatus && (
+                      <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
+                        <p className="font-medium text-emerald-800 mb-1">
+                          Job: {noteUploadJobId.substring(0, 12)}...
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {HARMONIZER_STATUS_STEPS.map((step, index) => {
+                            const mappedStatus =
+                              mapHarmonizerStatusToStep(noteUploadJobStatus);
+                            const currentIndex =
+                              HARMONIZER_STATUS_STEPS.indexOf(
+                                mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
+                              );
+                            const reached =
+                              mappedStatus === 'FAILED'
+                                ? index <= 2
+                                : currentIndex >= index;
+                            const active = mappedStatus === step;
+                            return (
+                              <React.Fragment key={step}>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
+                                    active || reached
+                                      ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                      : 'bg-gray-100 text-gray-500 border-gray-300'
+                                  }`}
+                                >
+                                  {step}
+                                </span>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                        {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
+                          'FAILED' && (
+                          <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
+                            FAILED
+                          </p>
+                        )}
+                        {noteUploadStepResults.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-gray-700 font-medium text-xs">
+                              Completed
+                            </p>
+                            <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
+                              {noteUploadStepResults.map((step, idx) => (
+                                <li
+                                  key={`${step.stepName || step.step || 'step'}-${idx}`}
+                                >
+                                  • {step.stepName || step.step || step.name}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {noteUploadPercent !== null && (
+                          <div className="mt-1">
+                            <progress
+                              className="mt-0.5 h-1 w-full"
+                              value={Math.max(
+                                0,
+                                Math.min(100, noteUploadPercent),
+                              )}
+                              max={100}
+                            />
+                            <p className="text-gray-500 text-xs mt-0.5">
+                              {Math.round(noteUploadPercent)}%
+                            </p>
+                          </div>
+                        )}
+                        {isNoteUploadPolling && (
+                          <p className="mt-1 text-gray-500 text-xs">
+                            Polling...
+                          </p>
+                        )}
+                        {isLoadingNoteUploadSummary && (
+                          <p className="mt-1 text-gray-500 text-xs">
+                            Loading summary...
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {harmonizerPanelTab === 'review' &&
+                  noteUploadJobStatus === 'AWAITING_REVIEW' && (
+                    <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-amber-900">
+                          Review generated resources
+                        </h3>
+                        <p className="mt-1 text-xs text-amber-800">
+                          Nothing has been written to the patient record yet.
+                          Select a resource to inspect or edit it.
+                        </p>
+                      </div>
+
+                      {isLoadingHarmonizerReview ? (
+                        <p className="text-xs text-amber-800">
+                          Loading generated resources…
+                        </p>
+                      ) : harmonizerReviewRecords.length > 0 ? (
+                        <div className="space-y-2">
+                          {harmonizerReviewRecords.map((record) => {
+                            const resource = (record.resource || record) as any;
+                            const display =
+                              resource.code?.text ||
+                              resource.code?.coding?.[0]?.display ||
+                              resource.title ||
+                              resource.medication?.concept?.text ||
+                              record.resourceId ||
+                              'Generated resource';
+                            return (
+                              <button
+                                key={record.recordId}
+                                type="button"
+                                onClick={() => openHarmonizerRecord(record)}
+                                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-xs font-semibold text-gray-900">
+                                    {record.resourceType ||
+                                      resource.resourceType ||
+                                      'FHIR Resource'}
+                                  </span>
+                                  <span className="text-[11px] text-gray-500">
+                                    {record.confidence !== undefined
+                                      ? `${Math.round(record.confidence * 100)}% confidence`
+                                      : record.outcome || 'Review'}
+                                  </span>
+                                </div>
+                                <p className="mt-1 truncate text-sm text-gray-800">
+                                  {display}
+                                </p>
+                                {record.evidence && (
+                                  <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                                    Evidence:{' '}
+                                    {Array.isArray(record.evidence)
+                                      ? record.evidence.join(' ')
+                                      : record.evidence}
+                                  </p>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-800">
+                          No staged resources were returned for this review.
+                        </p>
+                      )}
+
+                      {harmonizerReviewActionError && (
+                        <p className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                          {harmonizerReviewActionError}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void approveHarmonizerReview()}
+                          disabled={
+                            isLoadingHarmonizerReview ||
+                            harmonizerReviewRecords.length === 0
+                          }
+                          className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Approve &amp; resume
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void rejectHarmonizerReview('REVISE')}
+                          className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                        >
+                          Request changes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void rejectHarmonizerReview('DISCARD')}
+                          className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                {selectedHarmonizerRecord && (
+                  <div
+                    className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 p-3 sm:items-center sm:p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => setSelectedHarmonizerRecord(null)}
+                  >
+                    <div
+                      className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3">
+                        <div className="min-w-0">
+                          <h2 className="text-base font-semibold text-gray-900">
+                            {selectedHarmonizerRecord.resourceType ||
+                              'FHIR Resource'}
+                          </h2>
+                          <p className="mt-1 break-all font-mono text-xs text-gray-500">
+                            {selectedHarmonizerRecord.resourceId ||
+                              selectedHarmonizerRecord.recordId}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedHarmonizerRecord(null);
+                            setIsEditingHarmonizerRecord(false);
+                          }}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-2xl text-gray-500 hover:bg-gray-100"
+                          aria-label="Close review resource"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-4">
+                        {isEditingHarmonizerRecord ? (
+                          <>
+                            <FriendlyHarmonizerEditor
+                              resource={harmonizerRecordDraftObject}
+                              onChange={(resource) => {
+                                setHarmonizerRecordDraftObject(resource);
+                                setHarmonizerRecordDraft(
+                                  JSON.stringify(resource, null, 2),
+                                );
+                              }}
+                            />
+                          </>
+                        ) : (
+                          <ResourceSummaryContent
+                            resource={
+                              (selectedHarmonizerRecord.resource ||
+                                selectedHarmonizerRecord) as any
+                            }
+                          />
+                        )}
+                      </div>
+                      <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3">
+                        {!isEditingHarmonizerRecord ? (
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingHarmonizerRecord(true)}
+                            className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+                          >
+                            Edit resource
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setIsEditingHarmonizerRecord(false)
+                              }
+                              className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                              Cancel edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void saveHarmonizerRecord()}
+                              disabled={isSavingHarmonizerRecord}
+                              className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              {isSavingHarmonizerRecord
+                                ? 'Saving…'
+                                : 'Save resource'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {noteUploadSummary && (
+                {harmonizerPanelTab === 'upload' && noteUploadSummary && (
                   <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 text-emerald-900">
                     <p className="font-medium">Summary</p>
                     <p className="mt-0.5">
@@ -5780,7 +6590,7 @@ const PatientRecordsPage: React.FC = () => {
                   </div>
                 )}
 
-                {noteUploadError && (
+                {harmonizerPanelTab === 'upload' && noteUploadError && (
                   <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
                     <div className="mb-1">{noteUploadError}</div>
                     {noteUploadJobId && (
