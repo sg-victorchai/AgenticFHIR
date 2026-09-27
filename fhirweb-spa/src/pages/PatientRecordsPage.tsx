@@ -2013,6 +2013,7 @@ const PatientRecordsPage: React.FC = () => {
   const [harmonizerRecordDraft, setHarmonizerRecordDraft] = useState('');
   const [isSavingHarmonizerRecord, setIsSavingHarmonizerRecord] =
     useState(false);
+  const [harmonizerIgnoreReason, setHarmonizerIgnoreReason] = useState('');
   const [harmonizerReviewActionError, setHarmonizerReviewActionError] =
     useState<string | null>(null);
   const [pendingHarmonizerMissions, setPendingHarmonizerMissions] = useState<
@@ -2338,6 +2339,13 @@ const PatientRecordsPage: React.FC = () => {
     );
   };
 
+  const getHarmonizerDisposition = (record: HarmonizerReviewRecord) => {
+    const value = String(record.outcome || record.status || '').toUpperCase();
+    if (value.includes('IGNOR')) return 'IGNORE';
+    if (value.includes('EXCLUD')) return 'EXCLUDE';
+    return null;
+  };
+
   const openPendingHarmonizerMission = async (
     mission: HarmonizerPendingMission,
   ) => {
@@ -2351,6 +2359,7 @@ const PatientRecordsPage: React.FC = () => {
   const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
     setSelectedHarmonizerRecord(record);
     setShowHarmonizerDuplicateDetails(false);
+    setHarmonizerIgnoreReason('');
     setIsAddingHarmonizerRecord(false);
     setIsEditingHarmonizerRecord(false);
     const resource = (record.resource || record) as Record<string, any>;
@@ -2365,6 +2374,7 @@ const PatientRecordsPage: React.FC = () => {
       resourceType: 'Observation',
       resource,
     });
+    setHarmonizerIgnoreReason('');
     setIsAddingHarmonizerRecord(true);
     setIsEditingHarmonizerRecord(true);
     setHarmonizerRecordDraftObject(resource);
@@ -2430,6 +2440,35 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const setSelectedRecordDisposition = async (
+    disposition: 'EXCLUDE' | 'IGNORE' | 'INCLUDE',
+  ) => {
+    if (!noteUploadJobId || !selectedHarmonizerRecord?.recordId) return;
+    if (disposition === 'IGNORE' && !harmonizerIgnoreReason.trim()) {
+      setHarmonizerReviewActionError(
+        'Please provide a reason before marking this record as ignored.',
+      );
+      return;
+    }
+    setHarmonizerReviewActionError(null);
+    try {
+      await harmonizerReviewService.setRecordDisposition(
+        noteUploadJobId,
+        selectedHarmonizerRecord.recordId,
+        disposition,
+        disposition === 'IGNORE' ? harmonizerIgnoreReason : undefined,
+        harmonizerReviewEtag,
+      );
+      setSelectedHarmonizerRecord(null);
+      setHarmonizerIgnoreReason('');
+      await loadHarmonizerReview(noteUploadJobId);
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to update the record disposition.',
+      );
+    }
+  };
+
   const approveHarmonizerReview = async () => {
     if (!noteUploadJobId) return;
     setIsNoteUploadPolling(true);
@@ -2472,11 +2511,11 @@ const PatientRecordsPage: React.FC = () => {
         harmonizerReviewEtag,
       );
       setHarmonizerReviewRecords([]);
-      setNoteUploadJobStatus(mode === 'REVISE' ? 'RUNNING' : 'FAILED');
+      setNoteUploadJobStatus(mode === 'REVISE' ? 'RUNNING' : 'COMPLETED');
       setNoteUploadMessage(
         mode === 'REVISE'
           ? 'Changes requested. Harmonizer is regenerating…'
-          : 'Document import discarded.',
+          : 'Completed: user rejected the document import. No records were written.',
       );
     } catch (error: any) {
       setHarmonizerReviewActionError(
@@ -3809,7 +3848,6 @@ const PatientRecordsPage: React.FC = () => {
                           {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
                         </p>
                       </div>
-                      <AiProvenancePanel resource={enc} />
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs text-gray-500">
@@ -3853,6 +3891,7 @@ const PatientRecordsPage: React.FC = () => {
                             )
                             .join(', ') || '—'}
                         </div>
+                        <AiProvenancePanel resource={enc} />
                       </div>
                     </div>
                   )}
@@ -5877,7 +5916,7 @@ const PatientRecordsPage: React.FC = () => {
                         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
                       />
                     </svg>
-                    <span>Upload</span>
+                    <span>Upload &amp; Review</span>
                   </button>
                 )}
 
@@ -6914,68 +6953,144 @@ const PatientRecordsPage: React.FC = () => {
                           />
                         )}
                       </div>
-                      <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3">
-                        {!isAddingHarmonizerRecord &&
-                          selectedHarmonizerRecord.recordId && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void resolveSelectedDuplicate(
-                                  isHarmonizerDuplicate(
+                      <div className="flex flex-col gap-2 border-t border-gray-200 px-4 py-3">
+                        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {!isAddingHarmonizerRecord &&
+                              selectedHarmonizerRecord.recordId && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void resolveSelectedDuplicate(
+                                        isHarmonizerDuplicate(
+                                          selectedHarmonizerRecord,
+                                        )
+                                          ? 'CREATE_NEW'
+                                          : 'SKIP',
+                                      )
+                                    }
+                                    className="rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                  >
+                                    {isHarmonizerDuplicate(
+                                      selectedHarmonizerRecord,
+                                    )
+                                      ? 'Mark as non-duplicate'
+                                      : 'Mark as duplicate'}
+                                  </button>
+                                  {getHarmonizerDisposition(
                                     selectedHarmonizerRecord,
-                                  )
-                                    ? 'CREATE_NEW'
-                                    : 'SKIP',
-                                )
-                              }
-                              className="mr-auto rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                  ) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void setSelectedRecordDisposition(
+                                          'INCLUDE',
+                                        )
+                                      }
+                                      className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                    >
+                                      Include record
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void setSelectedRecordDisposition(
+                                            'EXCLUDE',
+                                          )
+                                        }
+                                        className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                                      >
+                                        Mark as excluded
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void setSelectedRecordDisposition(
+                                            'IGNORE',
+                                          )
+                                        }
+                                        disabled={
+                                          !harmonizerIgnoreReason.trim()
+                                        }
+                                        className="rounded-md border border-gray-400 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        Mark as ignored
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                          </div>
+                          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                            {!isEditingHarmonizerRecord ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setIsEditingHarmonizerRecord(true)
+                                }
+                                className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+                              >
+                                Edit resource
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setIsEditingHarmonizerRecord(false)
+                                  }
+                                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                >
+                                  Cancel edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void saveHarmonizerRecord()}
+                                  disabled={isSavingHarmonizerRecord}
+                                  className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                                >
+                                  {isSavingHarmonizerRecord
+                                    ? 'Saving…'
+                                    : 'Save resource'}
+                                </button>
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedHarmonizerRecord(null);
+                                setIsEditingHarmonizerRecord(false);
+                              }}
+                              className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                             >
-                              {isHarmonizerDuplicate(selectedHarmonizerRecord)
-                                ? 'Mark as non-duplicate'
-                                : 'Mark as duplicate'}
+                              Close
                             </button>
+                          </div>
+                        </div>
+                        {!isAddingHarmonizerRecord &&
+                          selectedHarmonizerRecord.recordId &&
+                          !getHarmonizerDisposition(
+                            selectedHarmonizerRecord,
+                          ) && (
+                            <label className="flex w-full items-center gap-2 text-xs font-semibold text-gray-600">
+                              <span className="shrink-0">Ignore reason</span>
+                              <input
+                                type="text"
+                                value={harmonizerIgnoreReason}
+                                onChange={(event) => {
+                                  setHarmonizerIgnoreReason(event.target.value);
+                                  if (harmonizerReviewActionError) {
+                                    setHarmonizerReviewActionError(null);
+                                  }
+                                }}
+                                placeholder="Explain why this record should not have been generated"
+                                className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-xs font-normal text-gray-800 placeholder:text-gray-400 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500/20"
+                              />
+                            </label>
                           )}
-                        {!isEditingHarmonizerRecord ? (
-                          <button
-                            type="button"
-                            onClick={() => setIsEditingHarmonizerRecord(true)}
-                            className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
-                          >
-                            Edit resource
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setIsEditingHarmonizerRecord(false)
-                              }
-                              className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                            >
-                              Cancel edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void saveHarmonizerRecord()}
-                              disabled={isSavingHarmonizerRecord}
-                              className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-                            >
-                              {isSavingHarmonizerRecord
-                                ? 'Saving…'
-                                : 'Save resource'}
-                            </button>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedHarmonizerRecord(null);
-                            setIsEditingHarmonizerRecord(false);
-                          }}
-                          className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                        >
-                          Close
-                        </button>
                       </div>
                     </div>
                   </div>

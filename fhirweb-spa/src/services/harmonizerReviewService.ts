@@ -152,6 +152,39 @@ export const createHarmonizerReviewService = (baseUrl: string) => ({
     );
   },
 
+  async setRecordDisposition(
+    jobId: string,
+    recordId: string,
+    disposition: 'EXCLUDE' | 'IGNORE' | 'INCLUDE',
+    reason?: string,
+    etag?: string,
+  ) {
+    const operation =
+      disposition === 'EXCLUDE'
+        ? '$exclude-record'
+        : disposition === 'IGNORE'
+          ? '$ignore-record'
+          : '$include-record';
+    const headers: Record<string, string> = {
+      ...(await getAuthenticatedHeaders({
+        'Content-Type': 'application/json',
+      })),
+    };
+    if (etag) headers['If-Match'] = etag;
+    return parseResponse(
+      await fetch(
+        `${reviewUrl(baseUrl, jobId, operation)}&record=${encodeURIComponent(recordId)}`,
+        {
+          method: 'POST',
+          headers,
+          ...(disposition === 'IGNORE'
+            ? { body: JSON.stringify({ reason: reason?.trim() || '' }) }
+            : {}),
+        },
+      ),
+    );
+  },
+
   async approve(jobId: string, notes: string, etag?: string) {
     const headers: Record<string, string> = {
       ...(await getAuthenticatedHeaders({

@@ -263,11 +263,101 @@ authorization:
 
 **Reviewer actions**:
 
-- `$review…` operations: edit a record, exclude / include it, add a missed record, resolve a duplicate (`CREATE_NEW` / `SKIP` / `UPDATE_EXISTING`).
+- `$review…` operations: edit a record, exclude / include it, ignore it (`$ignore-record` — LLM hallucination / unrelated record), add a missed record, resolve a duplicate (`CREATE_NEW` / `SKIP` / `UPDATE_EXISTING`).
 - Decide with `approve`, `request-changes` (re-generates with the reviewer's notes; records the reviewer edited are kept) or `reject` (discard).
 - Decisions go through `PATCH /api/agent/AgentInterventionRequest/{id}` or `$approve` / `$reject`.
 
 API details: [Review before save, mission output and audit operations](#review-before-save-mission-output-and-audit-operations). Design: `docs/superpowers/specs/2026-09-26-docs-harmonizer-review-dedup-terminology-design.md`. Persona-level guide: `docs/AI-Persona-Design-User-Guide.md` → "DataPipelinePersona Review Before Save, Missions & Audit".
+
+### AI-Generation Provenance Extension
+
+Every FHIR resource written by the `clinical-docs-harmonizer` carries a complex extension that records how, when, and by whom the record was generated and approved. The extension is stamped by the **fhir-write step** immediately before each `PUT`; it is never placed into LLM output, so the model cannot fabricate or corrupt it.
+
+#### Extension URL
+
+```
+http://fhir4java.org/StructureDefinition/ai-generation-provenance
+```
+
+A `StructureDefinition` for this extension lives under `fhir-config/r5/profiles/` (and `r4b/`), so profile validation accepts it without warnings.
+
+#### Full example on a written resource
+
+```json
+{
+  "resourceType": "Condition",
+  "id": "7f3c-abc-...",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://fhir4java.org/CodeSystem/data-origin",
+        "code": "ai-generated"
+      }
+    ]
+  },
+  "extension": [
+    {
+      "url": "http://fhir4java.org/StructureDefinition/ai-generation-provenance",
+      "extension": [
+        { "url": "generatedAt",    "valueDateTime": "2026-09-26T08:14:03Z" },
+        { "url": "missionId",      "valueString":   "exec-async-456" },
+        { "url": "personaId",      "valueString":   "clinical-docs-harmonizer" },
+        { "url": "personaVersion", "valueString":   "1.0.0" },
+        { "url": "revision",       "valueInteger":  2 },
+        { "url": "confidence",     "valueDecimal":  0.87 },
+        { "url": "humanEdited",    "valueBoolean":  true },
+        { "url": "reviewedAt",     "valueDateTime": "2026-09-26T09:02:11Z" },
+        { "url": "reviewedBy",     "valueString":   "user-dr-chan" },
+        { "url": "approvedAt",     "valueDateTime": "2026-09-26T09:05:40Z" },
+        { "url": "approvedBy",     "valueString":   "user-dr-chan" }
+      ]
+    }
+  ],
+  ...
+}
+```
+
+#### Attribute reference
+
+| Sub-extension URL | FHIR type       | Set by          | Description                                                                                                                                  |
+| ----------------- | --------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generatedAt`     | `valueDateTime` | fhir-write step | When the LLM generated this draft (start of the revision that produced it)                                                                   |
+| `missionId`       | `valueString`   | fhir-write step | The `jobId` / `executionId`; use with `$mission-output?job=` to retrieve the full job record                                                 |
+| `personaId`       | `valueString`   | fhir-write step | The DataPipelinePersona that generated the record, e.g. `clinical-docs-harmonizer`                                                           |
+| `personaVersion`  | `valueString`   | fhir-write step | Version of the persona YAML at the time the job ran                                                                                          |
+| `revision`        | `valueInteger`  | fhir-write step | Which request-changes round produced this record (`1` = first attempt, `2` = after first request-changes, …)                                 |
+| `confidence`      | `valueDecimal`  | fhir-write step | Per-record confidence score (0–1) calculated in the review gate: `llmConfidence × groundingFactor × terminologyFactor − completenessPenalty` |
+| `humanEdited`     | `valueBoolean`  | fhir-write step | `true` if a reviewer edited this record's FHIR JSON during review before approving                                                           |
+| `reviewedAt`      | `valueDateTime` | fhir-write step | When the reviewer first opened / claimed the review (or the time of the last manual edit if no claim)                                        |
+| `reviewedBy`      | `valueString`   | fhir-write step | User ID of the reviewer                                                                                                                      |
+| `approvedAt`      | `valueDateTime` | fhir-write step | When the `$approve` decision was made                                                                                                        |
+| `approvedBy`      | `valueString`   | fhir-write step | User ID of the approver (may differ from `reviewedBy` if claims are shared)                                                                  |
+
+> `reviewedAt` and `approvedAt` are different moments and both are preserved for audit. A resource approved without a prior claim has both set to the approval time.
+
+#### `meta.tag`: `ai-generated`
+
+In addition to the extension, every written resource has a `meta.tag` entry:
+
+```json
+"meta": {
+  "tag": [{ "system": "http://fhir4java.org/CodeSystem/data-origin", "code": "ai-generated" }]
+}
+```
+
+This tag lets any consumer — clinicians, downstream agents, FHIR subscriptions — identify AI-generated records without inspecting the extension.
+
+#### Searching by tag and extension
+
+```bash
+# All AI-generated Conditions for a patient
+GET /fhir/r5/Condition?patient=Patient/P12345&_tag=http://fhir4java.org/CodeSystem/data-origin|ai-generated
+
+# Find every resource from a specific harmonizer job
+GET /fhir/r5/Condition?_tag=http://fhir4java.org/CodeSystem/data-origin|ai-generated&_has:Condition:_extension=missionId|exec-async-456
+```
+
+To trace a record back to its source document and review history use `$mission-output?job={missionId}` or `$source-document?job={missionId}` on the `DataPipelinePersona` endpoint.
 
 ### Key Components
 
@@ -1330,10 +1420,11 @@ These are operations on the same unified path. The job is selected with `?job={j
 | Method | Operation                                                       | Body                                                                                                                | Purpose                                                                                                                                                                                                                                                                                                                                                                         |
 | ------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `$can-execute`                                                  | —                                                                                                                   | `{allowed, roles, missing[]}`: whether the signed-in user's RBAC role scopes allow running this persona (create on every written type, read on looked-up types). `$execute` returns `403` with the same `missing[]` when not                                                                                                                                                    |
-| `GET`  | `$review?job=`                                                  | —                                                                                                                   | Records staged for review (FHIR JSON + `recordId`, `resourceType`, `resourceId`, `status`, `outcome`, `confidence`, `evidence`, `dedup`, `terminology`) and an `ETag` header                                                                                                                                                                                                    |
+| `GET`  | `$review?job=`                                                  | —                                                                                                                   | Records staged for review (FHIR JSON + `recordId`, `resourceType`, `resourceId`, `status`, `outcome`, `confidence`, `evidence`, `dedup`, `ignoreReason`, `terminology`) and an `ETag` header. Counts: `generated`, `included`, `excluded`, `ignored`, `flaggedDuplicates`                                                                                                       |
 | `PUT`  | `$review-record?job=&record=`                                   | FHIR resource                                                                                                       | Edit a staged record (`resourceType`, `id`, subject immutable)                                                                                                                                                                                                                                                                                                                  |
 | `POST` | `$review-record?job=`                                           | FHIR resource                                                                                                       | Add a record the pipeline missed                                                                                                                                                                                                                                                                                                                                                |
-| `POST` | `$exclude-record?job=&record=` / `$include-record?job=&record=` | —                                                                                                                   | Leave a record out / put it back                                                                                                                                                                                                                                                                                                                                                |
+| `POST` | `$exclude-record?job=&record=` / `$include-record?job=&record=` | —                                                                                                                   | Leave a record out / put it back (valid but not wanted) — requires create on type                                                                                                                                                                                                                                                                                               |
+| `POST` | `$ignore-record?job=&record=`                                   | `{"reason": "..."}` (optional)                                                                                      | Mark record as an LLM error / irrelevant; `$include-record` reverses — requires only read on type                                                                                                                                                                                                                                                                               |
 | `POST` | `$resolve-duplicate?job=&record=`                               | `{"action": "CREATE_NEW" \| "SKIP" \| "UPDATE_EXISTING"}`                                                           | Decide a flagged duplicate                                                                                                                                                                                                                                                                                                                                                      |
 | `POST` | `$approve?job=`                                                 | `{"notes": "..."}`                                                                                                  | `202`; the job resumes and writes the included records under the ids shown during review                                                                                                                                                                                                                                                                                        |
 | `POST` | `$reject?job=`                                                  | `{"mode": "REVISE" \| "DISCARD", "instructions": "...", "recordComments": [{"recordId": "...", "comment": "..."}]}` | `202`; REVISE re-runs generation with the reviewer's feedback, DISCARD ends the job without writing                                                                                                                                                                                                                                                                             |
@@ -1342,6 +1433,29 @@ These are operations on the same unified path. The job is selected with `?job={j
 | `GET`  | `$source-document?job=`                                         | —                                                                                                                   | The originally uploaded document (audit)                                                                                                                                                                                                                                                                                                                                        |
 
 `GET /api/persona/DataPipelinePersona/$missions?persona=` lists across pipeline personas, e.g. for a "waiting for my review" inbox. `persona` is optional with `submittedBy=me` and required with `any`.
+
+---
+
+#### Exclude vs Ignore — when to use which
+
+Both `$exclude-record` and `$ignore-record` prevent a record from being written. `$include-record` reverses either. The distinction is **intent and permission level**.
+
+|                         | `$exclude-record`                                                  | `$ignore-record`                                                                          |
+| ----------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| **What it means**       | "This record is valid — I just don't want it saved in this import" | "The LLM should not have generated this at all — it is wrong, hallucinated, or unrelated" |
+| **Outcome**             | `EXCLUDED_BY_REVIEWER`                                             | `IGNORED_BY_REVIEWER`                                                                     |
+| **Permission required** | create on the resource type                                        | read on the resource type (lighter gate)                                                  |
+| **Optional body**       | none                                                               | `{"reason": "..."}`                                                                       |
+| **Count bucket**        | `counts.excluded`                                                  | `counts.ignored`                                                                          |
+| **Signal**              | "Skip for now" — no quality signal                                 | Flags an LLM error — feeds accuracy monitoring                                            |
+
+**Concrete examples:**
+
+- **Exclude:** The harmonizer generated a valid Condition for diabetes, but the clinician says "we already have this documented in the other system — skip it for this import." The record is clinically correct; the reviewer just does not want a duplicate write right now.
+
+- **Ignore:** The harmonizer generated a Procedure for "appendectomy" from a note that only mentioned the _patient's family history_ of appendectomy. The LLM misread the context. The record should never have been created. The reviewer flags it with `$ignore-record` and adds `{"reason": "family history, not the patient's own procedure"}`.
+
+The practical implication is that `counts.ignored` feeds into LLM quality monitoring over time. If a persona accumulates a high `ignored` rate, it signals the prompt or pipeline needs tuning. `counts.excluded` does not carry that signal — it is a normal reviewer workflow action.
 
 **HITL through `AgentInterventionRequest`.** Each pause for review also opens an `AgentInterventionRequest` with `type: "pipeline-review"`, `options: ["approve","request-changes","reject"]`, and `context.reviewUrl` / `missionOutputUrl`. It uses the same convention as AgentPersona HITL in `docs/AI-Persona-Design-User-Guide.md`:
 
@@ -1357,9 +1471,42 @@ These are operations on the same unified path. The job is selected with `?job={j
 
 Either path marks the intervention `ANSWERED`. Each revise round opens a new intervention with a new id, so always re-fetch `?status=PENDING`. Answering a non-pending intervention returns `409`.
 
+**Record statuses:** `PROPOSED` → `EDITED` (reviewer changed content) → `EXCLUDED` (excluded) → `IGNORED` (LLM error) → `WRITTEN` (approved and saved) → `FAILED` (write error) → `SUPERSEDED` (replaced by a newer revision).
+
+**Record outcomes** (in `$mission-output` and each draft): `PENDING_REVIEW`, `CREATED`, `UPDATED_EXISTING`, `SKIPPED_DUPLICATE`, `EXCLUDED_BY_REVIEWER`, `IGNORED_BY_REVIEWER`, `DISCARDED`, `FAILED`.
+
 Mutations accept `If-Match: <ETag>`; a stale ETag returns `412`. While paused, `$status` returns `"status": "awaiting_review"` with `reviewUrl` and `interventionId`. Once the job has finished (completed, failed or rejected), `$status` includes `missionOutput`.
 
 Review is enabled per persona with `review.enabled: true` (the docs harmonizer default). A single job can override it with the `$execute` input `"reviewRequired": true | false`. The async response echoes the effective `reviewRequired`. Written resources carry the `http://fhir4java.org/StructureDefinition/ai-generation-provenance` extension (generatedAt, missionId, reviewedAt/By, approvedAt/By, …) and the `ai-generated` meta tag.
+
+#### What happens when a reviewer submits "Request Changes"
+
+"Request changes" corresponds to `$reject` with `mode: REVISE` (or the intervention body `{"decision":"request-changes","notes":"...","recordComments":[...]}`). It does **not** write anything to the FHIR store. Instead it triggers a re-generation loop:
+
+1. **Current drafts marked `SUPERSEDED`.** All staged records for the current revision are closed out. The revision counter on the job increments (`revision + 1`).
+
+2. **Pipeline re-runs from Step 3 (`llm-extract-clinical-entities`).** Steps 1–2 (bulk-query, document-parse) are skipped because their outputs are already persisted. The executor resumes via `executeFrom(…, "llm-extract-clinical-entities")`.
+
+3. **Reviewer feedback injected into the LLM prompt.** The `notes` and `recordComments` supplied by the reviewer are added to the pipeline context and surfaced to the LLM in a new prompt section:
+
+   ```
+   Reviewer feedback on the previous attempt (revision {{ revision }}):
+   {{ reviewerInstructions }}
+
+   Per-record comments:
+   {{ recordComments | tojson }}
+
+   Records the reviewer already edited (keep as-is):
+   {{ lockedRecords | tojson }}
+   ```
+
+4. **Hand-edited records are locked.** Any record the reviewer edited manually before submitting request-changes is carried into the new revision unchanged. The LLM is told not to regenerate those records.
+
+5. **Pipeline pauses again at `review-gate`.** A new set of drafts is staged with a fresh `revision` number. A new `AgentInterventionRequest` is created (always re-fetch `?status=PENDING` to get the new id). The job status returns to `awaiting_review`.
+
+6. **`review.maxRevisions` caps the loop** (default 3). If the revision limit is reached, the job moves to `failed` instead of pausing again.
+
+The reviewer can inspect the new drafts — including the updated dedup annotations and confidence scores — and decide again: approve, request further changes, or reject.
 
 ---
 
@@ -2345,7 +2492,8 @@ WHERE pj.tenant_id = 'tenant-123'
 | Outcome                | Meaning                                                                                                                                          |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `SKIPPED_DUPLICATE`    | Exact duplicate of an existing record (`duplicateOf` gives its id). Without review it was removed before write (`dedup-check` log: `N removed`). |
-| `EXCLUDED_BY_REVIEWER` | The reviewer excluded it                                                                                                                         |
+| `EXCLUDED_BY_REVIEWER` | The reviewer excluded it (valid record, not wanted right now)                                                                                    |
+| `IGNORED_BY_REVIEWER`  | The reviewer marked it as an LLM error or irrelevant (`ignoreReason` in the record view)                                                         |
 | `FAILED`               | Write error in `error`                                                                                                                           |
 
 A duplicate that should have been kept: re-submit with review on and resolve it with `$resolve-duplicate` `CREATE_NEW`.
