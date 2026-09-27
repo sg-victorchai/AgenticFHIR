@@ -9,6 +9,19 @@ export interface HarmonizerReviewRecord {
   status?: string;
   outcome?: string;
   confidence?: number;
+  humanEdited?: boolean;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  review?: {
+    humanEdited?: boolean;
+    reviewedAt?: string;
+    reviewedBy?: string;
+    approvedAt?: string;
+    approvedBy?: string;
+    [key: string]: unknown;
+  };
   evidence?: string | string[];
   dedup?: Record<string, unknown>;
   terminology?: Record<string, unknown>;
@@ -90,6 +103,50 @@ export const createHarmonizerReviewService = (baseUrl: string) => ({
           method: 'PUT',
           headers,
           body: JSON.stringify(resource),
+        },
+      ),
+    );
+  },
+
+  async addRecord(
+    jobId: string,
+    resource: Record<string, unknown>,
+    etag?: string,
+  ) {
+    const headers: Record<string, string> = {
+      ...(await getAuthenticatedHeaders({
+        'Content-Type': 'application/json',
+      })),
+    };
+    if (etag) headers['If-Match'] = etag;
+    return parseResponse(
+      await fetch(reviewUrl(baseUrl, jobId, '$review-record'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(resource),
+      }),
+    );
+  },
+
+  async resolveDuplicate(
+    jobId: string,
+    recordId: string,
+    action: 'CREATE_NEW' | 'SKIP' | 'UPDATE_EXISTING',
+    etag?: string,
+  ) {
+    const headers: Record<string, string> = {
+      ...(await getAuthenticatedHeaders({
+        'Content-Type': 'application/json',
+      })),
+    };
+    if (etag) headers['If-Match'] = etag;
+    return parseResponse(
+      await fetch(
+        `${reviewUrl(baseUrl, jobId, '$resolve-duplicate')}&record=${encodeURIComponent(recordId)}`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action }),
         },
       ),
     );

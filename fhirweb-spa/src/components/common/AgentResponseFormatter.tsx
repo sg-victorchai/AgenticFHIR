@@ -296,7 +296,7 @@ const FriendlyResourceAttributes: React.FC<{ resource: any }> = ({
           className="border-b border-gray-100 py-3 last:border-b-0"
         >
           <dt className="text-xs font-semibold text-gray-500">{label}</dt>
-          <dd className="mt-2 grid gap-2 sm:grid-cols-3">
+          <dd className="mt-2 space-y-2">
             {value.coding?.map((coding: any, index: number) => (
               <React.Fragment key={`${path}.coding.${index}`}>
                 <SummaryRow label="Code" value={coding.code} />

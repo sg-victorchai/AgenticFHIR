@@ -13,7 +13,7 @@ import AgentConversationModal from '../components/modals/AgentConversationModal'
 import { ResourceSummaryContent } from '../components/common/AgentResponseFormatter';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
 import { AgentEndpointConfig } from '../types/agent';
-import { getAuthenticatedHeaders } from '../services/auth/oidc';
+import { getAuthenticatedHeaders, getOidcUser } from '../services/auth/oidc';
 import {
   extractOperationOutcomeText,
   getOperationOutcomeMessage,
@@ -517,6 +517,199 @@ const ErrorState: React.FC<{ error: unknown }> = ({ error }) => (
   </div>
 );
 
+const AI_PROVENANCE_EXTENSION_URL =
+  'http://fhir4java.org/StructureDefinition/ai-generation-provenance';
+
+const AiProvenancePanel: React.FC<{ resource: any }> = ({ resource }) => {
+  const provenance = resource?.extension?.find(
+    (extension: any) => extension.url === AI_PROVENANCE_EXTENSION_URL,
+  );
+  const [currentUser, setCurrentUser] = React.useState<{
+    id?: string;
+    login?: string;
+  }>({});
+
+  React.useEffect(() => {
+    let active = true;
+    void getOidcUser().then((user) => {
+      if (!active || !user) return;
+      setCurrentUser({
+        id: user.profile.sub,
+        login: String(
+          user.profile.preferred_username ||
+            user.profile.email ||
+            user.profile.name ||
+            '',
+        ),
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!provenance) return null;
+
+  const values = (provenance.extension || []).reduce(
+    (result: Record<string, unknown>, item: any) => {
+      const valueKey = Object.keys(item).find((key) => key.startsWith('value'));
+      if (valueKey) result[item.url] = item[valueKey];
+      return result;
+    },
+    {},
+  );
+
+  const reviewerName = (value: unknown) =>
+    value && currentUser.id === value && currentUser.login
+      ? currentUser.login
+      : value;
+
+  const reviewBy = reviewerName(values.reviewedBy);
+  const approvedBy = reviewerName(values.approvedBy);
+  const reviewDetails = [values.reviewedAt, reviewBy]
+    .filter(Boolean)
+    .join(' · ');
+  const approvalDetails = [values.approvedAt, approvedBy]
+    .filter(Boolean)
+    .join(' · ');
+  const reviewSummary = [
+    values.revision !== undefined ? `Revision ${values.revision}` : '',
+    typeof values.confidence === 'number'
+      ? `Confidence ${Math.round(values.confidence * 100)}%`
+      : '',
+    values.humanEdited === true
+      ? 'Human edited'
+      : values.humanEdited === false
+        ? 'Not human edited'
+        : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const rows = [
+    ['Generated at', values.generatedAt],
+    ['Mission ID', values.missionId],
+    [
+      'Persona',
+      [values.personaId, values.personaVersion].filter(Boolean).join(' · '),
+    ],
+    ['Review details', reviewDetails],
+    ['Approval details', approvalDetails],
+    ['Review summary', reviewSummary],
+  ].filter(
+    ([, value]) => value !== undefined && value !== null && value !== '',
+  );
+
+  return (
+    <div className="mt-3 rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+      <p className="font-semibold">AI-generated resource provenance</p>
+      <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="min-w-0 py-1">
+            <dt className="font-medium text-red-800">{label}</dt>
+            <dd className="break-words text-red-900">{String(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+};
+
+const getReviewMetadata = (record: HarmonizerReviewRecord) => {
+  const audit = record.review || {};
+  const humanEdited = record.humanEdited ?? audit.humanEdited ?? false;
+  const outcome = record.outcome || record.status || 'PENDING_REVIEW';
+  return {
+    status: humanEdited ? 'Reviewed' : outcome,
+    outcome,
+    humanEdited,
+    reviewedAt: record.reviewedAt || audit.reviewedAt,
+    reviewedBy: record.reviewedBy || audit.reviewedBy,
+  };
+};
+
+const HarmonizerReviewMetadata: React.FC<{
+  record: HarmonizerReviewRecord;
+  compact?: boolean;
+}> = ({ record, compact = false }) => {
+  const metadata = getReviewMetadata(record);
+  return (
+    <div className={compact ? 'flex flex-wrap gap-2 text-[11px]' : 'space-y-2'}>
+      <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 font-semibold uppercase tracking-wide text-amber-800">
+        {metadata.status}
+      </span>
+      {metadata.outcome !== metadata.status && (
+        <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-700">
+          Outcome: {metadata.outcome}
+        </span>
+      )}
+      {!compact && metadata.humanEdited && (
+        <p className="text-sm text-emerald-700">Human reviewed and edited</p>
+      )}
+      {metadata.reviewedAt && (
+        <p className={compact ? 'text-gray-600' : 'text-sm text-gray-600'}>
+          Reviewed at: {fmt(metadata.reviewedAt)}
+        </p>
+      )}
+      {metadata.reviewedBy && (
+        <p className={compact ? 'text-gray-600' : 'text-sm text-gray-600'}>
+          Reviewed by: {metadata.reviewedBy}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const HarmonizerDuplicateDetails: React.FC<{
+  record: HarmonizerReviewRecord;
+}> = ({ record }) => {
+  const dedup = record.dedup as
+    | {
+        reason?: string;
+        classification?: string;
+        matchedOn?: Record<string, unknown>;
+        duplicateOf?: { resourceType?: string; resourceId?: string };
+      }
+    | undefined;
+
+  if (!dedup) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-red-900">
+        Duplicate details
+      </p>
+      {dedup.classification && (
+        <p className="mt-2 text-sm font-semibold text-red-800">
+          Classification: {dedup.classification.replace(/_/g, ' ')}
+        </p>
+      )}
+      {dedup.reason && (
+        <p className="mt-2 text-sm text-red-800">{dedup.reason}</p>
+      )}
+      {dedup.matchedOn && Object.keys(dedup.matchedOn).length > 0 && (
+        <dl className="mt-3 space-y-1 border-t border-red-200 pt-2 text-xs text-red-900">
+          <dt className="font-semibold">Matched fields</dt>
+          {Object.entries(dedup.matchedOn).map(([field, value]) => (
+            <div key={field} className="flex gap-2">
+              <dt className="font-medium">{friendlyFieldLabel(field)}:</dt>
+              <dd className="min-w-0 break-words">{String(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {dedup.duplicateOf?.resourceType && dedup.duplicateOf.resourceId && (
+        <p className="mt-3 border-t border-red-200 pt-2 text-xs text-red-900">
+          Existing record:{' '}
+          <span className="font-mono font-semibold">
+            {dedup.duplicateOf.resourceType}/{dedup.duplicateOf.resourceId}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+};
+
 const friendlyFieldLabel = (field: string) =>
   field
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -579,7 +772,7 @@ const FriendlyHarmonizerEditor: React.FC<{
         {coding.map((entry: Record<string, any>, index: number) => (
           <div
             key={`${path.join('.')}.coding.${index}`}
-            className="grid gap-3 rounded-md border border-gray-200 bg-white p-3 sm:grid-cols-3"
+            className="space-y-3 rounded-md border border-gray-200 bg-white p-3"
           >
             <label className="block text-xs font-semibold text-gray-600">
               Code
@@ -657,7 +850,7 @@ const FriendlyHarmonizerEditor: React.FC<{
           {label}
           <input
             type={isTemporal ? 'date' : 'text'}
-            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-100 text-gray-500' : ''}`}
+            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-200 text-gray-600' : ''}`}
             value=""
             readOnly={readOnly}
             onChange={(event) => update(path, event.target.value)}
@@ -683,10 +876,11 @@ const FriendlyHarmonizerEditor: React.FC<{
         return renderCodeableConcept(value, path, label);
       }
       if (Array.isArray(value)) {
+        const readOnly = isReadOnlyReferenceField(path);
         return (
           <fieldset
             key={path.join('.')}
-            className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3"
+            className={`space-y-3 rounded-md border border-gray-300 p-3 ${readOnly ? 'bg-gray-200' : 'bg-gray-50'}`}
           >
             <legend className="px-1 text-xs font-semibold text-gray-600">
               {label}
@@ -710,7 +904,7 @@ const FriendlyHarmonizerEditor: React.FC<{
       return (
         <fieldset
           key={path.join('.')}
-          className={`space-y-3 rounded-md border border-gray-200 p-3 ${depth > 0 ? 'bg-gray-50' : 'bg-white'}`}
+          className={`space-y-3 rounded-md border border-gray-300 p-3 ${isReadOnlyReferenceField(path) ? 'bg-gray-200' : depth > 0 ? 'bg-gray-50' : 'bg-white'}`}
         >
           <legend className="px-1 text-xs font-semibold text-gray-600">
             {label}
@@ -740,7 +934,7 @@ const FriendlyHarmonizerEditor: React.FC<{
         {label}
         {isBoolean ? (
           <select
-            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-100 text-gray-500' : ''}`}
+            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-200 text-gray-600' : ''}`}
             value={String(value)}
             disabled={readOnly}
             onChange={(event) => update(path, event.target.value === 'true')}
@@ -765,7 +959,7 @@ const FriendlyHarmonizerEditor: React.FC<{
                 : String(value)
             }
             readOnly={readOnly}
-            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-100 text-gray-500' : ''}`}
+            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-200 text-gray-600' : ''}`}
             onChange={(event) =>
               update(
                 path,
@@ -1808,6 +2002,10 @@ const PatientRecordsPage: React.FC = () => {
     useState(false);
   const [selectedHarmonizerRecord, setSelectedHarmonizerRecord] =
     useState<HarmonizerReviewRecord | null>(null);
+  const [showHarmonizerDuplicateDetails, setShowHarmonizerDuplicateDetails] =
+    useState(false);
+  const [isAddingHarmonizerRecord, setIsAddingHarmonizerRecord] =
+    useState(false);
   const [isEditingHarmonizerRecord, setIsEditingHarmonizerRecord] =
     useState(false);
   const [harmonizerRecordDraftObject, setHarmonizerRecordDraftObject] =
@@ -1983,7 +2181,12 @@ const PatientRecordsPage: React.FC = () => {
   const normalizeHarmonizerStatus = (status?: string): string =>
     String(status || '').toUpperCase();
 
-  const HARMONIZER_STATUS_STEPS = ['QUEUE', 'RUNNING', 'COMPLETED'] as const;
+  const HARMONIZER_STATUS_STEPS = [
+    'QUEUE',
+    'RUNNING',
+    'REVIEW',
+    'COMPLETED',
+  ] as const;
 
   const mapHarmonizerStatusToStep = (
     status?: string,
@@ -2006,6 +2209,13 @@ const PatientRecordsPage: React.FC = () => {
       normalized === 'QUEUE'
     ) {
       return 'QUEUE';
+    }
+
+    if (
+      normalized === 'AWAITING_REVIEW' ||
+      normalized === 'AWAITING_INTERVENTION'
+    ) {
+      return 'REVIEW';
     }
 
     if (normalized === 'RUNNING' || normalized === 'IN_PROGRESS') {
@@ -2117,6 +2327,17 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const isHarmonizerDuplicate = (record: HarmonizerReviewRecord) => {
+    const dedup = record.dedup || {};
+    return Boolean(
+      dedup.isDuplicate ||
+      dedup.duplicate ||
+      dedup.outcome === 'DUPLICATE' ||
+      record.outcome === 'SKIPPED_DUPLICATE' ||
+      record.status === 'SKIPPED_DUPLICATE',
+    );
+  };
+
   const openPendingHarmonizerMission = async (
     mission: HarmonizerPendingMission,
   ) => {
@@ -2129,9 +2350,24 @@ const PatientRecordsPage: React.FC = () => {
 
   const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
     setSelectedHarmonizerRecord(record);
+    setShowHarmonizerDuplicateDetails(false);
+    setIsAddingHarmonizerRecord(false);
     setIsEditingHarmonizerRecord(false);
     const resource = (record.resource || record) as Record<string, any>;
     setHarmonizerRecordDraftObject(JSON.parse(JSON.stringify(resource)));
+    setHarmonizerRecordDraft(JSON.stringify(resource, null, 2));
+  };
+
+  const openNewHarmonizerRecord = () => {
+    const resource = { resourceType: 'Observation', status: 'final' };
+    setSelectedHarmonizerRecord({
+      recordId: '',
+      resourceType: 'Observation',
+      resource,
+    });
+    setIsAddingHarmonizerRecord(true);
+    setIsEditingHarmonizerRecord(true);
+    setHarmonizerRecordDraftObject(resource);
     setHarmonizerRecordDraft(JSON.stringify(resource, null, 2));
   };
 
@@ -2144,13 +2380,22 @@ const PatientRecordsPage: React.FC = () => {
         string,
         unknown
       >;
-      await harmonizerReviewService.updateRecord(
-        noteUploadJobId,
-        selectedHarmonizerRecord.recordId,
-        resource,
-        harmonizerReviewEtag,
-      );
+      if (isAddingHarmonizerRecord) {
+        await harmonizerReviewService.addRecord(
+          noteUploadJobId,
+          resource,
+          harmonizerReviewEtag,
+        );
+      } else {
+        await harmonizerReviewService.updateRecord(
+          noteUploadJobId,
+          selectedHarmonizerRecord.recordId,
+          resource,
+          harmonizerReviewEtag,
+        );
+      }
       setSelectedHarmonizerRecord(null);
+      setIsAddingHarmonizerRecord(false);
       setIsEditingHarmonizerRecord(false);
       await loadHarmonizerReview(noteUploadJobId);
     } catch (error: any) {
@@ -2161,6 +2406,27 @@ const PatientRecordsPage: React.FC = () => {
       );
     } finally {
       setIsSavingHarmonizerRecord(false);
+    }
+  };
+
+  const resolveSelectedDuplicate = async (
+    action: 'CREATE_NEW' | 'SKIP' | 'UPDATE_EXISTING',
+  ) => {
+    if (!noteUploadJobId || !selectedHarmonizerRecord?.recordId) return;
+    setHarmonizerReviewActionError(null);
+    try {
+      await harmonizerReviewService.resolveDuplicate(
+        noteUploadJobId,
+        selectedHarmonizerRecord.recordId,
+        action,
+        harmonizerReviewEtag,
+      );
+      setSelectedHarmonizerRecord(null);
+      await loadHarmonizerReview(noteUploadJobId);
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to update duplicate decision.',
+      );
     }
   };
 
@@ -2293,7 +2559,11 @@ const PatientRecordsPage: React.FC = () => {
           if (normalizeHarmonizerStatus(payload.status) === 'AWAITING_REVIEW') {
             setNoteUploadJobStatus('AWAITING_REVIEW');
             setIsNoteUploadPolling(false);
-            setNoteUploadMessage('Generated resources are ready for review.');
+            setHarmonizerPanelTab('review');
+            setShowPendingHarmonizerMissions(false);
+            setNoteUploadMessage(
+              'Review required: generated resources are ready. Review them before approval.',
+            );
             await loadHarmonizerReview(jobId);
             return;
           }
@@ -3201,6 +3471,7 @@ const PatientRecordsPage: React.FC = () => {
                                 </div>
                               ) : null}
                             </div>
+                            <AiProvenancePanel resource={cond} />
                           </td>
                         </tr>
                       )}
@@ -3340,6 +3611,7 @@ const PatientRecordsPage: React.FC = () => {
                           </div>
                         )}
                       </div>
+                      <AiProvenancePanel resource={cond} />
                     </div>
                   )}
                 </div>
@@ -3481,6 +3753,7 @@ const PatientRecordsPage: React.FC = () => {
                                   .join(', ') || '—'}
                               </div>
                             </div>
+                            <AiProvenancePanel resource={enc} />
                           </td>
                         </tr>
                       )}
@@ -3536,6 +3809,7 @@ const PatientRecordsPage: React.FC = () => {
                           {enc.reason?.[0]?.value?.[0]?.concept?.text || '—'}
                         </p>
                       </div>
+                      <AiProvenancePanel resource={enc} />
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs text-gray-500">
@@ -3844,6 +4118,7 @@ const PatientRecordsPage: React.FC = () => {
                                   ) : null}
                                 </div>
                               )}
+                              <AiProvenancePanel resource={obs} />
                             </td>
                           </tr>
                         )}
@@ -3883,6 +4158,7 @@ const PatientRecordsPage: React.FC = () => {
                         <div className="mt-1">
                           <StatusBadge status={obs.status} />
                         </div>
+                        <AiProvenancePanel resource={obs} />
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">
@@ -4085,6 +4361,7 @@ const PatientRecordsPage: React.FC = () => {
                                 '—'}
                             </div>
                           </div>
+                          <AiProvenancePanel resource={sr} />
                         </td>
                       </tr>
                     )}
@@ -4215,6 +4492,7 @@ const PatientRecordsPage: React.FC = () => {
                             <span className="font-medium">Conclusion:</span>{' '}
                             {dr.conclusion || '—'}
                           </div>
+                          <AiProvenancePanel resource={dr} />
                         </td>
                       </tr>
                     )}
@@ -4451,6 +4729,7 @@ const PatientRecordsPage: React.FC = () => {
                                     .join('; ') || '—'}
                                 </div>
                               </div>
+                              <AiProvenancePanel resource={mr} />
                             </td>
                           </tr>
                         )}
@@ -4648,6 +4927,7 @@ const PatientRecordsPage: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        <AiProvenancePanel resource={mr} />
                       </div>
                     )}
                   </div>
@@ -4762,6 +5042,7 @@ const PatientRecordsPage: React.FC = () => {
                                     : '—'}
                                 </div>
                               </div>
+                              <AiProvenancePanel resource={md} />
                             </td>
                           </tr>
                         )}
@@ -4834,6 +5115,7 @@ const PatientRecordsPage: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        <AiProvenancePanel resource={md} />
                       </div>
                     )}
                   </div>
@@ -4947,6 +5229,7 @@ const PatientRecordsPage: React.FC = () => {
                                   {ms.note?.[0]?.text || '—'}
                                 </div>
                               </div>
+                              <AiProvenancePanel resource={ms} />
                             </td>
                           </tr>
                         )}
@@ -5021,6 +5304,7 @@ const PatientRecordsPage: React.FC = () => {
                             <p className="text-gray-600">{ms.note[0].text}</p>
                           </div>
                         )}
+                        <AiProvenancePanel resource={ms} />
                       </div>
                     )}
                   </div>
@@ -5306,6 +5590,7 @@ const PatientRecordsPage: React.FC = () => {
                                 '—'}
                             </div>
                           </div>
+                          <AiProvenancePanel resource={proc} />
                         </td>
                       </tr>
                     )}
@@ -5473,6 +5758,7 @@ const PatientRecordsPage: React.FC = () => {
                         </ul>
                       </div>
                     ) : null}
+                    <AiProvenancePanel resource={cp} />
                   </div>
                 )}
               </div>
@@ -5716,7 +6002,7 @@ const PatientRecordsPage: React.FC = () => {
                         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
                       />
                     </svg>
-                    Upload Report
+                    Upload & Review
                   </button>
                 )}
 
@@ -6125,7 +6411,7 @@ const PatientRecordsPage: React.FC = () => {
                       className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                         harmonizerPanelTab === 'review'
                           ? 'bg-amber-500 text-white'
-                          : 'text-emerald-700 hover:bg-emerald-50'
+                          : 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200 hover:bg-amber-100'
                       }`}
                     >
                       Review
@@ -6278,7 +6564,7 @@ const PatientRecordsPage: React.FC = () => {
                         disabled={!selectedNoteFile || isUploadingNotes}
                         className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        {isUploadingNotes ? 'Uploading...' : 'Upload Report'}
+                        {isUploadingNotes ? 'Uploading...' : 'Upload & Review'}
                       </button>
                     </form>
 
@@ -6382,14 +6668,25 @@ const PatientRecordsPage: React.FC = () => {
                 {harmonizerPanelTab === 'review' &&
                   noteUploadJobStatus === 'AWAITING_REVIEW' && (
                     <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                      <div>
-                        <h3 className="text-sm font-semibold text-amber-900">
-                          Review generated resources
-                        </h3>
+                      <div className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2">
+                        <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+                          Review required
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-amber-900">
+                          Generated resources are ready for review.
+                        </p>
                         <p className="mt-1 text-xs text-amber-800">
                           Nothing has been written to the patient record yet.
-                          Select a resource to inspect or edit it.
+                          Review or edit each resource, then approve to resume
+                          the import.
                         </p>
+                        <button
+                          type="button"
+                          onClick={openNewHarmonizerRecord}
+                          className="mt-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                        >
+                          Add missing resource
+                        </button>
                       </div>
 
                       {isLoadingHarmonizerReview ? (
@@ -6401,12 +6698,33 @@ const PatientRecordsPage: React.FC = () => {
                           {harmonizerReviewRecords.map((record) => {
                             const resource = (record.resource || record) as any;
                             const display =
-                              resource.code?.text ||
-                              resource.code?.coding?.[0]?.display ||
-                              resource.title ||
-                              resource.medication?.concept?.text ||
-                              record.resourceId ||
-                              'Generated resource';
+                              resource.resourceType === 'Encounter'
+                                ? [
+                                    resource.actualPeriod?.start ||
+                                    resource.period?.start
+                                      ? fmt(
+                                          resource.actualPeriod?.start ||
+                                            resource.period?.start,
+                                        )
+                                      : null,
+                                    resource.class?.display ||
+                                      resource.class?.coding?.[0]?.display ||
+                                      resource.class?.coding?.[0]?.code,
+                                    resource.type?.[0]?.text ||
+                                      resource.type?.[0]?.coding?.[0]
+                                        ?.display ||
+                                      resource.type?.[0]?.coding?.[0]?.code,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') ||
+                                  record.resourceId ||
+                                  'Encounter'
+                                : resource.code?.text ||
+                                  resource.code?.coding?.[0]?.display ||
+                                  resource.title ||
+                                  resource.medication?.concept?.text ||
+                                  record.resourceId ||
+                                  'Generated resource';
                             return (
                               <button
                                 key={record.recordId}
@@ -6426,6 +6744,17 @@ const PatientRecordsPage: React.FC = () => {
                                       : record.outcome || 'Review'}
                                   </span>
                                 </div>
+                                <div className="mt-1">
+                                  <HarmonizerReviewMetadata
+                                    record={record}
+                                    compact
+                                  />
+                                </div>
+                                {isHarmonizerDuplicate(record) && (
+                                  <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                                    Duplicate candidate
+                                  </p>
+                                )}
                                 <p className="mt-1 truncate text-sm text-gray-800">
                                   {display}
                                 </p>
@@ -6491,7 +6820,8 @@ const PatientRecordsPage: React.FC = () => {
                     onClick={() => setSelectedHarmonizerRecord(null)}
                   >
                     <div
-                      className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+                      className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-y-scroll overscroll-contain rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+                      style={{ scrollbarGutter: 'stable' }}
                       onClick={(event) => event.stopPropagation()}
                     >
                       <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3">
@@ -6504,6 +6834,51 @@ const PatientRecordsPage: React.FC = () => {
                             {selectedHarmonizerRecord.resourceId ||
                               selectedHarmonizerRecord.recordId}
                           </p>
+                          <div className="mt-2">
+                            <HarmonizerReviewMetadata
+                              record={selectedHarmonizerRecord}
+                            />
+                          </div>
+                          {selectedHarmonizerRecord.evidence && (
+                            <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+                              <p className="text-xs font-semibold text-blue-900">
+                                Evidence from source document
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-sm text-blue-800">
+                                {Array.isArray(
+                                  selectedHarmonizerRecord.evidence,
+                                )
+                                  ? selectedHarmonizerRecord.evidence.join('\n')
+                                  : selectedHarmonizerRecord.evidence}
+                              </p>
+                            </div>
+                          )}
+                          {isHarmonizerDuplicate(selectedHarmonizerRecord) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowHarmonizerDuplicateDetails(
+                                    (expanded) => !expanded,
+                                  )
+                                }
+                                className="mt-3 flex w-full items-center justify-between rounded-md bg-red-50 px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-100"
+                                aria-expanded={showHarmonizerDuplicateDetails}
+                              >
+                                <span>
+                                  This resource is marked as a duplicate.
+                                </span>
+                                <span aria-hidden="true">
+                                  {showHarmonizerDuplicateDetails ? '−' : '+'}
+                                </span>
+                              </button>
+                              {showHarmonizerDuplicateDetails && (
+                                <HarmonizerDuplicateDetails
+                                  record={selectedHarmonizerRecord}
+                                />
+                              )}
+                            </>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -6517,7 +6892,7 @@ const PatientRecordsPage: React.FC = () => {
                           ×
                         </button>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-4">
+                      <div className="flex-none overflow-visible p-4">
                         {isEditingHarmonizerRecord ? (
                           <>
                             <FriendlyHarmonizerEditor
@@ -6540,6 +6915,26 @@ const PatientRecordsPage: React.FC = () => {
                         )}
                       </div>
                       <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3">
+                        {!isAddingHarmonizerRecord &&
+                          selectedHarmonizerRecord.recordId && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void resolveSelectedDuplicate(
+                                  isHarmonizerDuplicate(
+                                    selectedHarmonizerRecord,
+                                  )
+                                    ? 'CREATE_NEW'
+                                    : 'SKIP',
+                                )
+                              }
+                              className="mr-auto rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                            >
+                              {isHarmonizerDuplicate(selectedHarmonizerRecord)
+                                ? 'Mark as non-duplicate'
+                                : 'Mark as duplicate'}
+                            </button>
+                          )}
                         {!isEditingHarmonizerRecord ? (
                           <button
                             type="button"
