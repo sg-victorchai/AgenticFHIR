@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import Client from 'fhir-kit-client';
 import { createFHIRClient } from '../services/fhir/client';
+import { oidcUserManager } from '../services/auth/oidc';
 
 interface FHIRContextType {
   client: Client | null;
@@ -41,6 +42,18 @@ export const FHIRProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     initClient();
+
+    const handleUserLoaded = () => {
+      void initClient();
+    };
+
+    oidcUserManager.events.addUserLoaded(handleUserLoaded);
+    oidcUserManager.events.addUserUnloaded(handleUserLoaded);
+
+    return () => {
+      oidcUserManager.events.removeUserLoaded(handleUserLoaded);
+      oidcUserManager.events.removeUserUnloaded(handleUserLoaded);
+    };
   }, []);
 
   return (

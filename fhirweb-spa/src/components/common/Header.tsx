@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { logout } from '../../store/slices/authSlice';
 import { clearRole } from '../../store/slices/uiSlice';
+import { signOut } from '../../services/auth/oidc';
 
 const Header: React.FC = () => {
   const dispatch = useDispatch();
@@ -17,7 +18,10 @@ const Header: React.FC = () => {
   const handleLogout = () => {
     dispatch(logout());
     dispatch(clearRole());
-    navigate('/login');
+    void signOut().catch((error) => {
+      console.error('Unable to start OIDC sign-out:', error);
+      navigate('/login');
+    });
   };
 
   const getRoleLabel = () => {

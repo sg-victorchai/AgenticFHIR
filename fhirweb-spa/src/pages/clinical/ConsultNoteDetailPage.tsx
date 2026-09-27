@@ -8,6 +8,7 @@ import {
   useCreateResourceMutation,
   useUpdateResourceMutation,
 } from '../../services/fhir/client';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 import {
   Encounter,
   Observation,
@@ -62,12 +63,12 @@ const SEVERITY_SNOMED = {
 
 const VITAL_LOINC_NAMES: Record<string, string> = {
   '59408-5': 'SpO₂',
-  '2708-6':  'SpO₂',  // backward compat
-  '8867-4':  'Heart Rate',
-  '8480-6':  'Systolic BP',
-  '8462-4':  'Diastolic BP',
-  '9279-1':  'Resp. Rate',
-  '8310-5':  'Temperature',
+  '2708-6': 'SpO₂', // backward compat
+  '8867-4': 'Heart Rate',
+  '8480-6': 'Systolic BP',
+  '8462-4': 'Diastolic BP',
+  '9279-1': 'Resp. Rate',
+  '8310-5': 'Temperature',
 };
 
 const SECTION_ACCENT: Record<string, string> = {
@@ -216,11 +217,12 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-
 const SectionDivider: React.FC<{ label: string }> = ({ label }) => (
   <div className="flex items-center gap-2 my-3">
     <div className="flex-1 border-t border-gray-100" />
-    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</span>
+    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+      {label}
+    </span>
     <div className="flex-1 border-t border-gray-100" />
   </div>
 );
@@ -308,7 +310,13 @@ const EmptyNote: React.FC<{ label: string }> = ({ label }) => (
   <p className="text-sm text-gray-400 italic">{label}</p>
 );
 
-const FilterBar = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+const FilterBar = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) => (
   <div className="mb-4">
     <input
       type="text"
@@ -341,8 +349,15 @@ interface UpdateVitalsFormProps {
   patientId: string;
   patientName: string;
   encounterId: string;
-  createResource: (arg: { resourceType: string; resource: Resource }) => Promise<any>;
-  updateResource: (arg: { resourceType: string; id: string; resource: Resource }) => Promise<any>;
+  createResource: (arg: {
+    resourceType: string;
+    resource: Resource;
+  }) => Promise<any>;
+  updateResource: (arg: {
+    resourceType: string;
+    id: string;
+    resource: Resource;
+  }) => Promise<any>;
   isSaving: boolean;
   onDone?: () => void;
 }
@@ -360,12 +375,72 @@ const VITAL_FIELD_META: Array<{
   unit: string;
   ucum: string;
 }> = [
-  { field: 'spo2', loincCode: '59408-5', label: 'SpO₂ (%)', min: 50, max: 100, step: 1, ph: '98', unit: '%', ucum: '%' },
-  { field: 'hr', loincCode: '8867-4', label: 'Heart Rate (bpm)', min: 20, max: 300, step: 1, ph: '72', unit: 'beats/min', ucum: '/min' },
-  { field: 'sbp', loincCode: '8480-6', label: 'Systolic BP', min: 50, max: 300, step: 1, ph: '120', unit: 'mmHg', ucum: 'mm[Hg]' },
-  { field: 'dbp', loincCode: '8462-4', label: 'Diastolic BP', min: 20, max: 200, step: 1, ph: '80', unit: 'mmHg', ucum: 'mm[Hg]' },
-  { field: 'rr', loincCode: '9279-1', label: 'Resp. Rate (/min)', min: 4, max: 60, step: 1, ph: '16', unit: 'breaths/min', ucum: '/min' },
-  { field: 'temp', loincCode: '8310-5', label: 'Temp (°C)', min: 30, max: 43, step: 0.1, ph: '36.8', unit: '°C', ucum: 'Cel' },
+  {
+    field: 'spo2',
+    loincCode: '59408-5',
+    label: 'SpO₂ (%)',
+    min: 50,
+    max: 100,
+    step: 1,
+    ph: '98',
+    unit: '%',
+    ucum: '%',
+  },
+  {
+    field: 'hr',
+    loincCode: '8867-4',
+    label: 'Heart Rate (bpm)',
+    min: 20,
+    max: 300,
+    step: 1,
+    ph: '72',
+    unit: 'beats/min',
+    ucum: '/min',
+  },
+  {
+    field: 'sbp',
+    loincCode: '8480-6',
+    label: 'Systolic BP',
+    min: 50,
+    max: 300,
+    step: 1,
+    ph: '120',
+    unit: 'mmHg',
+    ucum: 'mm[Hg]',
+  },
+  {
+    field: 'dbp',
+    loincCode: '8462-4',
+    label: 'Diastolic BP',
+    min: 20,
+    max: 200,
+    step: 1,
+    ph: '80',
+    unit: 'mmHg',
+    ucum: 'mm[Hg]',
+  },
+  {
+    field: 'rr',
+    loincCode: '9279-1',
+    label: 'Resp. Rate (/min)',
+    min: 4,
+    max: 60,
+    step: 1,
+    ph: '16',
+    unit: 'breaths/min',
+    ucum: '/min',
+  },
+  {
+    field: 'temp',
+    loincCode: '8310-5',
+    label: 'Temp (°C)',
+    min: 30,
+    max: 43,
+    step: 0.1,
+    ph: '36.8',
+    unit: '°C',
+    ucum: 'Cel',
+  },
 ];
 
 const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
@@ -379,39 +454,68 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
 }) => {
   const panelObs = [...existingVitals]
     .filter((o) => o.component?.length)
-    .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1))[0];
+    .sort((a, b) =>
+      (b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1,
+    )[0];
 
-  const initialForm = VITAL_FIELD_META.reduce((acc, f) => {
-    if (panelObs) {
-      const comp = panelObs.component?.find((c) => c.code?.coding?.[0]?.code === f.loincCode);
-      acc[f.field] = comp?.valueQuantity?.value != null ? String(comp.valueQuantity.value) : '';
-    } else {
-      // backward compat: old individual observations
-      const obs = existingVitals
-        .filter((o) => o.code?.coding?.[0]?.code === f.loincCode)
-        .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1))[0];
-      acc[f.field] = obs?.valueQuantity?.value != null ? String(obs.valueQuantity.value) : '';
-    }
-    return acc;
-  }, {} as Record<string, string>);
+  const initialForm = VITAL_FIELD_META.reduce(
+    (acc, f) => {
+      if (panelObs) {
+        const comp = panelObs.component?.find(
+          (c) => c.code?.coding?.[0]?.code === f.loincCode,
+        );
+        acc[f.field] =
+          comp?.valueQuantity?.value != null
+            ? String(comp.valueQuantity.value)
+            : '';
+      } else {
+        // backward compat: old individual observations
+        const obs = existingVitals
+          .filter((o) => o.code?.coding?.[0]?.code === f.loincCode)
+          .sort((a, b) =>
+            (b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1,
+          )[0];
+        acc[f.field] =
+          obs?.valueQuantity?.value != null
+            ? String(obs.valueQuantity.value)
+            : '';
+      }
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
 
-  const [form, setForm] = useState<Record<string, string>>({ ...initialForm, recordedAt: localNow() });
+  const [form, setForm] = useState<Record<string, string>>({
+    ...initialForm,
+    recordedAt: localNow(),
+  });
   const [err, setErr] = useState('');
 
   const handleSave = async () => {
     setErr('');
     const effectiveDateTime = toFHIRDateTime(form.recordedAt);
 
-    const components = VITAL_FIELD_META
-      .map((meta) => {
-        const val = form[meta.field];
-        if (!val) return null;
-        return {
-          code: { coding: [{ system: 'http://loinc.org', code: meta.loincCode, display: meta.label }] },
-          valueQuantity: { value: parseFloat(val), unit: meta.unit, system: 'http://unitsofmeasure.org', code: meta.ucum },
-        };
-      })
-      .filter(Boolean);
+    const components = VITAL_FIELD_META.map((meta) => {
+      const val = form[meta.field];
+      if (!val) return null;
+      return {
+        code: {
+          coding: [
+            {
+              system: 'http://loinc.org',
+              code: meta.loincCode,
+              display: meta.label,
+            },
+          ],
+        },
+        valueQuantity: {
+          value: parseFloat(val),
+          unit: meta.unit,
+          system: 'http://unitsofmeasure.org',
+          code: meta.ucum,
+        },
+      };
+    }).filter(Boolean);
 
     if (components.length === 0) {
       setErr('Enter at least one value.');
@@ -421,16 +525,40 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
     const obs = {
       resourceType: 'Observation' as const,
       status: 'final' as const,
-      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
-      code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
+      category: [
+        {
+          coding: [
+            {
+              system:
+                'http://terminology.hl7.org/CodeSystem/observation-category',
+              code: 'vital-signs',
+              display: 'Vital Signs',
+            },
+          ],
+        },
+      ],
+      code: {
+        coding: [
+          {
+            system: 'http://loinc.org',
+            code: VITALS_PANEL_LOINC,
+            display: 'Vital signs panel',
+          },
+        ],
+        text: 'Vital Signs',
+      },
       subject: { reference: `Patient/${patientId}`, display: patientName },
       encounter: { reference: `Encounter/${encounterId}` },
       effectiveDateTime,
       component: components,
     };
-    const res = await createResource({ resourceType: 'Observation', resource: obs as any });
+    const res = await createResource({
+      resourceType: 'Observation',
+      resource: obs as any,
+    });
     if ('data' in res) onDone?.();
-    else setErr('Failed to save vitals.');
+    else
+      setErr(getOperationOutcomeMessage(res.error) || 'Failed to save vitals.');
   };
 
   return (
@@ -447,7 +575,9 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
               placeholder={f.ph}
               className={fieldCls}
               value={form[f.field]}
-              onChange={(e) => setForm((prev) => ({ ...prev, [f.field]: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, [f.field]: e.target.value }))
+              }
             />
           </div>
         ))}
@@ -458,11 +588,15 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
           type="datetime-local"
           className={`${fieldCls} max-w-xs`}
           value={form.recordedAt}
-          onChange={(e) => setForm((prev) => ({ ...prev, recordedAt: e.target.value }))}
+          onChange={(e) =>
+            setForm((prev) => ({ ...prev, recordedAt: e.target.value }))
+          }
         />
       </div>
       {err && (
-        <div className="bg-red-50 border border-red-300 text-red-700 rounded-md p-2 text-sm">{err}</div>
+        <div className="bg-red-50 border border-red-300 text-red-700 rounded-md p-2 text-sm">
+          {err}
+        </div>
       )}
       <button
         onClick={handleSave}
@@ -475,7 +609,8 @@ const UpdateVitalsForm: React.FC<UpdateVitalsFormProps> = ({
   );
 };
 
-const AddExamForm: React.FC<AddFormProps> = ({  patientId,
+const AddExamForm: React.FC<AddFormProps> = ({
+  patientId,
   patientName,
   encounterId,
   createResource,
@@ -557,7 +692,10 @@ const AddExamForm: React.FC<AddFormProps> = ({  patientId,
     if ('data' in res) {
       onDone?.();
     } else {
-      setErr('Failed to save. Please retry.');
+      setErr(
+        getOperationOutcomeMessage(res.error) ||
+          'Failed to save. Please retry.',
+      );
     }
   };
   return (
@@ -678,7 +816,10 @@ const AddOrderForm: React.FC<AddFormProps> = ({
     if ('data' in res) {
       onDone?.();
     } else {
-      setErr('Failed to place order. Please retry.');
+      setErr(
+        getOperationOutcomeMessage(res.error) ||
+          'Failed to place order. Please retry.',
+      );
     }
   };
   return (
@@ -832,7 +973,10 @@ const AddDiagnosisForm: React.FC<AddFormProps> = ({
     if ('data' in res) {
       onDone?.();
     } else {
-      setErr('Failed to save. Please retry.');
+      setErr(
+        getOperationOutcomeMessage(res.error) ||
+          'Failed to save. Please retry.',
+      );
     }
   };
   return (
@@ -978,7 +1122,10 @@ const AddMedicationForm: React.FC<AddFormProps> = ({
     if ('data' in res) {
       onDone?.();
     } else {
-      setErr('Failed to save. Please retry.');
+      setErr(
+        getOperationOutcomeMessage(res.error) ||
+          'Failed to save. Please retry.',
+      );
     }
   };
   return (
@@ -1121,7 +1268,10 @@ const AddCarePlanForm: React.FC<AddFormProps> = ({
     if ('data' in res) {
       onDone?.();
     } else {
-      setErr('Failed to save. Please retry.');
+      setErr(
+        getOperationOutcomeMessage(res.error) ||
+          'Failed to save. Please retry.',
+      );
     }
   };
   return (
@@ -1203,28 +1353,35 @@ const ConsultNoteDetailPage: React.FC = () => {
     { resourceType: 'DiagnosticReport', encounterId: encounterId! },
     { skip: !encounterId },
   );
-  const { data: medDispBundle, isLoading: medDispLoading } = useSearchByEncounterQuery(
-    { resourceType: 'MedicationDispense', encounterId: encounterId! },
-    { skip: !encounterId },
-  );
-  const { data: medStatBundle, isLoading: medStatLoading } = useSearchByEncounterQuery(
-    { resourceType: 'MedicationStatement', encounterId: encounterId! },
-    { skip: !encounterId },
-  );
-  const { data: procBundle, isLoading: procLoading } = useSearchByEncounterQuery(
-    { resourceType: 'Procedure', encounterId: encounterId! },
-    { skip: !encounterId },
-  );
+  const { data: medDispBundle, isLoading: medDispLoading } =
+    useSearchByEncounterQuery(
+      { resourceType: 'MedicationDispense', encounterId: encounterId! },
+      { skip: !encounterId },
+    );
+  const { data: medStatBundle, isLoading: medStatLoading } =
+    useSearchByEncounterQuery(
+      { resourceType: 'MedicationStatement', encounterId: encounterId! },
+      { skip: !encounterId },
+    );
+  const { data: procBundle, isLoading: procLoading } =
+    useSearchByEncounterQuery(
+      { resourceType: 'Procedure', encounterId: encounterId! },
+      { skip: !encounterId },
+    );
 
   const encounter = encounterResource as Encounter | undefined;
-  const allObs = extractResources<Observation>(obsBundle).filter((o) => o.status !== 'entered-in-error');
+  const allObs = extractResources<Observation>(obsBundle).filter(
+    (o) => o.status !== 'entered-in-error',
+  );
   const serviceRequests = extractResources<ServiceRequest>(srBundle);
   const conditions = extractResources<Condition>(condBundle);
   const medications = extractResources<MedicationRequest>(medBundle);
   const carePlans = extractResources<CarePlan>(cpBundle);
   const diagnosticReports = extractResources<DiagnosticReport>(drBundle);
-  const medicationDispenses = extractResources<MedicationDispense>(medDispBundle);
-  const medicationStatements = extractResources<MedicationStatement>(medStatBundle);
+  const medicationDispenses =
+    extractResources<MedicationDispense>(medDispBundle);
+  const medicationStatements =
+    extractResources<MedicationStatement>(medStatBundle);
   const procedures = extractResources<Procedure>(procBundle);
 
   const SNOMED_SYSTEM = 'http://snomed.info/sct';
@@ -1233,8 +1390,14 @@ const ConsultNoteDetailPage: React.FC = () => {
   const isRadSR = (sr: ServiceRequest): boolean =>
     // Check sr.category (proper FHIR R5 structure)
     (sr.category?.some((cat) =>
-      cat.coding?.some((cd) => cd.system === SNOMED_SYSTEM && cd.code != null && RAD_SNOMED_CODES.has(cd.code)),
-    ) ?? false) ||
+      cat.coding?.some(
+        (cd) =>
+          cd.system === SNOMED_SYSTEM &&
+          cd.code != null &&
+          RAD_SNOMED_CODES.has(cd.code),
+      ),
+    ) ??
+      false) ||
     // Fallback: legacy records store category code inside sr.code
     RAD_SNOMED_CODES.has((sr.code as any)?.concept?.coding?.[0]?.code ?? '');
   const labOrders = serviceRequests.filter((sr) => !isRadSR(sr));
@@ -1242,21 +1405,24 @@ const ConsultNoteDetailPage: React.FC = () => {
 
   // SNOMED CT lab codes: specialty codes + generic "laboratory procedure/report" codes
   const LAB_SNOMED_CODES = new Set([
-    '252275004',     // Haematology
-    '59524001',      // Biochemistry
-    '252276003',     // Immunology/Serology
-    '19851009',      // Microbiology
-    '394579002',     // Cardiology
-    '394607009',     // Pulmonology
-    '74728003',      // General/Other
-    '108252007',     // Laboratory procedure (generic)
+    '252275004', // Haematology
+    '59524001', // Biochemistry
+    '252276003', // Immunology/Serology
+    '19851009', // Microbiology
+    '394579002', // Cardiology
+    '394607009', // Pulmonology
+    '74728003', // General/Other
+    '108252007', // Laboratory procedure (generic)
     '4321000179101', // Laboratory report
-    '15220000',      // Laboratory test
+    '15220000', // Laboratory test
   ]);
   const labReports = diagnosticReports.filter((dr) =>
     dr.category?.some((cat) =>
       cat.coding?.some(
-        (cd) => cd.system === SNOMED_SYSTEM && cd.code != null && LAB_SNOMED_CODES.has(cd.code),
+        (cd) =>
+          cd.system === SNOMED_SYSTEM &&
+          cd.code != null &&
+          LAB_SNOMED_CODES.has(cd.code),
       ),
     ),
   );
@@ -1264,7 +1430,10 @@ const ConsultNoteDetailPage: React.FC = () => {
   const radReports = diagnosticReports.filter((dr) =>
     dr.category?.some((cat) =>
       cat.coding?.some(
-        (cd) => cd.system === SNOMED_SYSTEM && cd.code != null && RAD_SNOMED_CODES.has(cd.code),
+        (cd) =>
+          cd.system === SNOMED_SYSTEM &&
+          cd.code != null &&
+          RAD_SNOMED_CODES.has(cd.code),
       ),
     ),
   );
@@ -1280,11 +1449,16 @@ const ConsultNoteDetailPage: React.FC = () => {
     o.category?.some((c) => c.coding?.some((cd) => cd.code === 'laboratory')),
   );
   const otherObs = allObs.filter(
-    (o) => !o.category?.some((c) =>
-      c.coding?.some((cd) => cd.code === 'vital-signs' || cd.code === 'exam' || cd.code === 'laboratory'),
-    ),
+    (o) =>
+      !o.category?.some((c) =>
+        c.coding?.some(
+          (cd) =>
+            cd.code === 'vital-signs' ||
+            cd.code === 'exam' ||
+            cd.code === 'laboratory',
+        ),
+      ),
   );
-
 
   type VitalEntry = { value: number; unit: string; effectiveDateTime?: string };
   const latestVitals: Record<string, VitalEntry> = {};
@@ -1296,16 +1470,30 @@ const ConsultNoteDetailPage: React.FC = () => {
         const val = comp.valueQuantity?.value;
         if (!code || val == null) return;
         const prev = latestVitals[code];
-        if (!prev || (dt && (!prev.effectiveDateTime || dt > prev.effectiveDateTime)))
-          latestVitals[code] = { value: val, unit: comp.valueQuantity?.unit || '', effectiveDateTime: dt };
+        if (
+          !prev ||
+          (dt && (!prev.effectiveDateTime || dt > prev.effectiveDateTime))
+        )
+          latestVitals[code] = {
+            value: val,
+            unit: comp.valueQuantity?.unit || '',
+            effectiveDateTime: dt,
+          };
       });
     } else {
       const code = obs.code?.coding?.[0]?.code || '';
       const val = obs.valueQuantity?.value;
       if (!code || val == null) return;
       const prev = latestVitals[code];
-      if (!prev || (dt && (!prev.effectiveDateTime || dt > prev.effectiveDateTime)))
-        latestVitals[code] = { value: val, unit: obs.valueQuantity?.unit || '', effectiveDateTime: dt };
+      if (
+        !prev ||
+        (dt && (!prev.effectiveDateTime || dt > prev.effectiveDateTime))
+      )
+        latestVitals[code] = {
+          value: val,
+          unit: obs.valueQuantity?.unit || '',
+          effectiveDateTime: dt,
+        };
     }
   });
 
@@ -1358,9 +1546,24 @@ const ConsultNoteDetailPage: React.FC = () => {
     { id: 'rad-reports', label: 'Rad Reports', icon: '📡', indent: true },
     { id: 'assessment', label: 'Assessment', icon: 'Dx' },
     { id: 'medications', label: 'Medications', icon: 'Rx' },
-    { id: 'medication-request', label: 'Medication Request', icon: '💊', indent: true },
-    { id: 'medication-dispense', label: 'Medication Dispense', icon: '💊', indent: true },
-    { id: 'medication-statement', label: 'Medication Statement', icon: '💊', indent: true },
+    {
+      id: 'medication-request',
+      label: 'Medication Request',
+      icon: '💊',
+      indent: true,
+    },
+    {
+      id: 'medication-dispense',
+      label: 'Medication Dispense',
+      icon: '💊',
+      indent: true,
+    },
+    {
+      id: 'medication-statement',
+      label: 'Medication Statement',
+      icon: '💊',
+      indent: true,
+    },
     { id: 'procedure', label: 'Procedure', icon: '⚕️' },
     { id: 'care-plan', label: 'Care Plan', icon: '📝' },
   ];
@@ -1369,22 +1572,31 @@ const ConsultNoteDetailPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState('notes');
   const [filterText, setFilterText] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedLabReport, setSelectedLabReport] = useState<DiagnosticReport | null>(null);
+  const [selectedLabReport, setSelectedLabReport] =
+    useState<DiagnosticReport | null>(null);
 
-  useEffect(() => { setFilterText(''); setExpandedId(null); }, [activeSection]);
+  useEffect(() => {
+    setFilterText('');
+    setExpandedId(null);
+  }, [activeSection]);
 
-  const codeBadge = (coding?: Array<{system?: string; code?: string}>) => {
+  const codeBadge = (coding?: Array<{ system?: string; code?: string }>) => {
     if (!coding?.length) return null;
     const c = coding[0];
     if (!c.code) return null;
-    const prefix = c.system?.includes('snomed') ? 'SNOMED' : c.system?.includes('loinc') ? 'LOINC' : c.system?.includes('rxnorm') ? 'RxNorm' : '';
+    const prefix = c.system?.includes('snomed')
+      ? 'SNOMED'
+      : c.system?.includes('loinc')
+        ? 'LOINC'
+        : c.system?.includes('rxnorm')
+          ? 'RxNorm'
+          : '';
     return `${prefix ? prefix + ' ' : ''}${c.code}`;
   };
 
   return (
     // Escape the container's px-4 py-8 padding to go full-width
     <div className="-mx-4 -mt-8 flex flex-col min-h-screen">
-
       {/* ── Sticky demographic bar ─────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
         {/* Avatar + name */}
@@ -1397,12 +1609,27 @@ const ConsultNoteDetailPage: React.FC = () => {
               {patientName || '—'}
             </span>
             <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-gray-500">
-              {patient?.birthDate && <span>DOB: <strong className="text-gray-700">{patient.birthDate}</strong></span>}
+              {patient?.birthDate && (
+                <span>
+                  DOB:{' '}
+                  <strong className="text-gray-700">{patient.birthDate}</strong>
+                </span>
+              )}
               {patient?.gender && (
-                <span>Sex: <strong className="text-gray-700 capitalize">{patient.gender}</strong></span>
+                <span>
+                  Sex:{' '}
+                  <strong className="text-gray-700 capitalize">
+                    {patient.gender}
+                  </strong>
+                </span>
               )}
               {patient?.identifier?.[0]?.value && (
-                <span>ID: <strong className="text-gray-700 font-mono">{patient.identifier[0].value}</strong></span>
+                <span>
+                  ID:{' '}
+                  <strong className="text-gray-700 font-mono">
+                    {patient.identifier[0].value}
+                  </strong>
+                </span>
               )}
             </div>
           </div>
@@ -1419,19 +1646,27 @@ const ConsultNoteDetailPage: React.FC = () => {
               className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
                 encounter.status === 'in-progress'
                   ? 'bg-blue-100 text-blue-800'
-                  : (encounter.status as string) === 'finished' || encounter.status === 'completed'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
+                  : (encounter.status as string) === 'finished' ||
+                      encounter.status === 'completed'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-600'
               }`}
             >
               {encounter.status}
             </span>
           )}
           {encounter?.actualPeriod?.start && (
-            <span className="text-xs text-gray-400">{formatDT(encounter.actualPeriod.start)}</span>
+            <span className="text-xs text-gray-400">
+              {formatDT(encounter.actualPeriod.start)}
+            </span>
           )}
           {encounter?.identifier?.[0]?.value && (
-            <span className="text-xs text-gray-500">Visit ID: <strong className="text-gray-700 font-mono">{encounter.identifier[0].value}</strong></span>
+            <span className="text-xs text-gray-500">
+              Visit ID:{' '}
+              <strong className="text-gray-700 font-mono">
+                {encounter.identifier[0].value}
+              </strong>
+            </span>
           )}
         </div>
 
@@ -1456,10 +1691,13 @@ const ConsultNoteDetailPage: React.FC = () => {
 
       {/* ── Body: sidebar + content ────────────────────────────────────────── */}
       <div className="flex flex-1">
-
         {/* Left sidebar */}
-        <aside className={`${sidebarCollapsed ? 'w-10' : 'w-52'} flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:flex flex-col transition-all duration-200`}>
-          <div className={`flex ${sidebarCollapsed ? 'justify-center' : 'justify-end'} p-1.5`}>
+        <aside
+          className={`${sidebarCollapsed ? 'w-10' : 'w-52'} flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:flex flex-col transition-all duration-200`}
+        >
+          <div
+            className={`flex ${sidebarCollapsed ? 'justify-center' : 'justify-end'} p-1.5`}
+          >
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded text-sm leading-none"
@@ -1478,11 +1716,13 @@ const ConsultNoteDetailPage: React.FC = () => {
                     activeSection === id
                       ? 'bg-blue-50 text-blue-700 font-semibold border-r-2 border-blue-600'
                       : indent
-                      ? 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                        ? 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                   }`}
                 >
-                  <span className="text-xs w-5 text-center flex-shrink-0 opacity-70">{icon}</span>
+                  <span className="text-xs w-5 text-center flex-shrink-0 opacity-70">
+                    {icon}
+                  </span>
                   <span className="truncate">{label}</span>
                 </button>
               ))}
@@ -1505,7 +1745,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
                     {isEditable && (
                       <div className="bg-amber-500 px-5 py-2 flex items-center justify-between">
-                        <span className="text-white text-xs font-bold uppercase tracking-widest">Active Consult — In Progress</span>
+                        <span className="text-white text-xs font-bold uppercase tracking-widest">
+                          Active Consult — In Progress
+                        </span>
                         <Link
                           to={`/patient/${patientId}/encounter/${encounterId}/consult`}
                           className="text-xs bg-white text-amber-700 font-semibold px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
@@ -1517,20 +1759,42 @@ const ConsultNoteDetailPage: React.FC = () => {
                     {/* Latest vitals strip */}
                     {Object.keys(latestVitals).length > 0 && (
                       <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
-                        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Latest Vitals</div>
+                        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                          Latest Vitals
+                        </div>
                         <div className="flex flex-wrap gap-3">
                           {Object.entries(latestVitals).map(([code, entry]) => {
                             const trend = interpretVital(code, entry.value);
                             const name = VITAL_LOINC_NAMES[code] || code;
                             return (
-                              <div key={code} className={`border rounded-lg px-3 py-2 ${vitalCardCls(trend)}`}>
-                                <div className="text-xs text-gray-500 font-medium">{name}</div>
-                                <div className={`text-lg font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                  {entry.value} <span className="text-xs font-normal">{entry.unit}</span>
-                                  {trend === 'critical' && <span className="ml-1 text-red-600 text-sm font-bold">!</span>}
-                                  {trend === 'abnormal' && <span className="ml-1 text-amber-600 text-xs">▲</span>}
+                              <div
+                                key={code}
+                                className={`border rounded-lg px-3 py-2 ${vitalCardCls(trend)}`}
+                              >
+                                <div className="text-xs text-gray-500 font-medium">
+                                  {name}
                                 </div>
-                                <div className="text-xs text-gray-400">{formatDT(entry.effectiveDateTime)}</div>
+                                <div
+                                  className={`text-lg font-bold tabular-nums ${vitalValCls(trend)}`}
+                                >
+                                  {entry.value}{' '}
+                                  <span className="text-xs font-normal">
+                                    {entry.unit}
+                                  </span>
+                                  {trend === 'critical' && (
+                                    <span className="ml-1 text-red-600 text-sm font-bold">
+                                      !
+                                    </span>
+                                  )}
+                                  {trend === 'abnormal' && (
+                                    <span className="ml-1 text-amber-600 text-xs">
+                                      ▲
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  {formatDT(entry.effectiveDateTime)}
+                                </div>
                               </div>
                             );
                           })}
@@ -1540,7 +1804,21 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </div>
 
                   {/* ── 1. Vital Signs ── */}
-                  <Section sectionKey="vitals" icon="V" title="Vital Signs" count={Object.keys(latestVitals).length} isEditable={isEditable} addLabel="Update Vitals" addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}>
+                  <Section
+                    sectionKey="vitals"
+                    icon="V"
+                    title="Vital Signs"
+                    count={Object.keys(latestVitals).length}
+                    isEditable={isEditable}
+                    addLabel="Update Vitals"
+                    addForm={
+                      <UpdateVitalsForm
+                        {...formProps}
+                        existingVitals={vitals}
+                        updateResource={updateResource}
+                      />
+                    }
+                  >
                     {Object.keys(latestVitals).length === 0 ? (
                       <EmptyNote label="No vital signs recorded for this encounter." />
                     ) : (
@@ -1549,14 +1827,29 @@ const ConsultNoteDetailPage: React.FC = () => {
                           const name = VITAL_LOINC_NAMES[code] || code;
                           const trend = interpretVital(code, entry.value);
                           return (
-                            <div key={code} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
-                              <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
-                              <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
-                                {entry.value}
-                                <span className="text-sm font-normal ml-1">{entry.unit}</span>
-                                {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
+                            <div
+                              key={code}
+                              className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}
+                            >
+                              <div className="text-xs text-gray-500 font-medium mb-1">
+                                {name}
                               </div>
-                              <div className="text-xs text-gray-400 mt-1">{formatDT(entry.effectiveDateTime)}</div>
+                              <div
+                                className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}
+                              >
+                                {entry.value}
+                                <span className="text-sm font-normal ml-1">
+                                  {entry.unit}
+                                </span>
+                                {trend === 'critical' && (
+                                  <span className="ml-1 text-red-600 text-sm">
+                                    !
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {formatDT(entry.effectiveDateTime)}
+                              </div>
                             </div>
                           );
                         })}
@@ -1565,34 +1858,63 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </Section>
 
                   {/* ── 2. Physical Examination ── */}
-                  <Section sectionKey="exam" icon="E" title="Physical Examination" count={examFindings.length} isEditable={isEditable} addLabel="Add Finding" addForm={<AddExamForm {...formProps} />}>
+                  <Section
+                    sectionKey="exam"
+                    icon="E"
+                    title="Physical Examination"
+                    count={examFindings.length}
+                    isEditable={isEditable}
+                    addLabel="Add Finding"
+                    addForm={<AddExamForm {...formProps} />}
+                  >
                     {examFindings.length === 0 ? (
                       <EmptyNote label="No examination findings recorded." />
                     ) : (
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              System
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Finding
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Result
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Time
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {examFindings.map((obs) => {
-                            const system = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                            const system =
+                              obs.code?.text ||
+                              obs.code?.coding?.[0]?.display ||
+                              '—';
                             const finding = obs.valueString || '—';
-                            const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                            const isNormal =
+                              obs.interpretation?.[0]?.coding?.[0]?.code ===
+                              'N';
                             return (
                               <tr key={obs.id} className="hover:bg-gray-50">
-                                <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{system}</td>
-                                <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
+                                <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">
+                                  {system}
+                                </td>
+                                <td className="py-2.5 pr-4 text-gray-800">
+                                  {finding}
+                                </td>
                                 <td className="py-2.5 pr-4 whitespace-nowrap">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                                  >
                                     {isNormal ? '✓ Normal' : '! Abnormal'}
                                   </span>
                                 </td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT(obs.effectiveDateTime)}
+                                </td>
                               </tr>
                             );
                           })}
@@ -1602,8 +1924,22 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </Section>
 
                   {/* ── 3. Investigations ── */}
-                  <Section sectionKey="investigations" icon="Ix" title="Investigations" count={serviceRequests.length + otherObs.length + labObservations.length} isEditable={isEditable} addLabel="Place Order" addForm={<AddOrderForm {...formProps} />}>
-                    {serviceRequests.length === 0 && otherObs.length === 0 && labObservations.length === 0 ? (
+                  <Section
+                    sectionKey="investigations"
+                    icon="Ix"
+                    title="Investigations"
+                    count={
+                      serviceRequests.length +
+                      otherObs.length +
+                      labObservations.length
+                    }
+                    isEditable={isEditable}
+                    addLabel="Place Order"
+                    addForm={<AddOrderForm {...formProps} />}
+                  >
+                    {serviceRequests.length === 0 &&
+                    otherObs.length === 0 &&
+                    labObservations.length === 0 ? (
                       <EmptyNote label="No investigation orders or results recorded." />
                     ) : (
                       <div className="space-y-5">
@@ -1613,64 +1949,124 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Test
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Category
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Priority
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Status
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Ordered
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {serviceRequests.map((sr) => (
                                   <tr key={sr.id} className="hover:bg-gray-50">
-                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">{(sr.code as any)?.concept?.text || (sr.code as any)?.text || '—'}</td>
-                                    <td className="py-2.5 pr-4 text-xs text-gray-500">{(sr.code as any)?.concept?.coding?.[0]?.display || '—'}</td>
-                                    <td className="py-2.5 pr-4">{sr.priority && <StatusPill status={sr.priority} />}</td>
-                                    <td className="py-2.5 pr-4"><StatusPill status={sr.status} /></td>
-                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
+                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                      {(sr.code as any)?.concept?.text ||
+                                        (sr.code as any)?.text ||
+                                        '—'}
+                                    </td>
+                                    <td className="py-2.5 pr-4 text-xs text-gray-500">
+                                      {(sr.code as any)?.concept?.coding?.[0]
+                                        ?.display || '—'}
+                                    </td>
+                                    <td className="py-2.5 pr-4">
+                                      {sr.priority && (
+                                        <StatusPill status={sr.priority} />
+                                      )}
+                                    </td>
+                                    <td className="py-2.5 pr-4">
+                                      <StatusPill status={sr.status} />
+                                    </td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                      {formatDT(sr.authoredOn)}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
                         )}
-                        {(otherObs.length > 0 || labObservations.length > 0) && (
+                        {(otherObs.length > 0 ||
+                          labObservations.length > 0) && (
                           <div>
                             <SectionDivider label="Results" />
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Interpretation</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Test
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Result
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Interpretation
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Time
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
-                                {[...labObservations, ...otherObs].map((obs) => {
-                                  const name = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
-                                  const val = obs.valueQuantity
-                                    ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`
-                                    : obs.valueString || '—';
-                                  const interp = obs.interpretation?.[0]?.coding?.[0]?.code;
-                                  const interpDisplay = obs.interpretation?.[0]?.coding?.[0]?.display || interp;
-                                  const interpCls = interp === 'H' || interp === 'HH' ? 'bg-red-100 text-red-700'
-                                    : interp === 'L' || interp === 'LL' ? 'bg-blue-100 text-blue-700'
-                                    : interp === 'N' ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-600';
-                                  return (
-                                    <tr key={obs.id} className={`hover:bg-gray-50 ${interp === 'HH' || interp === 'LL' ? 'bg-red-50/30' : ''}`}>
-                                      <td className="py-2.5 pr-4 font-medium text-gray-800">{name}</td>
-                                      <td className="py-2.5 pr-4 font-mono font-semibold text-gray-700 tabular-nums">{val}</td>
-                                      <td className="py-2.5 pr-4">
-                                        {interpDisplay && (
-                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${interpCls}`}>{interpDisplay}</span>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
-                                    </tr>
-                                  );
-                                })}
+                                {[...labObservations, ...otherObs].map(
+                                  (obs) => {
+                                    const name =
+                                      obs.code?.text ||
+                                      obs.code?.coding?.[0]?.display ||
+                                      '—';
+                                    const val = obs.valueQuantity
+                                      ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`
+                                      : obs.valueString || '—';
+                                    const interp =
+                                      obs.interpretation?.[0]?.coding?.[0]
+                                        ?.code;
+                                    const interpDisplay =
+                                      obs.interpretation?.[0]?.coding?.[0]
+                                        ?.display || interp;
+                                    const interpCls =
+                                      interp === 'H' || interp === 'HH'
+                                        ? 'bg-red-100 text-red-700'
+                                        : interp === 'L' || interp === 'LL'
+                                          ? 'bg-blue-100 text-blue-700'
+                                          : interp === 'N'
+                                            ? 'bg-green-100 text-green-700'
+                                            : 'bg-gray-100 text-gray-600';
+                                    return (
+                                      <tr
+                                        key={obs.id}
+                                        className={`hover:bg-gray-50 ${interp === 'HH' || interp === 'LL' ? 'bg-red-50/30' : ''}`}
+                                      >
+                                        <td className="py-2.5 pr-4 font-medium text-gray-800">
+                                          {name}
+                                        </td>
+                                        <td className="py-2.5 pr-4 font-mono font-semibold text-gray-700 tabular-nums">
+                                          {val}
+                                        </td>
+                                        <td className="py-2.5 pr-4">
+                                          {interpDisplay && (
+                                            <span
+                                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${interpCls}`}
+                                            >
+                                              {interpDisplay}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                          {formatDT(obs.effectiveDateTime)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  },
+                                )}
                               </tbody>
                             </table>
                           </div>
@@ -1680,40 +2076,71 @@ const ConsultNoteDetailPage: React.FC = () => {
                   </Section>
 
                   {/* ── 4. Assessment / Diagnosis ── */}
-                  <Section sectionKey="assessment" icon="Dx" title="Assessment / Diagnosis" count={conditions.length} isEditable={isEditable} addLabel="Add Diagnosis" addForm={<AddDiagnosisForm {...formProps} />}>
+                  <Section
+                    sectionKey="assessment"
+                    icon="Dx"
+                    title="Assessment / Diagnosis"
+                    count={conditions.length}
+                    isEditable={isEditable}
+                    addLabel="Add Diagnosis"
+                    addForm={<AddDiagnosisForm {...formProps} />}
+                  >
                     {conditions.length === 0 ? (
                       <EmptyNote label="No diagnoses recorded for this encounter." />
                     ) : (
                       <div className="space-y-2">
                         {conditions.map((cond, i) => {
-                          const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                          const diagText =
+                            cond.code?.text ||
+                            cond.code?.coding?.[0]?.display ||
+                            '—';
                           const sevText = cond.severity?.coding?.[0]?.display;
-                          const verifCode = cond.verificationStatus?.coding?.[0]?.code || '';
-                          const clinCode = cond.clinicalStatus?.coding?.[0]?.code || '';
-                          const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500'
-                            : sevText === 'Moderate' ? 'border-l-4 border-amber-400'
-                            : 'border-l-4 border-gray-200';
+                          const verifCode =
+                            cond.verificationStatus?.coding?.[0]?.code || '';
+                          const clinCode =
+                            cond.clinicalStatus?.coding?.[0]?.code || '';
+                          const accCls =
+                            sevText === 'Severe'
+                              ? 'border-l-4 border-red-500'
+                              : sevText === 'Moderate'
+                                ? 'border-l-4 border-amber-400'
+                                : 'border-l-4 border-gray-200';
                           return (
-                            <div key={cond.id} className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}>
+                            <div
+                              key={cond.id}
+                              className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls}`}
+                            >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
-                                  <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
+                                  <span className="text-xs font-semibold text-gray-400 mr-2">
+                                    {i + 1}.
+                                  </span>
+                                  <span className="font-semibold text-gray-900 text-sm">
+                                    {diagText}
+                                  </span>
                                   {cond.code?.coding?.[0]?.code && (
-                                    <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
+                                    <span className="ml-2 text-xs font-mono text-gray-400">
+                                      [{cond.code.coding[0].code}]
+                                    </span>
                                   )}
                                 </div>
                                 <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
                                   {sevText && (
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}
+                                    >
                                       {sevText}
                                     </span>
                                   )}
-                                  {verifCode && <StatusPill status={verifCode} />}
+                                  {verifCode && (
+                                    <StatusPill status={verifCode} />
+                                  )}
                                   {clinCode && <StatusPill status={clinCode} />}
                                 </div>
                               </div>
-                              <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
+                              <div className="text-xs text-gray-400 mt-1 ml-4">
+                                Onset: {formatDate(cond.onsetDateTime)}
+                              </div>
                             </div>
                           );
                         })}
@@ -1732,11 +2159,15 @@ const ConsultNoteDetailPage: React.FC = () => {
                     addForm={
                       <div className="space-y-5">
                         <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Medication</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                            Medication
+                          </p>
                           <AddMedicationForm {...formProps} />
                         </div>
                         <div className="border-t border-blue-100 pt-4">
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Care Plan</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                            Care Plan
+                          </p>
                           <AddCarePlanForm {...formProps} />
                         </div>
                       </div>
@@ -1752,21 +2183,38 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Drug
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Dosage
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Status
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Ordered
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {medications.map((med) => (
                                   <tr key={med.id} className="hover:bg-gray-50">
                                     <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                      {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
+                                      {(med.medication as any)?.concept?.text ||
+                                        (med.medication as any)?.concept
+                                          ?.coding?.[0]?.display ||
+                                        '—'}
                                     </td>
-                                    <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
-                                    <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
-                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
+                                    <td className="py-2.5 pr-4 text-xs text-gray-600">
+                                      {med.dosageInstruction?.[0]?.text || '—'}
+                                    </td>
+                                    <td className="py-2.5 pr-4">
+                                      <StatusPill status={med.status} />
+                                    </td>
+                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                      {formatDT(med.authoredOn)}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1778,18 +2226,31 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <SectionDivider label="Care Plan" />
                             <div className="space-y-3">
                               {carePlans.map((cp) => (
-                                <div key={cp.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                                <div
+                                  key={cp.id}
+                                  className="bg-emerald-50 border border-emerald-200 rounded-lg p-4"
+                                >
                                   <div className="flex items-center justify-between mb-2">
-                                    <span className="font-semibold text-gray-900 text-sm">{cp.title || 'Care Plan'}</span>
+                                    <span className="font-semibold text-gray-900 text-sm">
+                                      {cp.title || 'Care Plan'}
+                                    </span>
                                     <div className="flex items-center gap-2">
                                       <StatusPill status={cp.status} />
-                                      <span className="text-xs text-gray-400">{formatDate(cp.created)}</span>
+                                      <span className="text-xs text-gray-400">
+                                        {formatDate(cp.created)}
+                                      </span>
                                     </div>
                                   </div>
-                                  {cp.description && <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{cp.description}</p>}
+                                  {cp.description && (
+                                    <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                                      {cp.description}
+                                    </p>
+                                  )}
                                   {cp.note?.[0]?.text && (
                                     <div className="mt-2 border-t border-emerald-100 pt-2">
-                                      <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{cp.note[0].text}</p>
+                                      <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+                                        {cp.note[0].text}
+                                      </p>
                                     </div>
                                   )}
                                 </div>
@@ -1800,7 +2261,6 @@ const ConsultNoteDetailPage: React.FC = () => {
                       </div>
                     )}
                   </Section>
-
                 </div>
               )}
 
@@ -1813,7 +2273,13 @@ const ConsultNoteDetailPage: React.FC = () => {
                   count={vitals.length}
                   isEditable={isEditable}
                   addLabel="Update Vitals"
-                  addForm={<UpdateVitalsForm {...formProps} existingVitals={vitals} updateResource={updateResource} />}
+                  addForm={
+                    <UpdateVitalsForm
+                      {...formProps}
+                      existingVitals={vitals}
+                      updateResource={updateResource}
+                    />
+                  }
                 >
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {vitals.length === 0 ? (
@@ -1822,43 +2288,81 @@ const ConsultNoteDetailPage: React.FC = () => {
                     <div className="space-y-4">
                       {[...vitals]
                         .sort((a, b) =>
-                          (b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1,
+                          (b.effectiveDateTime ?? '') >
+                          (a.effectiveDateTime ?? '')
+                            ? 1
+                            : -1,
                         )
                         .map((obs) => {
                           const components = obs.component?.length
                             ? obs.component
-                            : obs.code?.coding?.[0]?.code && obs.valueQuantity?.value != null
-                            ? [{ code: obs.code, valueQuantity: obs.valueQuantity }]
-                            : [];
+                            : obs.code?.coding?.[0]?.code &&
+                                obs.valueQuantity?.value != null
+                              ? [
+                                  {
+                                    code: obs.code,
+                                    valueQuantity: obs.valueQuantity,
+                                  },
+                                ]
+                              : [];
                           const filtered = filterText
                             ? components.filter((comp) => {
                                 const code = comp.code?.coding?.[0]?.code ?? '';
-                                const name = VITAL_LOINC_NAMES[code] || comp.code?.coding?.[0]?.display || code;
-                                return name.toLowerCase().includes(filterText.toLowerCase());
+                                const name =
+                                  VITAL_LOINC_NAMES[code] ||
+                                  comp.code?.coding?.[0]?.display ||
+                                  code;
+                                return name
+                                  .toLowerCase()
+                                  .includes(filterText.toLowerCase());
                               })
                             : components;
                           if (filtered.length === 0) return null;
                           return (
-                            <div key={obs.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                            <div
+                              key={obs.id}
+                              className="border border-gray-200 rounded-lg p-4 bg-white"
+                            >
                               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
                                 {formatDT(obs.effectiveDateTime)}
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 {filtered.map((comp) => {
-                                  const code = comp.code?.coding?.[0]?.code ?? '';
-                                  const name = VITAL_LOINC_NAMES[code] || comp.code?.coding?.[0]?.display || code;
+                                  const code =
+                                    comp.code?.coding?.[0]?.code ?? '';
+                                  const name =
+                                    VITAL_LOINC_NAMES[code] ||
+                                    comp.code?.coding?.[0]?.display ||
+                                    code;
                                   const val = comp.valueQuantity?.value;
                                   const unit = comp.valueQuantity?.unit ?? '';
                                   if (val == null) return null;
                                   const trend = interpretVital(code, val);
                                   return (
-                                    <div key={code} className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}>
-                                      <div className="text-xs text-gray-500 font-medium mb-1">{name}</div>
-                                      <div className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}>
+                                    <div
+                                      key={code}
+                                      className={`border rounded-lg p-3 ${vitalCardCls(trend)}`}
+                                    >
+                                      <div className="text-xs text-gray-500 font-medium mb-1">
+                                        {name}
+                                      </div>
+                                      <div
+                                        className={`text-xl font-bold tabular-nums ${vitalValCls(trend)}`}
+                                      >
                                         {val}
-                                        <span className="text-sm font-normal ml-1">{unit}</span>
-                                        {trend === 'critical' && <span className="ml-1 text-red-600 text-sm">!</span>}
-                                        {trend === 'abnormal' && <span className="ml-1 text-amber-600 text-xs">▲</span>}
+                                        <span className="text-sm font-normal ml-1">
+                                          {unit}
+                                        </span>
+                                        {trend === 'critical' && (
+                                          <span className="ml-1 text-red-600 text-sm">
+                                            !
+                                          </span>
+                                        )}
+                                        {trend === 'abnormal' && (
+                                          <span className="ml-1 text-amber-600 text-xs">
+                                            ▲
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   );
@@ -1886,8 +2390,14 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = examFindings.filter((obs) => {
-                      const text = obs.code?.text || obs.code?.coding?.[0]?.display || obs.valueString || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        obs.code?.text ||
+                        obs.code?.coding?.[0]?.display ||
+                        obs.valueString ||
+                        '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No examination findings recorded." />
@@ -1895,44 +2405,105 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">System</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Finding</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Time</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              System
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Finding
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Result
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Time
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {filtered.map((obs) => {
-                            const system = obs.code?.text || obs.code?.coding?.[0]?.display || '—';
+                            const system =
+                              obs.code?.text ||
+                              obs.code?.coding?.[0]?.display ||
+                              '—';
                             const finding = obs.valueString || '—';
-                            const isNormal = obs.interpretation?.[0]?.coding?.[0]?.code === 'N';
+                            const isNormal =
+                              obs.interpretation?.[0]?.coding?.[0]?.code ===
+                              'N';
                             const loincCode = obs.code?.coding?.[0]?.code;
-                            const interpCode = obs.interpretation?.[0]?.coding?.[0]?.code;
+                            const interpCode =
+                              obs.interpretation?.[0]?.coding?.[0]?.code;
                             return (
                               <React.Fragment key={obs.id}>
                                 <tr
                                   className="hover:bg-gray-50 cursor-pointer"
-                                  onClick={() => setExpandedId(expandedId === obs.id ? null : (obs.id ?? null))}
+                                  onClick={() =>
+                                    setExpandedId(
+                                      expandedId === obs.id
+                                        ? null
+                                        : (obs.id ?? null),
+                                    )
+                                  }
                                 >
-                                  <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">{system}</td>
-                                  <td className="py-2.5 pr-4 text-gray-800">{finding}</td>
+                                  <td className="py-2.5 pr-4 font-semibold text-gray-700 whitespace-nowrap w-36">
+                                    {system}
+                                  </td>
+                                  <td className="py-2.5 pr-4 text-gray-800">
+                                    {finding}
+                                  </td>
                                   <td className="py-2.5 pr-4 whitespace-nowrap">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isNormal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                                    >
                                       {isNormal ? '✓ Normal' : '! Abnormal'}
                                     </span>
                                   </td>
-                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
-                                  <td className="py-2.5 text-xs text-gray-400">{expandedId === obs.id ? '▲' : '▼'}</td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                    {formatDT(obs.effectiveDateTime)}
+                                  </td>
+                                  <td className="py-2.5 text-xs text-gray-400">
+                                    {expandedId === obs.id ? '▲' : '▼'}
+                                  </td>
                                 </tr>
                                 {expandedId === obs.id && (
                                   <tr>
-                                    <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <td
+                                      colSpan={5}
+                                      className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                    >
                                       <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                        {loincCode && <div><span className="text-gray-500 font-medium">LOINC:</span> <span className="font-mono">{loincCode}</span></div>}
-                                        {interpCode && <div><span className="text-gray-500 font-medium">Interpretation Code:</span> {interpCode}</div>}
-                                        <div><span className="text-gray-500 font-medium">Date/Time:</span> {formatDT(obs.effectiveDateTime)}</div>
-                                        {obs.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {obs.note[0].text}</div>}
+                                        {loincCode && (
+                                          <div>
+                                            <span className="text-gray-500 font-medium">
+                                              LOINC:
+                                            </span>{' '}
+                                            <span className="font-mono">
+                                              {loincCode}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {interpCode && (
+                                          <div>
+                                            <span className="text-gray-500 font-medium">
+                                              Interpretation Code:
+                                            </span>{' '}
+                                            {interpCode}
+                                          </div>
+                                        )}
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Date/Time:
+                                          </span>{' '}
+                                          {formatDT(obs.effectiveDateTime)}
+                                        </div>
+                                        {obs.note?.[0]?.text && (
+                                          <div className="col-span-2">
+                                            <span className="text-gray-500 font-medium">
+                                              Note:
+                                            </span>{' '}
+                                            {obs.note[0].text}
+                                          </div>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -1953,17 +2524,41 @@ const ConsultNoteDetailPage: React.FC = () => {
                   sectionKey="investigations"
                   icon="Ix"
                   title="Investigations"
-                  count={serviceRequests.length + labReports.length + radReports.length}
+                  count={
+                    serviceRequests.length +
+                    labReports.length +
+                    radReports.length
+                  }
                   isEditable={false}
                   addLabel=""
                   addForm={null}
                 >
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: 'Lab Orders', count: labOrders.length, section: 'lab-orders', color: 'bg-blue-50 border-blue-200 text-blue-700' },
-                      { label: 'Rad Orders', count: radOrders.length, section: 'rad-orders', color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
-                      { label: 'Lab Results', count: labReports.length, section: 'lab-results', color: 'bg-green-50 border-green-200 text-green-700' },
-                      { label: 'Rad Reports', count: radReports.length, section: 'rad-reports', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+                      {
+                        label: 'Lab Orders',
+                        count: labOrders.length,
+                        section: 'lab-orders',
+                        color: 'bg-blue-50 border-blue-200 text-blue-700',
+                      },
+                      {
+                        label: 'Rad Orders',
+                        count: radOrders.length,
+                        section: 'rad-orders',
+                        color: 'bg-indigo-50 border-indigo-200 text-indigo-700',
+                      },
+                      {
+                        label: 'Lab Results',
+                        count: labReports.length,
+                        section: 'lab-results',
+                        color: 'bg-green-50 border-green-200 text-green-700',
+                      },
+                      {
+                        label: 'Rad Reports',
+                        count: radReports.length,
+                        section: 'rad-reports',
+                        color: 'bg-purple-50 border-purple-200 text-purple-700',
+                      },
                     ].map(({ label, count, section, color }) => (
                       <button
                         key={label}
@@ -1971,7 +2566,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                         className={`border rounded-lg p-3 text-left hover:opacity-80 transition-opacity ${color}`}
                       >
                         <div className="text-2xl font-bold">{count}</div>
-                        <div className="text-xs font-medium mt-0.5">{label}</div>
+                        <div className="text-xs font-medium mt-0.5">
+                          {label}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -1993,7 +2590,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                   {(() => {
                     const filtered = labOrders.filter((sr) => {
                       const text = (sr.code as any)?.concept?.text || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No lab orders placed for this encounter." />
@@ -2001,10 +2600,18 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Test
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Category
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Priority
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Ordered
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
@@ -2013,28 +2620,92 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <React.Fragment key={sr.id}>
                               <tr
                                 className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setExpandedId(expandedId === sr.id ? null : (sr.id ?? null))}
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === sr.id
+                                      ? null
+                                      : (sr.id ?? null),
+                                  )
+                                }
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
                                   {(sr.code as any)?.concept?.text || '—'}
-                                  {(() => { const c = codeBadge((sr.code as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                  {(() => {
+                                    const c = codeBadge(
+                                      (sr.code as any)?.concept?.coding,
+                                    );
+                                    return c ? (
+                                      <span className="ml-2 text-xs font-mono text-gray-400">
+                                        [{c}]
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </td>
-                                <td className="py-2.5 pr-4 text-xs text-gray-500">{sr.category?.[0]?.coding?.[0]?.display || '—'}</td>
-                                <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === sr.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-500">
+                                  {sr.category?.[0]?.coding?.[0]?.display ||
+                                    '—'}
+                                </td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill
+                                    status={sr.priority || 'routine'}
+                                  />
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT(sr.authoredOn)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === sr.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === sr.id && (
                                 <tr>
-                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={5}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                      {(sr.code as any)?.concept?.coding?.[0]?.code && (
-                                        <div><span className="text-gray-500 font-medium">Order Code:</span> <span className="font-mono">{codeBadge((sr.code as any)?.concept?.coding) || (sr.code as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      {(sr.code as any)?.concept?.coding?.[0]
+                                        ?.code && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Order Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {codeBadge(
+                                              (sr.code as any)?.concept?.coding,
+                                            ) ||
+                                              (sr.code as any)?.concept
+                                                ?.coding?.[0]?.code}
+                                          </span>
+                                        </div>
                                       )}
-                                      <div><span className="text-gray-500 font-medium">Category:</span> {sr.category?.[0]?.coding?.[0]?.display || '—'}</div>
-                                      <div><span className="text-gray-500 font-medium">Authored On:</span> {formatDT(sr.authoredOn)}</div>
-                                      <div><span className="text-gray-500 font-medium">Priority:</span> {sr.priority || 'routine'}</div>
-                                      {sr.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Notes:</span> {sr.note[0].text}</div>}
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Category:
+                                        </span>{' '}
+                                        {sr.category?.[0]?.coding?.[0]
+                                          ?.display || '—'}
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Authored On:
+                                        </span>{' '}
+                                        {formatDT(sr.authoredOn)}
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Priority:
+                                        </span>{' '}
+                                        {sr.priority || 'routine'}
+                                      </div>
+                                      {sr.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Notes:
+                                          </span>{' '}
+                                          {sr.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2063,7 +2734,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                   {(() => {
                     const filtered = radOrders.filter((sr) => {
                       const text = (sr.code as any)?.concept?.text || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No radiology orders placed for this encounter." />
@@ -2071,9 +2744,15 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Priority</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Study
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Priority
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Ordered
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
@@ -2082,26 +2761,82 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <React.Fragment key={sr.id}>
                               <tr
                                 className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setExpandedId(expandedId === sr.id ? null : (sr.id ?? null))}
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === sr.id
+                                      ? null
+                                      : (sr.id ?? null),
+                                  )
+                                }
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
                                   {(sr.code as any)?.concept?.text || '—'}
-                                  {(() => { const c = codeBadge((sr.code as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                  {(() => {
+                                    const c = codeBadge(
+                                      (sr.code as any)?.concept?.coding,
+                                    );
+                                    return c ? (
+                                      <span className="ml-2 text-xs font-mono text-gray-400">
+                                        [{c}]
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </td>
-                                <td className="py-2.5 pr-4"><StatusPill status={sr.priority || 'routine'} /></td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(sr.authoredOn)}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === sr.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill
+                                    status={sr.priority || 'routine'}
+                                  />
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT(sr.authoredOn)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === sr.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === sr.id && (
                                 <tr>
-                                  <td colSpan={4} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={4}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                      {(sr.code as any)?.concept?.coding?.[0]?.code && (
-                                        <div><span className="text-gray-500 font-medium">Order Code:</span> <span className="font-mono">{codeBadge((sr.code as any)?.concept?.coding) || (sr.code as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      {(sr.code as any)?.concept?.coding?.[0]
+                                        ?.code && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Order Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {codeBadge(
+                                              (sr.code as any)?.concept?.coding,
+                                            ) ||
+                                              (sr.code as any)?.concept
+                                                ?.coding?.[0]?.code}
+                                          </span>
+                                        </div>
                                       )}
-                                      <div><span className="text-gray-500 font-medium">Category:</span> {sr.category?.[0]?.coding?.[0]?.display || '—'}</div>
-                                      <div><span className="text-gray-500 font-medium">Authored On:</span> {formatDT(sr.authoredOn)}</div>
-                                      {sr.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Notes:</span> {sr.note[0].text}</div>}
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Category:
+                                        </span>{' '}
+                                        {sr.category?.[0]?.coding?.[0]
+                                          ?.display || '—'}
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Authored On:
+                                        </span>{' '}
+                                        {formatDT(sr.authoredOn)}
+                                      </div>
+                                      {sr.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Notes:
+                                          </span>{' '}
+                                          {sr.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2117,128 +2852,283 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Lab Results ── */}
               {activeSection === 'lab-results' && (
-                <Section sectionKey="investigations" icon="🧪" title="Lab Results" count={labReports.length + labObservations.length} isEditable={false} addLabel="" addForm={null}>
+                <Section
+                  sectionKey="investigations"
+                  icon="🧪"
+                  title="Lab Results"
+                  count={labReports.length + labObservations.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {labReports.length === 0 && labObservations.length === 0 ? (
                     <EmptyNote label="No lab results available for this encounter." />
                   ) : (
                     <>
                       {/* DiagnosticReport rows */}
-                      {labReports.length > 0 && (() => {
-                        const filtered = labReports.filter((dr) => {
-                          const text = dr.code?.text || dr.code?.coding?.[0]?.display || '';
-                          return text.toLowerCase().includes(filterText.toLowerCase());
-                        });
-                        return filtered.length > 0 ? (
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
-                                <th className="pb-2" />
-                                <th className="pb-2" />
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                              {filtered.map((dr) => {
-                                const code = codeBadge(dr.code?.coding);
-                                const category = dr.category?.[0]?.coding?.[0]?.display || dr.category?.[0]?.text || '—';
-                                const conclusionCodes = dr.conclusionCode?.map((cc) => cc.coding?.[0]?.display).filter(Boolean).join(', ');
-                                return (
-                                  <React.Fragment key={dr.id}>
-                                    <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}>
-                                      <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                        {dr.code?.text || dr.code?.coding?.[0]?.display || 'Lab Report'}
-                                        {code && <span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>}
-                                      </td>
-                                      <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
-                                      <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
-                                      <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
-                                      <td className="py-2.5 pr-2">
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setSelectedLabReport(dr); }}
-                                          className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
-                                        >
-                                          View Report
-                                        </button>
-                                      </td>
-                                      <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
-                                    </tr>
-                                    {expandedId === dr.id && (
-                                      <tr>
-                                        <td colSpan={6} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
-                                          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                            {dr.code?.coding?.map((c, i) => (
-                                              <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
-                                            ))}
-                                            {(dr.effectiveDateTime || (dr as any).effectivePeriod?.start) && (
-                                              <div><span className="text-gray-500 font-medium">Effective:</span> {formatDT(dr.effectiveDateTime || (dr as any).effectivePeriod?.start)}</div>
-                                            )}
-                                            {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
-                                            {conclusionCodes && <div className="col-span-2"><span className="text-gray-500 font-medium">Finding Codes:</span> {conclusionCodes}</div>}
-                                            {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
-                                            {dr.basedOn?.[0]?.reference && <div><span className="text-gray-500 font-medium">Based On:</span> <span className="font-mono text-xs">{dr.basedOn[0].reference}</span></div>}
-                                          </div>
+                      {labReports.length > 0 &&
+                        (() => {
+                          const filtered = labReports.filter((dr) => {
+                            const text =
+                              dr.code?.text ||
+                              dr.code?.coding?.[0]?.display ||
+                              '';
+                            return text
+                              .toLowerCase()
+                              .includes(filterText.toLowerCase());
+                          });
+                          return filtered.length > 0 ? (
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Test
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Category
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Status
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Issued
+                                  </th>
+                                  <th className="pb-2" />
+                                  <th className="pb-2" />
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {filtered.map((dr) => {
+                                  const code = codeBadge(dr.code?.coding);
+                                  const category =
+                                    dr.category?.[0]?.coding?.[0]?.display ||
+                                    dr.category?.[0]?.text ||
+                                    '—';
+                                  const conclusionCodes = dr.conclusionCode
+                                    ?.map((cc) => cc.coding?.[0]?.display)
+                                    .filter(Boolean)
+                                    .join(', ');
+                                  return (
+                                    <React.Fragment key={dr.id}>
+                                      <tr
+                                        className="hover:bg-gray-50 cursor-pointer"
+                                        onClick={() =>
+                                          setExpandedId(
+                                            expandedId === dr.id
+                                              ? null
+                                              : (dr.id ?? null),
+                                          )
+                                        }
+                                      >
+                                        <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                          {dr.code?.text ||
+                                            dr.code?.coding?.[0]?.display ||
+                                            'Lab Report'}
+                                          {code && (
+                                            <span className="ml-2 text-xs font-mono text-gray-400">
+                                              [{code}]
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 pr-4 text-xs text-gray-500">
+                                          {category}
+                                        </td>
+                                        <td className="py-2.5 pr-4">
+                                          <StatusPill status={dr.status} />
+                                        </td>
+                                        <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                          {formatDT(dr.issued)}
+                                        </td>
+                                        <td className="py-2.5 pr-2">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedLabReport(dr);
+                                            }}
+                                            className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+                                          >
+                                            View Report
+                                          </button>
+                                        </td>
+                                        <td className="py-2.5 text-xs text-gray-400">
+                                          {expandedId === dr.id ? '▲' : '▼'}
                                         </td>
                                       </tr>
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        ) : null;
-                      })()}
+                                      {expandedId === dr.id && (
+                                        <tr>
+                                          <td
+                                            colSpan={6}
+                                            className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                          >
+                                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                              {dr.code?.coding?.map((c, i) => (
+                                                <div key={i}>
+                                                  <span className="text-gray-500 font-medium">
+                                                    Code {i + 1}:
+                                                  </span>{' '}
+                                                  <span className="font-mono">
+                                                    {codeBadge([c]) || c.code}
+                                                  </span>{' '}
+                                                  {c.display &&
+                                                    `— ${c.display}`}
+                                                </div>
+                                              ))}
+                                              {(dr.effectiveDateTime ||
+                                                (dr as any).effectivePeriod
+                                                  ?.start) && (
+                                                <div>
+                                                  <span className="text-gray-500 font-medium">
+                                                    Effective:
+                                                  </span>{' '}
+                                                  {formatDT(
+                                                    dr.effectiveDateTime ||
+                                                      (dr as any)
+                                                        .effectivePeriod?.start,
+                                                  )}
+                                                </div>
+                                              )}
+                                              {dr.performer?.[0]?.display && (
+                                                <div>
+                                                  <span className="text-gray-500 font-medium">
+                                                    Performer:
+                                                  </span>{' '}
+                                                  {dr.performer[0].display}
+                                                </div>
+                                              )}
+                                              {conclusionCodes && (
+                                                <div className="col-span-2">
+                                                  <span className="text-gray-500 font-medium">
+                                                    Finding Codes:
+                                                  </span>{' '}
+                                                  {conclusionCodes}
+                                                </div>
+                                              )}
+                                              {dr.conclusion && (
+                                                <div className="col-span-2">
+                                                  <span className="text-gray-500 font-medium">
+                                                    Conclusion:
+                                                  </span>{' '}
+                                                  {dr.conclusion}
+                                                </div>
+                                              )}
+                                              {dr.basedOn?.[0]?.reference && (
+                                                <div>
+                                                  <span className="text-gray-500 font-medium">
+                                                    Based On:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {dr.basedOn[0].reference}
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          ) : null;
+                        })()}
                       {/* Standalone Observation rows (category=laboratory) */}
-                      {labObservations.length > 0 && (() => {
-                        const filtered = labObservations.filter((obs) => {
-                          const text = obs.code?.text || obs.code?.coding?.[0]?.display || '';
-                          return text.toLowerCase().includes(filterText.toLowerCase());
-                        });
-                        return filtered.length > 0 ? (
-                          <table className="w-full text-sm mt-2">
-                            <thead>
-                              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Test</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Result</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Interpretation</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                                <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                              {filtered.map((obs) => {
-                                const testName = obs.code?.text || obs.code?.coding?.[0]?.display || 'Lab Test';
-                                const lcode = codeBadge(obs.code?.coding);
-                                const vq = obs.valueQuantity;
-                                const resultStr = vq ? `${vq.value} ${vq.unit ?? ''}`.trim() : (obs.valueString ?? '—');
-                                const interpCode = obs.interpretation?.[0]?.coding?.[0]?.code ?? '';
-                                const isHigh = interpCode === 'H' || interpCode === 'HH';
-                                const isLow = interpCode === 'L' || interpCode === 'LL';
-                                const interpLabel = isHigh ? '↑' : isLow ? '↓' : interpCode && interpCode !== 'N' && interpCode !== 'normal' ? '!' : '—';
-                                return (
-                                  <tr key={obs.id} className="hover:bg-gray-50">
-                                    <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                      {testName}
-                                      {lcode && <span className="ml-2 text-xs font-mono text-gray-400">[{lcode}]</span>}
-                                    </td>
-                                    <td className={`py-2.5 pr-4 font-medium ${isHigh || isLow ? 'text-red-600' : 'text-gray-800'}`}>
-                                      {resultStr}
-                                    </td>
-                                    <td className={`py-2.5 pr-4 font-bold ${isHigh || isLow ? 'text-red-600' : 'text-gray-400'}`}>
-                                      {interpLabel}
-                                    </td>
-                                    <td className="py-2.5 pr-4"><StatusPill status={obs.status} /></td>
-                                    <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(obs.effectiveDateTime)}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        ) : null;
-                      })()}
+                      {labObservations.length > 0 &&
+                        (() => {
+                          const filtered = labObservations.filter((obs) => {
+                            const text =
+                              obs.code?.text ||
+                              obs.code?.coding?.[0]?.display ||
+                              '';
+                            return text
+                              .toLowerCase()
+                              .includes(filterText.toLowerCase());
+                          });
+                          return filtered.length > 0 ? (
+                            <table className="w-full text-sm mt-2">
+                              <thead>
+                                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Test
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Result
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Interpretation
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Status
+                                  </th>
+                                  <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                                    Date
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {filtered.map((obs) => {
+                                  const testName =
+                                    obs.code?.text ||
+                                    obs.code?.coding?.[0]?.display ||
+                                    'Lab Test';
+                                  const lcode = codeBadge(obs.code?.coding);
+                                  const vq = obs.valueQuantity;
+                                  const resultStr = vq
+                                    ? `${vq.value} ${vq.unit ?? ''}`.trim()
+                                    : (obs.valueString ?? '—');
+                                  const interpCode =
+                                    obs.interpretation?.[0]?.coding?.[0]
+                                      ?.code ?? '';
+                                  const isHigh =
+                                    interpCode === 'H' || interpCode === 'HH';
+                                  const isLow =
+                                    interpCode === 'L' || interpCode === 'LL';
+                                  const interpLabel = isHigh
+                                    ? '↑'
+                                    : isLow
+                                      ? '↓'
+                                      : interpCode &&
+                                          interpCode !== 'N' &&
+                                          interpCode !== 'normal'
+                                        ? '!'
+                                        : '—';
+                                  return (
+                                    <tr
+                                      key={obs.id}
+                                      className="hover:bg-gray-50"
+                                    >
+                                      <td className="py-2.5 pr-4 font-semibold text-gray-800">
+                                        {testName}
+                                        {lcode && (
+                                          <span className="ml-2 text-xs font-mono text-gray-400">
+                                            [{lcode}]
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td
+                                        className={`py-2.5 pr-4 font-medium ${isHigh || isLow ? 'text-red-600' : 'text-gray-800'}`}
+                                      >
+                                        {resultStr}
+                                      </td>
+                                      <td
+                                        className={`py-2.5 pr-4 font-bold ${isHigh || isLow ? 'text-red-600' : 'text-gray-400'}`}
+                                      >
+                                        {interpLabel}
+                                      </td>
+                                      <td className="py-2.5 pr-4">
+                                        <StatusPill status={obs.status} />
+                                      </td>
+                                      <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                        {formatDT(obs.effectiveDateTime)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          ) : null;
+                        })()}
                     </>
                   )}
                 </Section>
@@ -2246,12 +3136,23 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Rad Reports ── */}
               {activeSection === 'rad-reports' && (
-                <Section sectionKey="investigations" icon="📡" title="Radiology Reports" count={radReports.length} isEditable={false} addLabel="" addForm={null}>
+                <Section
+                  sectionKey="investigations"
+                  icon="📡"
+                  title="Radiology Reports"
+                  count={radReports.length}
+                  isEditable={false}
+                  addLabel=""
+                  addForm={null}
+                >
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = radReports.filter((dr) => {
-                      const text = dr.code?.text || dr.code?.coding?.[0]?.display || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        dr.code?.text || dr.code?.coding?.[0]?.display || '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No radiology reports available for this encounter." />
@@ -2259,44 +3160,133 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Study</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Category</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Issued</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Study
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Category
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Issued
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {filtered.map((dr) => {
                             const code = codeBadge(dr.code?.coding);
-                            const category = dr.category?.[0]?.coding?.[0]?.display || dr.category?.[0]?.text || '—';
-                            const conclusionCodes = dr.conclusionCode?.map((cc) => cc.coding?.[0]?.display).filter(Boolean).join(', ');
+                            const category =
+                              dr.category?.[0]?.coding?.[0]?.display ||
+                              dr.category?.[0]?.text ||
+                              '—';
+                            const conclusionCodes = dr.conclusionCode
+                              ?.map((cc) => cc.coding?.[0]?.display)
+                              .filter(Boolean)
+                              .join(', ');
                             return (
                               <React.Fragment key={dr.id}>
-                                <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === dr.id ? null : (dr.id ?? null))}>
+                                <tr
+                                  className="hover:bg-gray-50 cursor-pointer"
+                                  onClick={() =>
+                                    setExpandedId(
+                                      expandedId === dr.id
+                                        ? null
+                                        : (dr.id ?? null),
+                                    )
+                                  }
+                                >
                                   <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                    {dr.code?.text || dr.code?.coding?.[0]?.display || 'Radiology Report'}
-                                    {code && <span className="ml-2 text-xs font-mono text-gray-400">[{code}]</span>}
+                                    {dr.code?.text ||
+                                      dr.code?.coding?.[0]?.display ||
+                                      'Radiology Report'}
+                                    {code && (
+                                      <span className="ml-2 text-xs font-mono text-gray-400">
+                                        [{code}]
+                                      </span>
+                                    )}
                                   </td>
-                                  <td className="py-2.5 pr-4 text-xs text-gray-500">{category}</td>
-                                  <td className="py-2.5 pr-4"><StatusPill status={dr.status} /></td>
-                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(dr.issued)}</td>
-                                  <td className="py-2.5 text-xs text-gray-400">{expandedId === dr.id ? '▲' : '▼'}</td>
+                                  <td className="py-2.5 pr-4 text-xs text-gray-500">
+                                    {category}
+                                  </td>
+                                  <td className="py-2.5 pr-4">
+                                    <StatusPill status={dr.status} />
+                                  </td>
+                                  <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                    {formatDT(dr.issued)}
+                                  </td>
+                                  <td className="py-2.5 text-xs text-gray-400">
+                                    {expandedId === dr.id ? '▲' : '▼'}
+                                  </td>
                                 </tr>
                                 {expandedId === dr.id && (
                                   <tr>
-                                    <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                    <td
+                                      colSpan={5}
+                                      className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                    >
                                       <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                                         {dr.code?.coding?.map((c, i) => (
-                                          <div key={i}><span className="text-gray-500 font-medium">Code {i + 1}:</span> <span className="font-mono">{codeBadge([c]) || c.code}</span> {c.display && `— ${c.display}`}</div>
+                                          <div key={i}>
+                                            <span className="text-gray-500 font-medium">
+                                              Code {i + 1}:
+                                            </span>{' '}
+                                            <span className="font-mono">
+                                              {codeBadge([c]) || c.code}
+                                            </span>{' '}
+                                            {c.display && `— ${c.display}`}
+                                          </div>
                                         ))}
-                                        {(dr.effectiveDateTime || (dr as any).effectivePeriod?.start) && (
-                                          <div><span className="text-gray-500 font-medium">Effective:</span> {formatDT(dr.effectiveDateTime || (dr as any).effectivePeriod?.start)}</div>
+                                        {(dr.effectiveDateTime ||
+                                          (dr as any).effectivePeriod
+                                            ?.start) && (
+                                          <div>
+                                            <span className="text-gray-500 font-medium">
+                                              Effective:
+                                            </span>{' '}
+                                            {formatDT(
+                                              dr.effectiveDateTime ||
+                                                (dr as any).effectivePeriod
+                                                  ?.start,
+                                            )}
+                                          </div>
                                         )}
-                                        {dr.performer?.[0]?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {dr.performer[0].display}</div>}
-                                        {conclusionCodes && <div className="col-span-2"><span className="text-gray-500 font-medium">Finding Codes:</span> {conclusionCodes}</div>}
-                                        {dr.conclusion && <div className="col-span-2"><span className="text-gray-500 font-medium">Conclusion:</span> {dr.conclusion}</div>}
-                                        {dr.basedOn?.[0]?.reference && <div><span className="text-gray-500 font-medium">Based On:</span> <span className="font-mono text-xs">{dr.basedOn[0].reference}</span></div>}
+                                        {dr.performer?.[0]?.display && (
+                                          <div>
+                                            <span className="text-gray-500 font-medium">
+                                              Performer:
+                                            </span>{' '}
+                                            {dr.performer[0].display}
+                                          </div>
+                                        )}
+                                        {conclusionCodes && (
+                                          <div className="col-span-2">
+                                            <span className="text-gray-500 font-medium">
+                                              Finding Codes:
+                                            </span>{' '}
+                                            {conclusionCodes}
+                                          </div>
+                                        )}
+                                        {dr.conclusion && (
+                                          <div className="col-span-2">
+                                            <span className="text-gray-500 font-medium">
+                                              Conclusion:
+                                            </span>{' '}
+                                            {dr.conclusion}
+                                          </div>
+                                        )}
+                                        {dr.basedOn?.[0]?.reference && (
+                                          <div>
+                                            <span className="text-gray-500 font-medium">
+                                              Based On:
+                                            </span>{' '}
+                                            <span className="font-mono text-xs">
+                                              {dr.basedOn[0].reference}
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -2325,53 +3315,130 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = conditions.filter((cond) => {
-                      const text = cond.code?.text || cond.code?.coding?.[0]?.display || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        cond.code?.text ||
+                        cond.code?.coding?.[0]?.display ||
+                        '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No diagnoses recorded." />
                     ) : (
                       <div className="space-y-2">
                         {filtered.map((cond, i) => {
-                          const diagText = cond.code?.text || cond.code?.coding?.[0]?.display || '—';
+                          const diagText =
+                            cond.code?.text ||
+                            cond.code?.coding?.[0]?.display ||
+                            '—';
                           const sevCode = cond.severity?.coding?.[0]?.code;
-                          const sevText = sevCode === '24484000' ? 'Severe' : sevCode === '6736007' ? 'Moderate' : sevCode === '255604002' ? 'Mild' : undefined;
-                          const verifCode = cond.verificationStatus?.coding?.[0]?.code;
-                          const clinCode = cond.clinicalStatus?.coding?.[0]?.code;
-                          const accCls = sevText === 'Severe' ? 'border-l-4 border-red-500' : sevText === 'Moderate' ? 'border-l-4 border-amber-400' : 'border-l-4 border-gray-200';
+                          const sevText =
+                            sevCode === '24484000'
+                              ? 'Severe'
+                              : sevCode === '6736007'
+                                ? 'Moderate'
+                                : sevCode === '255604002'
+                                  ? 'Mild'
+                                  : undefined;
+                          const verifCode =
+                            cond.verificationStatus?.coding?.[0]?.code;
+                          const clinCode =
+                            cond.clinicalStatus?.coding?.[0]?.code;
+                          const accCls =
+                            sevText === 'Severe'
+                              ? 'border-l-4 border-red-500'
+                              : sevText === 'Moderate'
+                                ? 'border-l-4 border-amber-400'
+                                : 'border-l-4 border-gray-200';
                           return (
                             <div
                               key={cond.id}
                               className={`bg-gray-50 rounded-lg px-4 py-3 ${accCls} cursor-pointer hover:bg-gray-100 transition-colors`}
-                              onClick={() => setExpandedId(expandedId === cond.id ? null : (cond.id ?? null))}
+                              onClick={() =>
+                                setExpandedId(
+                                  expandedId === cond.id
+                                    ? null
+                                    : (cond.id ?? null),
+                                )
+                              }
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <span className="text-xs font-semibold text-gray-400 mr-2">{i + 1}.</span>
-                                  <span className="font-semibold text-gray-900 text-sm">{diagText}</span>
+                                  <span className="text-xs font-semibold text-gray-400 mr-2">
+                                    {i + 1}.
+                                  </span>
+                                  <span className="font-semibold text-gray-900 text-sm">
+                                    {diagText}
+                                  </span>
                                   {cond.code?.coding?.[0]?.code && (
-                                    <span className="ml-2 text-xs font-mono text-gray-400">[{cond.code.coding[0].code}]</span>
+                                    <span className="ml-2 text-xs font-mono text-gray-400">
+                                      [{cond.code.coding[0].code}]
+                                    </span>
                                   )}
                                 </div>
                                 <div className="flex gap-1.5 flex-shrink-0 flex-wrap items-center justify-end">
                                   {sevText && (
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sevText === 'Severe' ? 'bg-red-100 text-red-700' : sevText === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}
+                                    >
                                       {sevText}
                                     </span>
                                   )}
-                                  {verifCode && <StatusPill status={verifCode} />}
+                                  {verifCode && (
+                                    <StatusPill status={verifCode} />
+                                  )}
                                   {clinCode && <StatusPill status={clinCode} />}
-                                  <span className="text-xs text-gray-400 ml-1">{expandedId === cond.id ? '▲' : '▼'}</span>
+                                  <span className="text-xs text-gray-400 ml-1">
+                                    {expandedId === cond.id ? '▲' : '▼'}
+                                  </span>
                                 </div>
                               </div>
-                              <div className="text-xs text-gray-400 mt-1 ml-4">Onset: {formatDate(cond.onsetDateTime)}</div>
+                              <div className="text-xs text-gray-400 mt-1 ml-4">
+                                Onset: {formatDate(cond.onsetDateTime)}
+                              </div>
                               {expandedId === cond.id && (
                                 <div className="mt-3 pt-3 border-t border-blue-100 bg-blue-50 -mx-4 -mb-3 px-4 pb-3 rounded-b-lg">
                                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                    {cond.code?.coding?.[0]?.code && <div><span className="text-gray-500 font-medium">Code:</span> <span className="font-mono">{cond.code.coding[0].system?.includes('snomed') ? 'SNOMED ' : ''}{cond.code.coding[0].code}</span></div>}
-                                    {cond.onsetDateTime && <div><span className="text-gray-500 font-medium">Onset:</span> {formatDate(cond.onsetDateTime)}</div>}
-                                    {(cond as any).recorder?.display && <div><span className="text-gray-500 font-medium">Recorder:</span> {(cond as any).recorder.display}</div>}
-                                    {cond.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {cond.note[0].text}</div>}
+                                    {cond.code?.coding?.[0]?.code && (
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Code:
+                                        </span>{' '}
+                                        <span className="font-mono">
+                                          {cond.code.coding[0].system?.includes(
+                                            'snomed',
+                                          )
+                                            ? 'SNOMED '
+                                            : ''}
+                                          {cond.code.coding[0].code}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {cond.onsetDateTime && (
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Onset:
+                                        </span>{' '}
+                                        {formatDate(cond.onsetDateTime)}
+                                      </div>
+                                    )}
+                                    {(cond as any).recorder?.display && (
+                                      <div>
+                                        <span className="text-gray-500 font-medium">
+                                          Recorder:
+                                        </span>{' '}
+                                        {(cond as any).recorder.display}
+                                      </div>
+                                    )}
+                                    {cond.note?.[0]?.text && (
+                                      <div className="col-span-2">
+                                        <span className="text-gray-500 font-medium">
+                                          Note:
+                                        </span>{' '}
+                                        {cond.note[0].text}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -2390,16 +3457,35 @@ const ConsultNoteDetailPage: React.FC = () => {
                   sectionKey="medications"
                   icon="Rx"
                   title="Medications"
-                  count={medications.length + medicationDispenses.length + medicationStatements.length}
+                  count={
+                    medications.length +
+                    medicationDispenses.length +
+                    medicationStatements.length
+                  }
                   isEditable={false}
                   addLabel=""
                   addForm={null}
                 >
                   <div className="grid grid-cols-3 gap-3">
                     {[
-                      { label: 'Medication Requests', count: medications.length, section: 'medication-request', color: 'bg-purple-50 border-purple-200 text-purple-700' },
-                      { label: 'Medication Dispenses', count: medicationDispenses.length, section: 'medication-dispense', color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
-                      { label: 'Medication Statements', count: medicationStatements.length, section: 'medication-statement', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+                      {
+                        label: 'Medication Requests',
+                        count: medications.length,
+                        section: 'medication-request',
+                        color: 'bg-purple-50 border-purple-200 text-purple-700',
+                      },
+                      {
+                        label: 'Medication Dispenses',
+                        count: medicationDispenses.length,
+                        section: 'medication-dispense',
+                        color: 'bg-indigo-50 border-indigo-200 text-indigo-700',
+                      },
+                      {
+                        label: 'Medication Statements',
+                        count: medicationStatements.length,
+                        section: 'medication-statement',
+                        color: 'bg-blue-50 border-blue-200 text-blue-700',
+                      },
                     ].map(({ label, count, section, color }) => (
                       <button
                         key={label}
@@ -2407,7 +3493,9 @@ const ConsultNoteDetailPage: React.FC = () => {
                         className={`border rounded-lg p-3 text-left hover:opacity-80 transition-opacity ${color}`}
                       >
                         <div className="text-2xl font-bold">{count}</div>
-                        <div className="text-xs font-medium mt-0.5">{label}</div>
+                        <div className="text-xs font-medium mt-0.5">
+                          {label}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -2428,8 +3516,14 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = medications.filter((med) => {
-                      const text = (med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        (med.medication as any)?.concept?.text ||
+                        (med.medication as any)?.concept?.coding?.[0]
+                          ?.display ||
+                        '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No medication requests recorded." />
@@ -2437,10 +3531,18 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Ordered</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Drug
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Dosage
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Ordered
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
@@ -2449,33 +3551,110 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <React.Fragment key={med.id}>
                               <tr
                                 className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setExpandedId(expandedId === med.id ? null : (med.id ?? null))}
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === med.id
+                                      ? null
+                                      : (med.id ?? null),
+                                  )
+                                }
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                  {(med.medication as any)?.concept?.text || (med.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                                  {(() => { const c = codeBadge((med.medication as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                  {(med.medication as any)?.concept?.text ||
+                                    (med.medication as any)?.concept
+                                      ?.coding?.[0]?.display ||
+                                    '—'}
+                                  {(() => {
+                                    const c = codeBadge(
+                                      (med.medication as any)?.concept?.coding,
+                                    );
+                                    return c ? (
+                                      <span className="ml-2 text-xs font-mono text-gray-400">
+                                        [{c}]
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </td>
-                                <td className="py-2.5 pr-4 text-xs text-gray-600">{med.dosageInstruction?.[0]?.text || '—'}</td>
-                                <td className="py-2.5 pr-4"><StatusPill status={med.status} /></td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(med.authoredOn)}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === med.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-600">
+                                  {med.dosageInstruction?.[0]?.text || '—'}
+                                </td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill status={med.status} />
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT(med.authoredOn)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === med.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === med.id && (
                                 <tr>
-                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={5}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                      {(med.medication as any)?.concept?.coding?.[0]?.code && (
-                                        <div><span className="text-gray-500 font-medium">Med Code:</span> <span className="font-mono">{codeBadge((med.medication as any)?.concept?.coding) || (med.medication as any)?.concept?.coding?.[0]?.code}</span></div>
-                                      )}
-                                      {med.dosageInstruction?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Full Dosage:</span> {med.dosageInstruction[0].text}</div>}
-                                      {med.dosageInstruction?.[0]?.route?.coding?.[0]?.display && <div><span className="text-gray-500 font-medium">Route:</span> {med.dosageInstruction[0].route.coding[0].display}</div>}
-                                      {med.dosageInstruction?.[0]?.doseAndRate?.[0]?.doseQuantity && (
+                                      {(med.medication as any)?.concept
+                                        ?.coding?.[0]?.code && (
                                         <div>
-                                          <span className="text-gray-500 font-medium">Dose:</span>{' '}
-                                          {med.dosageInstruction[0].doseAndRate[0].doseQuantity.value} {med.dosageInstruction[0].doseAndRate[0].doseQuantity.unit}
+                                          <span className="text-gray-500 font-medium">
+                                            Med Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {codeBadge(
+                                              (med.medication as any)?.concept
+                                                ?.coding,
+                                            ) ||
+                                              (med.medication as any)?.concept
+                                                ?.coding?.[0]?.code}
+                                          </span>
                                         </div>
                                       )}
-                                      {med.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {med.note[0].text}</div>}
+                                      {med.dosageInstruction?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Full Dosage:
+                                          </span>{' '}
+                                          {med.dosageInstruction[0].text}
+                                        </div>
+                                      )}
+                                      {med.dosageInstruction?.[0]?.route
+                                        ?.coding?.[0]?.display && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Route:
+                                          </span>{' '}
+                                          {
+                                            med.dosageInstruction[0].route
+                                              .coding[0].display
+                                          }
+                                        </div>
+                                      )}
+                                      {med.dosageInstruction?.[0]
+                                        ?.doseAndRate?.[0]?.doseQuantity && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Dose:
+                                          </span>{' '}
+                                          {
+                                            med.dosageInstruction[0]
+                                              .doseAndRate[0].doseQuantity.value
+                                          }{' '}
+                                          {
+                                            med.dosageInstruction[0]
+                                              .doseAndRate[0].doseQuantity.unit
+                                          }
+                                        </div>
+                                      )}
+                                      {med.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Note:
+                                          </span>{' '}
+                                          {med.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2503,8 +3682,11 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = medicationDispenses.filter((disp) => {
-                      const text = (disp.medication as any)?.concept?.text || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        (disp.medication as any)?.concept?.text || '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No medication dispenses recorded." />
@@ -2512,10 +3694,18 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Quantity</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Drug
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Quantity
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Date
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
@@ -2524,30 +3714,101 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <React.Fragment key={disp.id}>
                               <tr
                                 className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setExpandedId(expandedId === disp.id ? null : (disp.id ?? null))}
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === disp.id
+                                      ? null
+                                      : (disp.id ?? null),
+                                  )
+                                }
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                  {(disp.medication as any)?.concept?.text || (disp.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                                  {(() => { const c = codeBadge((disp.medication as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                  {(disp.medication as any)?.concept?.text ||
+                                    (disp.medication as any)?.concept
+                                      ?.coding?.[0]?.display ||
+                                    '—'}
+                                  {(() => {
+                                    const c = codeBadge(
+                                      (disp.medication as any)?.concept?.coding,
+                                    );
+                                    return c ? (
+                                      <span className="ml-2 text-xs font-mono text-gray-400">
+                                        [{c}]
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </td>
                                 <td className="py-2.5 pr-4 text-xs text-gray-600">
-                                  {disp.quantity?.value ? `${disp.quantity.value} ${disp.quantity.unit || ''}` : '—'}
+                                  {disp.quantity?.value
+                                    ? `${disp.quantity.value} ${disp.quantity.unit || ''}`
+                                    : '—'}
                                 </td>
-                                <td className="py-2.5 pr-4"><StatusPill status={disp.status} /></td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT(disp.whenHandedOver)}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === disp.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill status={disp.status} />
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT(disp.whenHandedOver)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === disp.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === disp.id && (
                                 <tr>
-                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={5}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                      {(disp.medication as any)?.concept?.coding?.[0]?.code && (
-                                        <div><span className="text-gray-500 font-medium">Med Code:</span> <span className="font-mono">{codeBadge((disp.medication as any)?.concept?.coding) || (disp.medication as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      {(disp.medication as any)?.concept
+                                        ?.coding?.[0]?.code && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Med Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {codeBadge(
+                                              (disp.medication as any)?.concept
+                                                ?.coding,
+                                            ) ||
+                                              (disp.medication as any)?.concept
+                                                ?.coding?.[0]?.code}
+                                          </span>
+                                        </div>
                                       )}
-                                      {disp.quantity && <div><span className="text-gray-500 font-medium">Quantity:</span> {disp.quantity.value} {disp.quantity.unit}</div>}
-                                      {(disp as any).daysSupply?.value && <div><span className="text-gray-500 font-medium">Days Supply:</span> {(disp as any).daysSupply.value}</div>}
-                                      {disp.whenHandedOver && <div><span className="text-gray-500 font-medium">When Handed Over:</span> {formatDT(disp.whenHandedOver)}</div>}
-                                      {disp.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {disp.note[0].text}</div>}
+                                      {disp.quantity && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Quantity:
+                                          </span>{' '}
+                                          {disp.quantity.value}{' '}
+                                          {disp.quantity.unit}
+                                        </div>
+                                      )}
+                                      {(disp as any).daysSupply?.value && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Days Supply:
+                                          </span>{' '}
+                                          {(disp as any).daysSupply.value}
+                                        </div>
+                                      )}
+                                      {disp.whenHandedOver && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            When Handed Over:
+                                          </span>{' '}
+                                          {formatDT(disp.whenHandedOver)}
+                                        </div>
+                                      )}
+                                      {disp.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Note:
+                                          </span>{' '}
+                                          {disp.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2575,8 +3836,11 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = medicationStatements.filter((stmt) => {
-                      const text = (stmt.medication as any)?.concept?.text || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        (stmt.medication as any)?.concept?.text || '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No medication statements recorded." />
@@ -2584,10 +3848,18 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Drug</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Dosage</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Date</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Drug
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Dosage
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Date
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
@@ -2596,28 +3868,102 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <React.Fragment key={stmt.id}>
                               <tr
                                 className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setExpandedId(expandedId === stmt.id ? null : (stmt.id ?? null))}
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === stmt.id
+                                      ? null
+                                      : (stmt.id ?? null),
+                                  )
+                                }
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                  {(stmt.medication as any)?.concept?.text || (stmt.medication as any)?.concept?.coding?.[0]?.display || '—'}
-                                  {(() => { const c = codeBadge((stmt.medication as any)?.concept?.coding); return c ? <span className="ml-2 text-xs font-mono text-gray-400">[{c}]</span> : null; })()}
+                                  {(stmt.medication as any)?.concept?.text ||
+                                    (stmt.medication as any)?.concept
+                                      ?.coding?.[0]?.display ||
+                                    '—'}
+                                  {(() => {
+                                    const c = codeBadge(
+                                      (stmt.medication as any)?.concept?.coding,
+                                    );
+                                    return c ? (
+                                      <span className="ml-2 text-xs font-mono text-gray-400">
+                                        [{c}]
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </td>
-                                <td className="py-2.5 pr-4 text-xs text-gray-600">{stmt.dosage?.[0]?.text || '—'}</td>
-                                <td className="py-2.5 pr-4"><StatusPill status={stmt.status} /></td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDT((stmt as any).dateAsserted)}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === stmt.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-600">
+                                  {stmt.dosage?.[0]?.text || '—'}
+                                </td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill status={stmt.status} />
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDT((stmt as any).dateAsserted)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === stmt.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === stmt.id && (
                                 <tr>
-                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={5}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                      {(stmt.medication as any)?.concept?.coding?.[0]?.code && (
-                                        <div><span className="text-gray-500 font-medium">Med Code:</span> <span className="font-mono">{codeBadge((stmt.medication as any)?.concept?.coding) || (stmt.medication as any)?.concept?.coding?.[0]?.code}</span></div>
+                                      {(stmt.medication as any)?.concept
+                                        ?.coding?.[0]?.code && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Med Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {codeBadge(
+                                              (stmt.medication as any)?.concept
+                                                ?.coding,
+                                            ) ||
+                                              (stmt.medication as any)?.concept
+                                                ?.coding?.[0]?.code}
+                                          </span>
+                                        </div>
                                       )}
-                                      {stmt.dosage?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Dosage:</span> {stmt.dosage[0].text}</div>}
-                                      {(stmt as any).effectivePeriod?.start && <div><span className="text-gray-500 font-medium">Effective Start:</span> {formatDate((stmt as any).effectivePeriod.start)}</div>}
-                                      {(stmt as any).effectivePeriod?.end && <div><span className="text-gray-500 font-medium">Effective End:</span> {formatDate((stmt as any).effectivePeriod.end)}</div>}
-                                      {stmt.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {stmt.note[0].text}</div>}
+                                      {stmt.dosage?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Dosage:
+                                          </span>{' '}
+                                          {stmt.dosage[0].text}
+                                        </div>
+                                      )}
+                                      {(stmt as any).effectivePeriod?.start && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Effective Start:
+                                          </span>{' '}
+                                          {formatDate(
+                                            (stmt as any).effectivePeriod.start,
+                                          )}
+                                        </div>
+                                      )}
+                                      {(stmt as any).effectivePeriod?.end && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Effective End:
+                                          </span>{' '}
+                                          {formatDate(
+                                            (stmt as any).effectivePeriod.end,
+                                          )}
+                                        </div>
+                                      )}
+                                      {stmt.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Note:
+                                          </span>{' '}
+                                          {stmt.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2645,8 +3991,13 @@ const ConsultNoteDetailPage: React.FC = () => {
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = procedures.filter((proc) => {
-                      const text = proc.code?.text || proc.code?.coding?.[0]?.display || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      const text =
+                        proc.code?.text ||
+                        proc.code?.coding?.[0]?.display ||
+                        '';
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No procedures recorded for this encounter." />
@@ -2654,10 +4005,18 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Procedure</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Performed</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Notes</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Procedure
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Performed
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Notes
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
@@ -2666,26 +4025,76 @@ const ConsultNoteDetailPage: React.FC = () => {
                             <React.Fragment key={proc.id}>
                               <tr
                                 className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setExpandedId(expandedId === proc.id ? null : (proc.id ?? null))}
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === proc.id
+                                      ? null
+                                      : (proc.id ?? null),
+                                  )
+                                }
                               >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
-                                  {proc.code?.text || proc.code?.coding?.[0]?.display || '—'}
+                                  {proc.code?.text ||
+                                    proc.code?.coding?.[0]?.display ||
+                                    '—'}
                                 </td>
-                                <td className="py-2.5 pr-4"><StatusPill status={proc.status} /></td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill status={proc.status} />
+                                </td>
                                 <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">
-                                  {formatDT((proc as any).occurrenceDateTime || proc.occurrencePeriod?.start)}
+                                  {formatDT(
+                                    (proc as any).occurrenceDateTime ||
+                                      proc.occurrencePeriod?.start,
+                                  )}
                                 </td>
-                                <td className="py-2.5 text-xs text-gray-600">{proc.note?.[0]?.text || '—'}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === proc.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 text-xs text-gray-600">
+                                  {proc.note?.[0]?.text || '—'}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === proc.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === proc.id && (
                                 <tr>
-                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={5}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                                      {proc.code?.coding?.[0]?.code && <div><span className="text-gray-500 font-medium">SNOMED Code:</span> <span className="font-mono">{proc.code.coding[0].code}</span></div>}
-                                      {(proc as any).location?.display && <div><span className="text-gray-500 font-medium">Location:</span> {(proc as any).location.display}</div>}
-                                      {proc.performer?.[0]?.actor?.display && <div><span className="text-gray-500 font-medium">Performer:</span> {proc.performer[0].actor.display}</div>}
-                                      {proc.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {proc.note[0].text}</div>}
+                                      {proc.code?.coding?.[0]?.code && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            SNOMED Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {proc.code.coding[0].code}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {(proc as any).location?.display && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Location:
+                                          </span>{' '}
+                                          {(proc as any).location.display}
+                                        </div>
+                                      )}
+                                      {proc.performer?.[0]?.actor?.display && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Performer:
+                                          </span>{' '}
+                                          {proc.performer[0].actor.display}
+                                        </div>
+                                      )}
+                                      {proc.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Note:
+                                          </span>{' '}
+                                          {proc.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2701,12 +4110,22 @@ const ConsultNoteDetailPage: React.FC = () => {
 
               {/* ── Care Plan ── */}
               {activeSection === 'care-plan' && (
-                <Section sectionKey="care-plan" icon="📝" title="Care Plan" count={carePlans.length} isEditable={isEditable} addLabel="Add Care Plan" addForm={<AddCarePlanForm {...formProps} />}>
+                <Section
+                  sectionKey="care-plan"
+                  icon="📝"
+                  title="Care Plan"
+                  count={carePlans.length}
+                  isEditable={isEditable}
+                  addLabel="Add Care Plan"
+                  addForm={<AddCarePlanForm {...formProps} />}
+                >
                   <FilterBar value={filterText} onChange={setFilterText} />
                   {(() => {
                     const filtered = carePlans.filter((cp) => {
                       const text = cp.title || cp.description || '';
-                      return text.toLowerCase().includes(filterText.toLowerCase());
+                      return text
+                        .toLowerCase()
+                        .includes(filterText.toLowerCase());
                     });
                     return filtered.length === 0 ? (
                       <EmptyNote label="No care plan recorded for this encounter." />
@@ -2714,39 +4133,108 @@ const ConsultNoteDetailPage: React.FC = () => {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-gray-400 border-b border-gray-100">
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Title</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Intent</th>
-                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">Created</th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Title
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Intent
+                            </th>
+                            <th className="text-left pb-2 font-semibold uppercase tracking-wider">
+                              Created
+                            </th>
                             <th className="pb-2" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {filtered.map((cp) => (
                             <React.Fragment key={cp.id}>
-                              <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === cp.id ? null : (cp.id ?? null))}>
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() =>
+                                  setExpandedId(
+                                    expandedId === cp.id
+                                      ? null
+                                      : (cp.id ?? null),
+                                  )
+                                }
+                              >
                                 <td className="py-2.5 pr-4 font-semibold text-gray-800">
                                   {cp.title || 'Care Plan'}
                                   {cp.category?.[0]?.coding?.[0]?.code && (
-                                    <span className="ml-2 text-xs font-mono text-gray-400">[{codeBadge(cp.category[0].coding) || cp.category[0].coding[0].code}]</span>
+                                    <span className="ml-2 text-xs font-mono text-gray-400">
+                                      [
+                                      {codeBadge(cp.category[0].coding) ||
+                                        cp.category[0].coding[0].code}
+                                      ]
+                                    </span>
                                   )}
                                 </td>
-                                <td className="py-2.5 pr-4"><StatusPill status={cp.status} /></td>
-                                <td className="py-2.5 pr-4 text-xs text-gray-500 capitalize">{cp.intent || '—'}</td>
-                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDate(cp.created)}</td>
-                                <td className="py-2.5 text-xs text-gray-400">{expandedId === cp.id ? '▲' : '▼'}</td>
+                                <td className="py-2.5 pr-4">
+                                  <StatusPill status={cp.status} />
+                                </td>
+                                <td className="py-2.5 pr-4 text-xs text-gray-500 capitalize">
+                                  {cp.intent || '—'}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                                  {formatDate(cp.created)}
+                                </td>
+                                <td className="py-2.5 text-xs text-gray-400">
+                                  {expandedId === cp.id ? '▲' : '▼'}
+                                </td>
                               </tr>
                               {expandedId === cp.id && (
                                 <tr>
-                                  <td colSpan={5} className="bg-blue-50 border-b border-blue-100 px-4 py-3">
+                                  <td
+                                    colSpan={5}
+                                    className="bg-blue-50 border-b border-blue-100 px-4 py-3"
+                                  >
                                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                                       {cp.category?.[0]?.coding?.[0]?.code && (
-                                        <div><span className="text-gray-500 font-medium">Category Code:</span> <span className="font-mono">{codeBadge(cp.category[0].coding) || cp.category[0].coding[0].code}</span></div>
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Category Code:
+                                          </span>{' '}
+                                          <span className="font-mono">
+                                            {codeBadge(cp.category[0].coding) ||
+                                              cp.category[0].coding[0].code}
+                                          </span>
+                                        </div>
                                       )}
-                                      {cp.period?.start && <div><span className="text-gray-500 font-medium">Period Start:</span> {formatDate(cp.period.start)}</div>}
-                                      {cp.period?.end && <div><span className="text-gray-500 font-medium">Period End:</span> {formatDate(cp.period.end)}</div>}
-                                      {cp.description && <div className="col-span-2"><span className="text-gray-500 font-medium">Description:</span> {cp.description}</div>}
-                                      {cp.note?.[0]?.text && <div className="col-span-2"><span className="text-gray-500 font-medium">Note:</span> {cp.note[0].text}</div>}
+                                      {cp.period?.start && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Period Start:
+                                          </span>{' '}
+                                          {formatDate(cp.period.start)}
+                                        </div>
+                                      )}
+                                      {cp.period?.end && (
+                                        <div>
+                                          <span className="text-gray-500 font-medium">
+                                            Period End:
+                                          </span>{' '}
+                                          {formatDate(cp.period.end)}
+                                        </div>
+                                      )}
+                                      {cp.description && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Description:
+                                          </span>{' '}
+                                          {cp.description}
+                                        </div>
+                                      )}
+                                      {cp.note?.[0]?.text && (
+                                        <div className="col-span-2">
+                                          <span className="text-gray-500 font-medium">
+                                            Note:
+                                          </span>{' '}
+                                          {cp.note[0].text}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -2761,22 +4249,30 @@ const ConsultNoteDetailPage: React.FC = () => {
               )}
 
               {/* ── Inpatient Admission ── */}
-
             </>
           )}
 
           {/* Footer */}
           <div className="mt-6 flex items-center justify-between pb-8">
             <div className="flex gap-2">
-              <Link to="/queue" className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm">
+              <Link
+                to="/queue"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm"
+              >
                 ← Queue
               </Link>
-              <Link to={`/patient/${patientId}/encounter`} className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm">
+              <Link
+                to={`/patient/${patientId}/encounter`}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-5 rounded-md transition-colors text-sm"
+              >
                 Visit History
               </Link>
             </div>
             {isEditable && (
-              <Link to={`/patient/${patientId}/encounter/${encounterId}/consult`} className="bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 px-5 rounded-md transition-colors text-sm">
+              <Link
+                to={`/patient/${patientId}/encounter/${encounterId}/consult`}
+                className="bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 px-5 rounded-md transition-colors text-sm"
+              >
                 Open Full Consult Wizard →
               </Link>
             )}
@@ -2794,6 +4290,5 @@ const ConsultNoteDetailPage: React.FC = () => {
     </div>
   );
 };
-
 
 export default ConsultNoteDetailPage;

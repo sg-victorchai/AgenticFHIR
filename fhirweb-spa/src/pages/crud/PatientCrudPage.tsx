@@ -6,6 +6,7 @@ import {
   useCreatePatientMutation,
 } from '../../services/fhir/client';
 import { Patient, HumanName, ContactPoint, Address } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 const PatientCrudPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -498,11 +499,13 @@ const PatientCrudPage: React.FC = () => {
       console.error('Error saving patient:', error);
 
       // Set error message to display on the UI
-      let errorMsg = 'Failed to save patient. Please try again.';
+      let errorMsg =
+        getOperationOutcomeMessage(error) ||
+        'Failed to save patient. Please try again.';
 
       // Extract more detailed error if available
-      if (error.data?.issue?.[0]?.details?.text) {
-        errorMsg = `Error: ${error.data.issue[0].details.text}`;
+      if (errorMsg !== 'Failed to save patient. Please try again.') {
+        errorMsg = `Error: ${errorMsg}`;
       } else if (error.data?.message) {
         errorMsg = `Error: ${error.data.message}`;
       } else if (error.message) {

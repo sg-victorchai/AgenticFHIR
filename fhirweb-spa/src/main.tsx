@@ -8,6 +8,7 @@ import { FHIRProvider } from './contexts/FHIRContext';
 import { store } from './store';
 import App from './App.tsx';
 import './styles/index.css';
+import OidcAuthBootstrap from './components/auth/OidcAuthBootstrap';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +25,9 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter basename="/smartapp">
         <QueryClientProvider client={queryClient}>
           <FHIRProvider>
-            <App />
+            <OidcAuthBootstrap>
+              <App />
+            </OidcAuthBootstrap>
             <ReactQueryDevtools initialIsOpen={false} />
           </FHIRProvider>
         </QueryClientProvider>

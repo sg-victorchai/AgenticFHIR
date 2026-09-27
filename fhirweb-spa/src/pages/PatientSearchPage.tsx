@@ -12,6 +12,7 @@ import {
 } from '../services/fhir/client';
 import { Pagination } from '../components/common/Pagination';
 import { RootState } from '../store';
+import { getOperationOutcomeMessage } from '../utils/fhirError';
 
 interface PatientResult {
   id: string;
@@ -216,7 +217,8 @@ const PatientSearchPage: React.FC = () => {
 
   // Determine error message from the RTK query error
   const errorMessage = searchError
-    ? 'Failed to search patients. Please try again.'
+    ? getOperationOutcomeMessage(searchError) ||
+      'Failed to search patients. Please try again.'
     : null;
 
   return (

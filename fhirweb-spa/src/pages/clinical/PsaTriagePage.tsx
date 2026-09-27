@@ -8,15 +8,20 @@ import {
   useSearchByEncounterQuery,
 } from '../../services/fhir/client';
 import { Encounter, Observation } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 const localNow = (): string => {
   const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 };
 
 const getLocId = (loc: any): string =>
   loc?.location?.identifier?.value ||
-  (loc?.location?.reference ? (loc.location.reference as string).split('/').pop() ?? '' : '') ||
+  (loc?.location?.reference
+    ? ((loc.location.reference as string).split('/').pop() ?? '')
+    : '') ||
   '';
 const nowISO = () => new Date().toISOString();
 
@@ -30,7 +35,10 @@ const COMP_TO_FIELD: Record<string, string> = {
 };
 
 const PsaTriagePage: React.FC = () => {
-  const { id: patientId, encounterId } = useParams<{ id: string; encounterId: string }>();
+  const { id: patientId, encounterId } = useParams<{
+    id: string;
+    encounterId: string;
+  }>();
   const navigate = useNavigate();
   const { data: patient } = useGetPatientQuery(patientId!);
   const { data: encounterResource } = useGetResourceByIdQuery(
@@ -41,8 +49,10 @@ const PsaTriagePage: React.FC = () => {
     { resourceType: 'Observation', encounterId: encounterId! },
     { skip: !encounterId },
   );
-  const [createResource, { isLoading: isCreating }] = useCreateResourceMutation();
-  const [updateResource, { isLoading: isUpdating }] = useUpdateResourceMutation();
+  const [createResource, { isLoading: isCreating }] =
+    useCreateResourceMutation();
+  const [updateResource, { isLoading: isUpdating }] =
+    useUpdateResourceMutation();
 
   const [form, setForm] = useState({
     spo2: '',
@@ -61,10 +71,14 @@ const PsaTriagePage: React.FC = () => {
     .filter(
       (o) =>
         o?.status !== 'entered-in-error' &&
-        o?.category?.some((c) => c.coding?.some((cd) => cd.code === 'vital-signs')) &&
+        o?.category?.some((c) =>
+          c.coding?.some((cd) => cd.code === 'vital-signs'),
+        ) &&
         (o?.component?.length ?? 0) > 0,
     )
-    .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1));
+    .sort((a, b) =>
+      (b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1,
+    );
 
   const latestPanelObs = existingPanelObs[0] ?? null;
 
@@ -79,31 +93,80 @@ const PsaTriagePage: React.FC = () => {
         updates[field as keyof typeof form] = String(comp.valueQuantity.value);
     });
     if (latestPanelObs.effectiveDateTime)
-      updates.recordedAt = new Date(latestPanelObs.effectiveDateTime).toISOString().slice(0, 16);
-    if (Object.keys(updates).length > 0) setForm((prev) => ({ ...prev, ...updates }));
+      updates.recordedAt = new Date(latestPanelObs.effectiveDateTime)
+        .toISOString()
+        .slice(0, 16);
+    if (Object.keys(updates).length > 0)
+      setForm((prev) => ({ ...prev, ...updates }));
   }, [latestPanelObs?.id]);
 
   const isSaving = isCreating || isUpdating;
 
   const patientName = patient
     ? patient.name?.[0]?.text ||
-      [patient.name?.[0]?.prefix?.join(' '), patient.name?.[0]?.given?.join(' '), patient.name?.[0]?.family]
-        .filter(Boolean).join(' ')
+      [
+        patient.name?.[0]?.prefix?.join(' '),
+        patient.name?.[0]?.given?.join(' '),
+        patient.name?.[0]?.family,
+      ]
+        .filter(Boolean)
+        .join(' ')
     : '';
 
   const buildComponents = () =>
     [
-      { code: '59408-5', display: 'SpO₂',            value: form.spo2, unit: '%',           ucum: '%' },
-      { code: '8867-4',  display: 'Heart Rate',       value: form.hr,   unit: 'beats/min',   ucum: '/min' },
-      { code: '8480-6',  display: 'Systolic BP',      value: form.sbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
-      { code: '8462-4',  display: 'Diastolic BP',     value: form.dbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
-      { code: '9279-1',  display: 'Respiratory Rate', value: form.rr,   unit: 'breaths/min', ucum: '/min' },
-      { code: '8310-5',  display: 'Body Temperature', value: form.temp, unit: '°C',          ucum: 'Cel' },
+      {
+        code: '59408-5',
+        display: 'SpO₂',
+        value: form.spo2,
+        unit: '%',
+        ucum: '%',
+      },
+      {
+        code: '8867-4',
+        display: 'Heart Rate',
+        value: form.hr,
+        unit: 'beats/min',
+        ucum: '/min',
+      },
+      {
+        code: '8480-6',
+        display: 'Systolic BP',
+        value: form.sbp,
+        unit: 'mmHg',
+        ucum: 'mm[Hg]',
+      },
+      {
+        code: '8462-4',
+        display: 'Diastolic BP',
+        value: form.dbp,
+        unit: 'mmHg',
+        ucum: 'mm[Hg]',
+      },
+      {
+        code: '9279-1',
+        display: 'Respiratory Rate',
+        value: form.rr,
+        unit: 'breaths/min',
+        ucum: '/min',
+      },
+      {
+        code: '8310-5',
+        display: 'Body Temperature',
+        value: form.temp,
+        unit: '°C',
+        ucum: 'Cel',
+      },
     ]
       .filter(({ value }) => value && !isNaN(parseFloat(value)))
       .map(({ code, display, value, unit, ucum }) => ({
         code: { coding: [{ system: 'http://loinc.org', code, display }] },
-        valueQuantity: { value: parseFloat(value), unit, system: 'http://unitsofmeasure.org', code: ucum },
+        valueQuantity: {
+          value: parseFloat(value),
+          unit,
+          system: 'http://unitsofmeasure.org',
+          code: ucum,
+        },
       }));
 
   const advanceEncounter = async () => {
@@ -119,11 +182,22 @@ const PsaTriagePage: React.FC = () => {
       locs[triageIdx] = {
         ...existing,
         status: 'completed',
-        period: { start: existing.period?.start || new Date(form.recordedAt).toISOString(), end: nowISO() },
+        period: {
+          start:
+            existing.period?.start || new Date(form.recordedAt).toISOString(),
+          end: nowISO(),
+        },
       };
     }
-    locs.push({ location: { identifier: { value: 'waiting-room' } }, status: 'active' });
-    const res = await updateResource({ resourceType: 'Encounter', id: encounterId!, resource: { ...encounter, location: locs } as any });
+    locs.push({
+      location: { identifier: { value: 'waiting-room' } },
+      status: 'active',
+    });
+    const res = await updateResource({
+      resourceType: 'Encounter',
+      id: encounterId!,
+      resource: { ...encounter, location: locs } as any,
+    });
     return !('error' in res);
   };
 
@@ -131,22 +205,54 @@ const PsaTriagePage: React.FC = () => {
   const handleCompleteTriage = async () => {
     setError('');
     const components = buildComponents();
-    if (components.length === 0) { setError('Please enter at least one vital sign.'); return; }
+    if (components.length === 0) {
+      setError('Please enter at least one vital sign.');
+      return;
+    }
     const obsResult = await createResource({
       resourceType: 'Observation',
       resource: {
         resourceType: 'Observation',
         status: 'final',
-        category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
-        code: { coding: [{ system: 'http://loinc.org', code: '85353-1', display: 'Vital signs panel' }], text: 'Vital Signs' },
+        category: [
+          {
+            coding: [
+              {
+                system:
+                  'http://terminology.hl7.org/CodeSystem/observation-category',
+                code: 'vital-signs',
+                display: 'Vital Signs',
+              },
+            ],
+          },
+        ],
+        code: {
+          coding: [
+            {
+              system: 'http://loinc.org',
+              code: '85353-1',
+              display: 'Vital signs panel',
+            },
+          ],
+          text: 'Vital Signs',
+        },
         subject: { reference: `Patient/${patientId}` },
         encounter: { reference: `Encounter/${encounterId}` },
         effectiveDateTime: new Date(form.recordedAt).toISOString(),
         component: components,
       } as any,
     });
-    if ('error' in obsResult) { setError('Failed to save vitals. Please retry.'); return; }
-    if (!(await advanceEncounter())) { setError('Failed to update triage status. Please retry.'); return; }
+    if ('error' in obsResult) {
+      setError(
+        getOperationOutcomeMessage(obsResult.error) ||
+          'Failed to save vitals. Please retry.',
+      );
+      return;
+    }
+    if (!(await advanceEncounter())) {
+      setError('Failed to update triage status. Please retry.');
+      return;
+    }
     navigate('/queue');
   };
 
@@ -155,7 +261,10 @@ const PsaTriagePage: React.FC = () => {
     setError('');
     if (!latestPanelObs) return;
     const components = buildComponents();
-    if (components.length === 0) { setError('Please enter at least one vital sign.'); return; }
+    if (components.length === 0) {
+      setError('Please enter at least one vital sign.');
+      return;
+    }
     const obsResult = await updateResource({
       resourceType: 'Observation',
       id: latestPanelObs.id!,
@@ -165,21 +274,36 @@ const PsaTriagePage: React.FC = () => {
         component: components,
       } as any,
     });
-    if ('error' in obsResult) { setError('Failed to update vitals. Please retry.'); return; }
-    if (!(await advanceEncounter())) { setError('Failed to update triage status. Please retry.'); return; }
+    if ('error' in obsResult) {
+      setError(
+        getOperationOutcomeMessage(obsResult.error) ||
+          'Failed to update vitals. Please retry.',
+      );
+      return;
+    }
+    if (!(await advanceEncounter())) {
+      setError('Failed to update triage status. Please retry.');
+      return;
+    }
     navigate('/queue');
   };
-
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-2xl">
       <nav className="text-sm text-gray-500 mb-4 flex items-center gap-1 flex-wrap">
-        <Link to="/queue" className="hover:text-blue-600">Queue</Link>
+        <Link to="/queue" className="hover:text-blue-600">
+          Queue
+        </Link>
         <span>/</span>
-        <span className="text-gray-700 font-medium">Triage — {patientName || patientId}</span>
+        <span className="text-gray-700 font-medium">
+          Triage — {patientName || patientId}
+        </span>
       </nav>
       <h1 className="text-2xl font-bold mb-1 text-gray-800">Patient Triage</h1>
-      <p className="text-sm text-gray-500 mb-6">Record vital signs and complete triage to send patient to consulting room.</p>
+      <p className="text-sm text-gray-500 mb-6">
+        Record vital signs and complete triage to send patient to consulting
+        room.
+      </p>
 
       <div className="bg-white shadow rounded-lg p-6 space-y-4">
         <h2 className="text-base font-semibold text-gray-700">Vital Signs</h2>
@@ -187,35 +311,63 @@ const PsaTriagePage: React.FC = () => {
           {[
             { label: 'SpO₂ (%)', key: 'spo2', placeholder: 'e.g. 98' },
             { label: 'Heart Rate (bpm)', key: 'hr', placeholder: 'e.g. 78' },
-            { label: 'Systolic BP (mmHg)', key: 'sbp', placeholder: 'e.g. 120' },
-            { label: 'Diastolic BP (mmHg)', key: 'dbp', placeholder: 'e.g. 80' },
-            { label: 'Respiratory Rate (/min)', key: 'rr', placeholder: 'e.g. 16' },
-            { label: 'Temperature (°C)', key: 'temp', placeholder: 'e.g. 37.0' },
+            {
+              label: 'Systolic BP (mmHg)',
+              key: 'sbp',
+              placeholder: 'e.g. 120',
+            },
+            {
+              label: 'Diastolic BP (mmHg)',
+              key: 'dbp',
+              placeholder: 'e.g. 80',
+            },
+            {
+              label: 'Respiratory Rate (/min)',
+              key: 'rr',
+              placeholder: 'e.g. 16',
+            },
+            {
+              label: 'Temperature (°C)',
+              key: 'temp',
+              placeholder: 'e.g. 37.0',
+            },
           ].map(({ label, key, placeholder }) => (
             <div key={key}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {label}
+              </label>
               <input
                 type="number"
                 step="any"
                 placeholder={placeholder}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={(form as any)[key]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, [key]: e.target.value }))
+                }
               />
             </div>
           ))}
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Recorded At</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Recorded At
+            </label>
             <input
               type="datetime-local"
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               value={form.recordedAt}
-              onChange={(e) => setForm((f) => ({ ...f, recordedAt: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, recordedAt: e.target.value }))
+              }
             />
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
 
         <div className="flex gap-3 pt-2">
           {latestPanelObs ? (

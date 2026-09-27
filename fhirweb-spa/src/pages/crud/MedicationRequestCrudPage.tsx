@@ -7,6 +7,7 @@ import {
   useDeleteResourceMutation,
 } from '../../services/fhir/client';
 import { MedicationRequest } from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 const MedicationRequestCrudPage: React.FC = () => {
   const { id: patientId, resourceId } = useParams<{
@@ -239,7 +240,10 @@ const MedicationRequestCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/medication`);
     } catch (error) {
       console.error('Error saving medication request:', error);
-      alert('Failed to save medication request. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to save medication request. Please try again.',
+      );
     }
   };
 
@@ -262,7 +266,10 @@ const MedicationRequestCrudPage: React.FC = () => {
       navigate(`/patient/${patientId}/medication`);
     } catch (error) {
       console.error('Error deleting medication request:', error);
-      alert('Failed to delete medication request. Please try again.');
+      alert(
+        getOperationOutcomeMessage(error) ||
+          'Failed to delete medication request. Please try again.',
+      );
     }
   };
 
@@ -332,8 +339,8 @@ const MedicationRequestCrudPage: React.FC = () => {
             {!resourceId
               ? 'Create New Medication Request'
               : isEditMode
-              ? 'Edit Medication Request'
-              : 'Medication Request Details'}
+                ? 'Edit Medication Request'
+                : 'Medication Request Details'}
           </h2>
           <p className="text-gray-600">
             {!resourceId
@@ -414,16 +421,16 @@ const MedicationRequestCrudPage: React.FC = () => {
                         .periodUnit === 'd'
                         ? 'day'
                         : formData.dosageInstruction[0].timing.repeat
-                            .periodUnit === 'h'
-                        ? 'hour'
-                        : formData.dosageInstruction[0].timing.repeat
-                            .periodUnit === 'wk'
-                        ? 'week'
-                        : formData.dosageInstruction[0].timing.repeat
-                            .periodUnit === 'mo'
-                        ? 'month'
-                        : formData.dosageInstruction[0].timing.repeat
-                            .periodUnit) || 'day'}
+                              .periodUnit === 'h'
+                          ? 'hour'
+                          : formData.dosageInstruction[0].timing.repeat
+                                .periodUnit === 'wk'
+                            ? 'week'
+                            : formData.dosageInstruction[0].timing.repeat
+                                  .periodUnit === 'mo'
+                              ? 'month'
+                              : formData.dosageInstruction[0].timing.repeat
+                                  .periodUnit) || 'day'}
                     </p>
                   </div>
                 </div>
@@ -741,8 +748,8 @@ const MedicationRequestCrudPage: React.FC = () => {
               {isCreating || isUpdating
                 ? 'Saving...'
                 : resourceId
-                ? 'Update Medication Request'
-                : 'Create Medication Request'}
+                  ? 'Update Medication Request'
+                  : 'Create Medication Request'}
             </button>
           </div>
         </form>

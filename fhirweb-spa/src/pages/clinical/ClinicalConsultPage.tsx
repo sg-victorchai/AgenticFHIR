@@ -8,17 +8,18 @@ import {
   useSearchByEncounterQuery,
 } from '../../services/fhir/client';
 import { Encounter } from 'fhir/r5';
-import type { Observation, ServiceRequest, Condition, MedicationRequest, CarePlan } from 'fhir/r5';
+import type {
+  Observation,
+  ServiceRequest,
+  Condition,
+  MedicationRequest,
+  CarePlan,
+} from 'fhir/r5';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId =
-  | 'vitals'
-  | 'exam'
-  | 'lab'
-  | 'rad'
-  | 'assessment'
-  | 'management';
+type TabId = 'vitals' | 'exam' | 'lab' | 'rad' | 'assessment' | 'management';
 
 interface RecordedItem {
   id: string;
@@ -59,9 +60,7 @@ const LAB_CATEGORIES = [
   { display: 'Other', code: '74728003' },
 ];
 
-const RAD_CATEGORIES = [
-  { display: 'Radiology / Imaging', code: '394914008' },
-];
+const RAD_CATEGORIES = [{ display: 'Radiology / Imaging', code: '394914008' }];
 
 const INVESTIGATION_CATEGORIES = [...LAB_CATEGORIES, ...RAD_CATEGORIES];
 
@@ -69,7 +68,7 @@ const VITALS_PANEL_LOINC = '85353-1';
 
 const VITAL_CODE_TO_FIELD: Record<string, string> = {
   '59408-5': 'spo2',
-  '2708-6': 'spo2',  // backward compat
+  '2708-6': 'spo2', // backward compat
   '8867-4': 'hr',
   '8480-6': 'sbp',
   '8462-4': 'dbp',
@@ -140,9 +139,16 @@ const ExistingRecords: React.FC<{
     </div>
     <ul className="space-y-2">
       {items.map((item) => (
-        <li key={item.id} className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
+        <li
+          key={item.id}
+          className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2"
+        >
           <span className="font-medium text-gray-700">{item.display}</span>
-          {item.note && <span className="text-gray-500 text-xs flex-shrink-0">{item.note}</span>}
+          {item.note && (
+            <span className="text-gray-500 text-xs flex-shrink-0">
+              {item.note}
+            </span>
+          )}
         </li>
       ))}
     </ul>
@@ -214,23 +220,24 @@ const ClinicalConsultPage: React.FC = () => {
 
   const { data: obsBundle, isLoading: obsLoading } = useSearchByEncounterQuery(
     { resourceType: 'Observation', encounterId: encounterId! },
-    { skip: !encounterId }
+    { skip: !encounterId },
   );
   const { data: srBundle, isLoading: srLoading } = useSearchByEncounterQuery(
     { resourceType: 'ServiceRequest', encounterId: encounterId! },
-    { skip: !encounterId }
+    { skip: !encounterId },
   );
-  const { data: condBundle, isLoading: condLoading } = useSearchByEncounterQuery(
-    { resourceType: 'Condition', encounterId: encounterId! },
-    { skip: !encounterId }
-  );
+  const { data: condBundle, isLoading: condLoading } =
+    useSearchByEncounterQuery(
+      { resourceType: 'Condition', encounterId: encounterId! },
+      { skip: !encounterId },
+    );
   const { data: medBundle, isLoading: medLoading } = useSearchByEncounterQuery(
     { resourceType: 'MedicationRequest', encounterId: encounterId! },
-    { skip: !encounterId }
+    { skip: !encounterId },
   );
   const { data: cpBundle, isLoading: cpLoading } = useSearchByEncounterQuery(
     { resourceType: 'CarePlan', encounterId: encounterId! },
-    { skip: !encounterId }
+    { skip: !encounterId },
   );
 
   const patientName = patient
@@ -266,16 +273,20 @@ const ClinicalConsultPage: React.FC = () => {
 
   useEffect(() => {
     if (preloadedRef.current) return;
-    if (obsLoading || srLoading || condLoading || medLoading || cpLoading) return;
+    if (obsLoading || srLoading || condLoading || medLoading || cpLoading)
+      return;
     preloadedRef.current = true;
 
-    const observations = ((obsBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as Observation[]) || [])
-      .filter((o) => o.status !== 'entered-in-error');
+    const observations = (
+      (obsBundle?.entry
+        ?.map((e: any) => e.resource)
+        .filter(Boolean) as Observation[]) || []
+    ).filter((o) => o.status !== 'entered-in-error');
     const vitalsFromFHIR = observations.filter(
-      (o) => o.category?.[0]?.coding?.[0]?.code === 'vital-signs'
+      (o) => o.category?.[0]?.coding?.[0]?.code === 'vital-signs',
     );
     const examFromFHIR = observations.filter(
-      (o) => o.category?.[0]?.coding?.[0]?.code === 'exam'
+      (o) => o.category?.[0]?.coding?.[0]?.code === 'exam',
     );
 
     const vitalsLoaded: RecordedItem[] = [];
@@ -285,13 +296,19 @@ const ClinicalConsultPage: React.FC = () => {
           const name = comp.code?.coding?.[0]?.display || '?';
           const val = comp.valueQuantity?.value ?? '—';
           const unit = comp.valueQuantity?.unit || '';
-          vitalsLoaded.push({ id: `${o.id!}-${name}`, display: `${name}: ${val} ${unit}`.trim() });
+          vitalsLoaded.push({
+            id: `${o.id!}-${name}`,
+            display: `${name}: ${val} ${unit}`.trim(),
+          });
         });
       } else {
         const name = o.code?.coding?.[0]?.display || o.code?.text || 'Vital';
         const val = o.valueQuantity?.value ?? o.valueString ?? '—';
         const unit = o.valueQuantity?.unit || '';
-        vitalsLoaded.push({ id: o.id!, display: `${name}: ${val} ${unit}`.trim() });
+        vitalsLoaded.push({
+          id: o.id!,
+          display: `${name}: ${val} ${unit}`.trim(),
+        });
       }
     });
     if (vitalsLoaded.length > 0) setVitalsItems(vitalsLoaded);
@@ -301,23 +318,33 @@ const ClinicalConsultPage: React.FC = () => {
       const system = o.code?.text || o.code?.coding?.[0]?.display || 'System';
       const finding = o.valueString || '—';
       const isNormal = o.interpretation?.[0]?.coding?.[0]?.code === 'N';
-      return { id: o.id!, display: `[${system}] ${finding}`, note: isNormal ? 'Normal' : 'Abnormal' };
+      return {
+        id: o.id!,
+        display: `[${system}] ${finding}`,
+        note: isNormal ? 'Normal' : 'Abnormal',
+      };
     });
     if (examLoaded.length > 0) setExamItems(examLoaded);
 
-    const serviceRequests = (srBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as ServiceRequest[]) || [];
+    const serviceRequests =
+      (srBundle?.entry
+        ?.map((e: any) => e.resource)
+        .filter(Boolean) as ServiceRequest[]) || [];
     const labLoaded: RecordedItem[] = [];
     const radLoaded: RecordedItem[] = [];
     const RAD_SR_CODES = new Set(['394914008', '310061009']);
     const SNOMED_SYS = 'http://snomed.info/sct';
     serviceRequests.forEach((sr) => {
       const catCode =
-        sr.category?.[0]?.coding?.find((cd: any) => cd.system === SNOMED_SYS)?.code ??
-        (sr.code as any)?.concept?.coding?.[0]?.code ?? '';
+        sr.category?.[0]?.coding?.find((cd: any) => cd.system === SNOMED_SYS)
+          ?.code ??
+        (sr.code as any)?.concept?.coding?.[0]?.code ??
+        '';
       const catDisplay =
         sr.category?.[0]?.coding?.[0]?.display ||
         sr.category?.[0]?.text ||
-        (sr.code as any)?.concept?.coding?.[0]?.display || '';
+        (sr.code as any)?.concept?.coding?.[0]?.display ||
+        '';
       const testName = (sr.code as any)?.concept?.text || catDisplay || 'Order';
       const item: RecordedItem = {
         id: sr.id!,
@@ -333,16 +360,26 @@ const ClinicalConsultPage: React.FC = () => {
     if (labLoaded.length > 0) setLabOrderItems(labLoaded);
     if (radLoaded.length > 0) setRadOrderItems(radLoaded);
 
-    const conditions = (condBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as Condition[]) || [];
+    const conditions =
+      (condBundle?.entry
+        ?.map((e: any) => e.resource)
+        .filter(Boolean) as Condition[]) || [];
     const diagLoaded: RecordedItem[] = conditions.map((c) => {
       const text = c.code?.text || c.code?.coding?.[0]?.display || 'Diagnosis';
       const severity = c.severity?.coding?.[0]?.display || '';
       const verif = c.verificationStatus?.coding?.[0]?.code || '';
-      return { id: c.id!, display: text, note: `${severity} · ${verif}`.replace(/^ · | · $/, '') };
+      return {
+        id: c.id!,
+        display: text,
+        note: `${severity} · ${verif}`.replace(/^ · | · $/, ''),
+      };
     });
     if (diagLoaded.length > 0) setDiagnosisItems(diagLoaded);
 
-    const medReqs = (medBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as MedicationRequest[]) || [];
+    const medReqs =
+      (medBundle?.entry
+        ?.map((e: any) => e.resource)
+        .filter(Boolean) as MedicationRequest[]) || [];
     const medLoaded: RecordedItem[] = medReqs.map((mr) => {
       const drug = (mr.medication as any)?.concept?.text || 'Medication';
       const dosage = mr.dosageInstruction?.[0]?.text || '';
@@ -350,16 +387,38 @@ const ClinicalConsultPage: React.FC = () => {
     });
     if (medLoaded.length > 0) setMedicationItems(medLoaded);
 
-    const carePlans = (cpBundle?.entry?.map((e: any) => e.resource).filter(Boolean) as CarePlan[]) || [];
+    const carePlans =
+      (cpBundle?.entry
+        ?.map((e: any) => e.resource)
+        .filter(Boolean) as CarePlan[]) || [];
     if (carePlans.length > 0) {
       const cp = carePlans[0];
-      setCarePlanItem({ id: cp.id!, display: cp.title || 'Care Plan', note: cp.description || '' });
+      setCarePlanItem({
+        id: cp.id!,
+        display: cp.title || 'Care Plan',
+        note: cp.description || '',
+      });
     }
-
-  }, [obsLoading, srLoading, condLoading, medLoading, cpLoading, obsBundle, srBundle, condBundle, medBundle, cpBundle]);
+  }, [
+    obsLoading,
+    srLoading,
+    condLoading,
+    medLoading,
+    cpLoading,
+    obsBundle,
+    srBundle,
+    condBundle,
+    medBundle,
+    cpBundle,
+  ]);
 
   const [isAddingMore, setIsAddingMore] = useState<Record<TabId, boolean>>({
-    vitals: false, exam: false, lab: false, rad: false, assessment: false, management: false,
+    vitals: false,
+    exam: false,
+    lab: false,
+    rad: false,
+    assessment: false,
+    management: false,
   });
 
   // ── VITALS ────────────────────────────────────────────────────────────────
@@ -380,19 +439,54 @@ const ClinicalConsultPage: React.FC = () => {
     const { spo2, hr, sbp, dbp, rr, temp, recordedAt } = vitalsForm;
 
     const vitalDefs = [
-      { code: '59408-5', display: 'SpO₂',             value: spo2, unit: '%',           ucum: '%' },
-      { code: '8867-4',  display: 'Heart Rate',        value: hr,   unit: 'beats/min',   ucum: '/min' },
-      { code: '8480-6',  display: 'Systolic BP',       value: sbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
-      { code: '8462-4',  display: 'Diastolic BP',      value: dbp,  unit: 'mmHg',        ucum: 'mm[Hg]' },
-      { code: '9279-1',  display: 'Respiratory Rate',  value: rr,   unit: 'breaths/min', ucum: '/min' },
-      { code: '8310-5',  display: 'Body Temperature',  value: temp, unit: '°C',          ucum: 'Cel' },
+      { code: '59408-5', display: 'SpO₂', value: spo2, unit: '%', ucum: '%' },
+      {
+        code: '8867-4',
+        display: 'Heart Rate',
+        value: hr,
+        unit: 'beats/min',
+        ucum: '/min',
+      },
+      {
+        code: '8480-6',
+        display: 'Systolic BP',
+        value: sbp,
+        unit: 'mmHg',
+        ucum: 'mm[Hg]',
+      },
+      {
+        code: '8462-4',
+        display: 'Diastolic BP',
+        value: dbp,
+        unit: 'mmHg',
+        ucum: 'mm[Hg]',
+      },
+      {
+        code: '9279-1',
+        display: 'Respiratory Rate',
+        value: rr,
+        unit: 'breaths/min',
+        ucum: '/min',
+      },
+      {
+        code: '8310-5',
+        display: 'Body Temperature',
+        value: temp,
+        unit: '°C',
+        ucum: 'Cel',
+      },
     ];
 
     const components = vitalDefs
       .filter(({ value }) => value && !isNaN(parseFloat(value)))
       .map(({ code, display, value, unit, ucum }) => ({
         code: { coding: [{ system: 'http://loinc.org', code, display }] },
-        valueQuantity: { value: parseFloat(value), unit, system: 'http://unitsofmeasure.org', code: ucum },
+        valueQuantity: {
+          value: parseFloat(value),
+          unit,
+          system: 'http://unitsofmeasure.org',
+          code: ucum,
+        },
       }));
 
     if (components.length === 0) {
@@ -404,29 +498,68 @@ const ClinicalConsultPage: React.FC = () => {
     const obs = {
       resourceType: 'Observation' as const,
       status: 'final' as const,
-      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs', display: 'Vital Signs' }] }],
-      code: { coding: [{ system: 'http://loinc.org', code: VITALS_PANEL_LOINC, display: 'Vital signs panel' }], text: 'Vital Signs' },
+      category: [
+        {
+          coding: [
+            {
+              system:
+                'http://terminology.hl7.org/CodeSystem/observation-category',
+              code: 'vital-signs',
+              display: 'Vital Signs',
+            },
+          ],
+        },
+      ],
+      code: {
+        coding: [
+          {
+            system: 'http://loinc.org',
+            code: VITALS_PANEL_LOINC,
+            display: 'Vital signs panel',
+          },
+        ],
+        text: 'Vital Signs',
+      },
       subject: { reference: `Patient/${patientId}`, display: patientName },
       encounter: { reference: `Encounter/${encounterId}` },
       effectiveDateTime,
       component: components,
     };
-    const result = await createResource({ resourceType: 'Observation', resource: obs as any });
+    const result = await createResource({
+      resourceType: 'Observation',
+      resource: obs as any,
+    });
     const savedObs = 'data' in result && result.data ? result.data : null;
 
     if (savedObs) {
       setRawVitals((prev) => [...prev, savedObs as Observation]);
-      const displayItems: RecordedItem[] = ((savedObs as any).component || components).map((comp: any) => {
+      const displayItems: RecordedItem[] = (
+        (savedObs as any).component || components
+      ).map((comp: any) => {
         const name = comp.code?.coding?.[0]?.display || '?';
         const val = comp.valueQuantity?.value ?? '—';
         const unit = comp.valueQuantity?.unit || '';
-        return { id: `${savedObs.id || 'new'}-${name}`, display: `${name}: ${val} ${unit}`.trim() };
+        return {
+          id: `${savedObs.id || 'new'}-${name}`,
+          display: `${name}: ${val} ${unit}`.trim(),
+        };
       });
       setVitalsItems(displayItems);
-      setVitalsForm((f) => ({ ...f, spo2: '', hr: '', sbp: '', dbp: '', rr: '', temp: '' }));
+      setVitalsForm((f) => ({
+        ...f,
+        spo2: '',
+        hr: '',
+        sbp: '',
+        dbp: '',
+        rr: '',
+        temp: '',
+      }));
       setIsEditingVitals(false);
     } else {
-      setVitalsError('Failed to save vital signs. Please try again.');
+      setVitalsError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to save vital signs. Please try again.',
+      );
     }
   };
 
@@ -436,7 +569,9 @@ const ClinicalConsultPage: React.FC = () => {
     const newForm = { ...vitalsForm };
     const latestPanelObs = [...rawVitals]
       .filter((o) => o.component?.length)
-      .sort((a, b) => ((b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1))[0];
+      .sort((a, b) =>
+        (b.effectiveDateTime ?? '') > (a.effectiveDateTime ?? '') ? 1 : -1,
+      )[0];
     if (latestPanelObs) {
       latestPanelObs.component?.forEach((comp) => {
         const code = comp.code?.coding?.[0]?.code || '';
@@ -451,7 +586,10 @@ const ClinicalConsultPage: React.FC = () => {
       rawVitals.forEach((obs) => {
         const code = obs.code?.coding?.[0]?.code || '';
         const prev = latestByCode[code];
-        if (!prev || (obs.effectiveDateTime ?? '') > (prev.effectiveDateTime ?? ''))
+        if (
+          !prev ||
+          (obs.effectiveDateTime ?? '') > (prev.effectiveDateTime ?? '')
+        )
           latestByCode[code] = obs;
       });
       Object.entries(latestByCode).forEach(([code, obs]) => {
@@ -550,7 +688,10 @@ const ClinicalConsultPage: React.FC = () => {
       ]);
       setExamForm((f) => ({ ...f, finding: '' }));
     } else {
-      setExamError('Failed to save examination finding. Please try again.');
+      setExamError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to save examination finding. Please try again.',
+      );
     }
   };
 
@@ -566,8 +707,10 @@ const ClinicalConsultPage: React.FC = () => {
 
   // Reset category when switching between lab/rad steps
   useEffect(() => {
-    if (activeTab === 'lab') setOrderForm((f) => ({ ...f, category: LAB_CATEGORIES[0].code }));
-    if (activeTab === 'rad') setOrderForm((f) => ({ ...f, category: RAD_CATEGORIES[0].code }));
+    if (activeTab === 'lab')
+      setOrderForm((f) => ({ ...f, category: LAB_CATEGORIES[0].code }));
+    if (activeTab === 'rad')
+      setOrderForm((f) => ({ ...f, category: RAD_CATEGORIES[0].code }));
   }, [activeTab]);
 
   const handleSaveOrder = async () => {
@@ -623,7 +766,10 @@ const ClinicalConsultPage: React.FC = () => {
       }
       setOrderForm((f) => ({ ...f, testName: '', notes: '' }));
     } else {
-      setOrdersError('Failed to place order. Please try again.');
+      setOrdersError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to place order. Please try again.',
+      );
     }
   };
 
@@ -719,7 +865,10 @@ const ClinicalConsultPage: React.FC = () => {
       ]);
       setDiagForm((f) => ({ ...f, diagnosis: '', snomedCode: '' }));
     } else {
-      setDiagError('Failed to save diagnosis. Please try again.');
+      setDiagError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to save diagnosis. Please try again.',
+      );
     }
   };
 
@@ -813,7 +962,10 @@ const ClinicalConsultPage: React.FC = () => {
         instructions: '',
       });
     } else {
-      setMedError('Failed to save medication. Please try again.');
+      setMedError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to save medication. Please try again.',
+      );
     }
   };
 
@@ -846,10 +998,12 @@ const ClinicalConsultPage: React.FC = () => {
       });
       setCarePlanForm({ title: '', description: '' });
     } else {
-      setCarePlanError('Failed to save care plan. Please try again.');
+      setCarePlanError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to save care plan. Please try again.',
+      );
     }
   };
-
 
   // ─── Step badge counts ─────────────────────────────────────────────────────
 
@@ -874,16 +1028,27 @@ const ClinicalConsultPage: React.FC = () => {
     const enc = encounterResource as Encounter;
     const now = new Date().toISOString();
     const locs = [...((enc.location || []) as any[])];
-    const idx = locs.reduceRight((found: number, l: any, i: number) =>
-      found === -1 &&
-      (l?.location?.identifier?.value === 'in-consultation') &&
-      (l.status === 'active' || l.status === 'planned')
-        ? i : found, -1);
+    const idx = locs.reduceRight(
+      (found: number, l: any, i: number) =>
+        found === -1 &&
+        l?.location?.identifier?.value === 'in-consultation' &&
+        (l.status === 'active' || l.status === 'planned')
+          ? i
+          : found,
+      -1,
+    );
     if (idx >= 0) {
       const existing = locs[idx];
-      locs[idx] = { ...existing, status: 'completed', period: { ...(existing.period || {}), end: now } };
+      locs[idx] = {
+        ...existing,
+        status: 'completed',
+        period: { ...(existing.period || {}), end: now },
+      };
     }
-    locs.push({ location: { identifier: { value: 'medication' } }, status: 'planned' });
+    locs.push({
+      location: { identifier: { value: 'medication' } },
+      status: 'planned',
+    });
     const updated = { ...enc, status: 'in-progress' as const, location: locs };
     const result = await updateResource({
       resourceType: 'Encounter',
@@ -893,7 +1058,10 @@ const ClinicalConsultPage: React.FC = () => {
     if ('data' in result) {
       navigate('/queue');
     } else {
-      setFinishError('Failed to finish consult. Please try again.');
+      setFinishError(
+        getOperationOutcomeMessage('error' in result ? result.error : null) ||
+          'Failed to finish consult. Please try again.',
+      );
     }
   };
 
@@ -901,7 +1069,6 @@ const ClinicalConsultPage: React.FC = () => {
 
   return (
     <div className="-mx-4 -mt-8 flex flex-col min-h-screen">
-
       {/* ── Sticky demographic bar ─────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-5 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
         <div className="flex items-center gap-3 min-w-0">
@@ -909,11 +1076,32 @@ const ClinicalConsultPage: React.FC = () => {
             {patientName.charAt(0).toUpperCase() || '?'}
           </div>
           <div className="min-w-0">
-            <span className="font-bold text-gray-900 text-base leading-tight block truncate">{patientName || '—'}</span>
+            <span className="font-bold text-gray-900 text-base leading-tight block truncate">
+              {patientName || '—'}
+            </span>
             <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-gray-500">
-              {patient?.birthDate && <span>DOB: <strong className="text-gray-700">{patient.birthDate}</strong></span>}
-              {patient?.gender && <span>Sex: <strong className="text-gray-700 capitalize">{patient.gender}</strong></span>}
-              {patient?.identifier?.[0]?.value && <span>ID: <strong className="text-gray-700 font-mono">{patient.identifier[0].value}</strong></span>}
+              {patient?.birthDate && (
+                <span>
+                  DOB:{' '}
+                  <strong className="text-gray-700">{patient.birthDate}</strong>
+                </span>
+              )}
+              {patient?.gender && (
+                <span>
+                  Sex:{' '}
+                  <strong className="text-gray-700 capitalize">
+                    {patient.gender}
+                  </strong>
+                </span>
+              )}
+              {patient?.identifier?.[0]?.value && (
+                <span>
+                  ID:{' '}
+                  <strong className="text-gray-700 font-mono">
+                    {patient.identifier[0].value}
+                  </strong>
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -925,11 +1113,15 @@ const ClinicalConsultPage: React.FC = () => {
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
             In Progress
           </span>
-          {encounterStart && <span className="text-xs text-gray-400">{encounterStart}</span>}
+          {encounterStart && (
+            <span className="text-xs text-gray-400">{encounterStart}</span>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-          {finishError && <span className="text-xs text-red-600">{finishError}</span>}
+          {finishError && (
+            <span className="text-xs text-red-600">{finishError}</span>
+          )}
           <button
             onClick={handleFinishConsult}
             disabled={isFinishing}
@@ -948,10 +1140,13 @@ const ClinicalConsultPage: React.FC = () => {
 
       {/* ── Body: sidebar + content ────────────────────────────────────────── */}
       <div className="flex flex-1">
-
         {/* Left step-wizard sidebar */}
-        <aside className={`${sidebarCollapsed ? 'w-12' : 'w-56'} flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:flex flex-col transition-all duration-200`}>
-          <div className={`flex ${sidebarCollapsed ? 'justify-center' : 'justify-end'} p-1.5`}>
+        <aside
+          className={`${sidebarCollapsed ? 'w-12' : 'w-56'} flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto hidden md:flex flex-col transition-all duration-200`}
+        >
+          <div
+            className={`flex ${sidebarCollapsed ? 'justify-center' : 'justify-end'} p-1.5`}
+          >
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded text-sm leading-none"
@@ -973,18 +1168,22 @@ const ClinicalConsultPage: React.FC = () => {
                         : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                     }`}
                   >
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                      activeTab === step.id
-                        ? 'bg-blue-600 text-white'
-                        : tabCounts[step.id] > 0
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                        activeTab === step.id
+                          ? 'bg-blue-600 text-white'
+                          : tabCounts[step.id] > 0
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-600'
+                      }`}
+                    >
                       {tabCounts[step.id] > 0 ? '✓' : step.step}
                     </span>
                     <span className="truncate">{step.label}</span>
                     {tabCounts[step.id] > 0 && (
-                      <span className="ml-auto text-xs font-semibold text-green-600">{tabCounts[step.id]}</span>
+                      <span className="ml-auto text-xs font-semibold text-green-600">
+                        {tabCounts[step.id]}
+                      </span>
                     )}
                   </button>
                 ))}
@@ -997,7 +1196,11 @@ const ClinicalConsultPage: React.FC = () => {
                 >
                   {isFinishing ? 'Finishing…' : '✓ Finish Consult'}
                 </button>
-                {finishError && <p className="text-xs text-red-600 mt-1 text-center">{finishError}</p>}
+                {finishError && (
+                  <p className="text-xs text-red-600 mt-1 text-center">
+                    {finishError}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -1005,12 +1208,12 @@ const ClinicalConsultPage: React.FC = () => {
 
         {/* Main step content */}
         <main className="flex-1 min-w-0 px-6 py-5">
-
           {/* Step header */}
           <div className="flex items-center justify-between mb-5">
             <div>
               <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-                Step {STEPS.findIndex((s) => s.id === activeTab) + 1} of {STEPS.length}
+                Step {STEPS.findIndex((s) => s.id === activeTab) + 1} of{' '}
+                {STEPS.length}
               </span>
               <h2 className="text-lg font-bold text-gray-800 mt-0.5">
                 {STEPS.find((s) => s.id === activeTab)?.label}
@@ -1051,810 +1254,913 @@ const ClinicalConsultPage: React.FC = () => {
           </div>
 
           <div className="bg-white shadow rounded-lg p-6">
-        {/* ── VITALS ── */}
-        {activeTab === 'vitals' && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Vital Signs
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Record the patient's vital signs. Leave fields blank to skip.
-            </p>
-
-            {vitalsItems.length > 0 && !isEditingVitals ? (
+            {/* ── VITALS ── */}
+            {activeTab === 'vitals' && (
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Recorded Vitals ({vitalsItems.length})
-                  </h4>
-                  <button
-                    onClick={prepareVitalsEdit}
-                    className="text-xs font-semibold text-amber-600 border border-amber-300 px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
-                  >
-                    ✏️ Update Vitals
-                  </button>
-                </div>
-                <ul className="space-y-2">
-                  {vitalsItems.map((item) => (
-                    <li key={item.id} className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
-                      <span className="font-medium text-gray-700">{item.display}</span>
-                      {item.note && <span className="text-gray-500 text-xs flex-shrink-0">{item.note}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <label className={labelCls}>SpO₂ (%)</label>
-                <input
-                  type="number"
-                  min="50"
-                  max="100"
-                  step="1"
-                  placeholder="e.g. 98"
-                  className={fieldCls}
-                  value={vitalsForm.spo2}
-                  onChange={(e) =>
-                    setVitalsForm((f) => ({ ...f, spo2: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Heart Rate (bpm)</label>
-                <input
-                  type="number"
-                  min="20"
-                  max="300"
-                  step="1"
-                  placeholder="e.g. 72"
-                  className={fieldCls}
-                  value={vitalsForm.hr}
-                  onChange={(e) =>
-                    setVitalsForm((f) => ({ ...f, hr: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Systolic BP (mmHg)</label>
-                <input
-                  type="number"
-                  min="50"
-                  max="300"
-                  step="1"
-                  placeholder="e.g. 120"
-                  className={fieldCls}
-                  value={vitalsForm.sbp}
-                  onChange={(e) =>
-                    setVitalsForm((f) => ({ ...f, sbp: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Diastolic BP (mmHg)</label>
-                <input
-                  type="number"
-                  min="20"
-                  max="200"
-                  step="1"
-                  placeholder="e.g. 80"
-                  className={fieldCls}
-                  value={vitalsForm.dbp}
-                  onChange={(e) =>
-                    setVitalsForm((f) => ({ ...f, dbp: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Resp. Rate (breaths/min)</label>
-                <input
-                  type="number"
-                  min="4"
-                  max="60"
-                  step="1"
-                  placeholder="e.g. 16"
-                  className={fieldCls}
-                  value={vitalsForm.rr}
-                  onChange={(e) =>
-                    setVitalsForm((f) => ({ ...f, rr: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Temperature (°C)</label>
-                <input
-                  type="number"
-                  min="30"
-                  max="43"
-                  step="0.1"
-                  placeholder="e.g. 36.8"
-                  className={fieldCls}
-                  value={vitalsForm.temp}
-                  onChange={(e) =>
-                    setVitalsForm((f) => ({ ...f, temp: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                  Vital Signs
+                </h2>
+                <p className="text-sm text-gray-500 mb-5">
+                  Record the patient's vital signs. Leave fields blank to skip.
+                </p>
 
-            <div className="mt-4">
-              <label className={labelCls}>Recorded At</label>
-              <input
-                type="datetime-local"
-                className={`${fieldCls} max-w-xs`}
-                value={vitalsForm.recordedAt}
-                onChange={(e) =>
-                  setVitalsForm((f) => ({ ...f, recordedAt: e.target.value }))
-                }
-              />
-            </div>
-
-            <ErrorBox msg={vitalsError} />
-
-            <button
-              onClick={handleSaveVitals}
-              disabled={isCreating}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-            >
-              {isCreating ? 'Saving...' : vitalsItems.length > 0 ? 'Update Vital Signs' : 'Save Vital Signs'}
-            </button>
-            {isEditingVitals && (
-              <button
-                onClick={() => setIsEditingVitals(false)}
-                className="mt-2 ml-3 text-xs text-gray-500 hover:text-gray-700"
-              >
-                Cancel
-              </button>
-            )}
-
-            <RecordedList
-              items={vitalsItems}
-              emptyLabel="No vitals recorded yet."
-            />
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── PHYSICAL EXAM ── */}
-        {activeTab === 'exam' && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Physical Examination
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Record findings by body system. Add one finding at a time.
-            </p>
-
-            {examItems.length > 0 && !isAddingMore.exam ? (
-              <ExistingRecords
-                items={examItems}
-                label="Recorded Findings"
-                onAddMore={() => setIsAddingMore((m) => ({ ...m, exam: true }))}
-              />
-            ) : (
-              <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Body System</label>
-                <select
-                  className={fieldCls}
-                  value={examForm.bodySystem}
-                  onChange={(e) =>
-                    setExamForm((f) => ({ ...f, bodySystem: e.target.value }))
-                  }
-                >
-                  {BODY_SYSTEMS.map((s) => (
-                    <option key={s.code} value={s.code}>
-                      {s.display}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Finding</label>
-                <input
-                  type="text"
-                  placeholder="Describe the finding..."
-                  className={fieldCls}
-                  value={examForm.finding}
-                  onChange={(e) =>
-                    setExamForm((f) => ({ ...f, finding: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="normality"
-                  checked={examForm.isNormal}
-                  onChange={() =>
-                    setExamForm((f) => ({ ...f, isNormal: true }))
-                  }
-                  className="text-green-600"
-                />
-                <span className="text-sm text-gray-700">Normal</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="normality"
-                  checked={!examForm.isNormal}
-                  onChange={() =>
-                    setExamForm((f) => ({ ...f, isNormal: false }))
-                  }
-                  className="text-red-500"
-                />
-                <span className="text-sm text-gray-700">Abnormal</span>
-              </label>
-            </div>
-
-            <ErrorBox msg={examError} />
-
-            <button
-              onClick={handleSaveExam}
-              disabled={isCreating}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-            >
-              {isCreating ? 'Saving...' : 'Add Finding'}
-            </button>
-
-            <RecordedList
-              items={examItems}
-              emptyLabel="No examination findings recorded yet."
-            />
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── LAB INVESTIGATIONS ── */}
-        {activeTab === 'lab' && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Lab Investigations
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Place laboratory investigation orders for this encounter.
-            </p>
-
-            {labOrderItems.length > 0 && !isAddingMore.lab ? (
-              <ExistingRecords
-                items={labOrderItems}
-                label="Lab Orders"
-                onAddMore={() => setIsAddingMore((m) => ({ ...m, lab: true }))}
-              />
-            ) : (
-              <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Category</label>
-                <select
-                  className={fieldCls}
-                  value={orderForm.category}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({ ...f, category: e.target.value }))
-                  }
-                >
-                  {LAB_CATEGORIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.display}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>
-                  Test Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Full Blood Count, LFT, HbA1c..."
-                  className={fieldCls}
-                  value={orderForm.testName}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({ ...f, testName: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Priority</label>
-                <select
-                  className={fieldCls}
-                  value={orderForm.priority}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({
-                      ...f,
-                      priority: e.target.value as any,
-                    }))
-                  }
-                >
-                  <option value="routine">Routine</option>
-                  <option value="urgent">Urgent</option>
-                  <option value="stat">STAT</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Clinical Notes</label>
-                <input
-                  type="text"
-                  placeholder="Optional clinical indication..."
-                  className={fieldCls}
-                  value={orderForm.notes}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({ ...f, notes: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-
-            <ErrorBox msg={ordersError} />
-
-            <button
-              onClick={handleSaveOrder}
-              disabled={isCreating}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-            >
-              {isCreating ? 'Placing...' : 'Place Lab Order'}
-            </button>
-
-            <RecordedList
-              items={labOrderItems}
-              emptyLabel="No lab orders placed yet."
-            />
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── RADIOLOGY ORDERS ── */}
-        {activeTab === 'rad' && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Radiology Orders
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Place radiology and imaging orders for this encounter.
-            </p>
-
-            {radOrderItems.length > 0 && !isAddingMore.rad ? (
-              <ExistingRecords
-                items={radOrderItems}
-                label="Radiology Orders"
-                onAddMore={() => setIsAddingMore((m) => ({ ...m, rad: true }))}
-              />
-            ) : (
-              <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Modality / Study</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Chest X-ray, CT Abdomen, MRI Brain..."
-                  className={fieldCls}
-                  value={orderForm.testName}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({ ...f, testName: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Priority</label>
-                <select
-                  className={fieldCls}
-                  value={orderForm.priority}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({
-                      ...f,
-                      priority: e.target.value as any,
-                    }))
-                  }
-                >
-                  <option value="routine">Routine</option>
-                  <option value="urgent">Urgent</option>
-                  <option value="stat">STAT</option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className={labelCls}>Clinical Indication</label>
-                <input
-                  type="text"
-                  placeholder="e.g. ?Pneumonia, rule out PE..."
-                  className={fieldCls}
-                  value={orderForm.notes}
-                  onChange={(e) =>
-                    setOrderForm((f) => ({ ...f, notes: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-
-            <ErrorBox msg={ordersError} />
-
-            <button
-              onClick={handleSaveOrder}
-              disabled={isCreating}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-            >
-              {isCreating ? 'Placing...' : 'Place Radiology Order'}
-            </button>
-
-            <RecordedList
-              items={radOrderItems}
-              emptyLabel="No radiology orders placed yet."
-            />
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── ASSESSMENT ── */}
-        {activeTab === 'assessment' && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              Assessment / Diagnosis
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Record the clinical diagnosis for this encounter.
-            </p>
-
-            {diagnosisItems.length > 0 && !isAddingMore.assessment ? (
-              <ExistingRecords
-                items={diagnosisItems}
-                label="Diagnoses"
-                onAddMore={() => setIsAddingMore((m) => ({ ...m, assessment: true }))}
-              />
-            ) : (
-              <>
-            {/* Summary of findings */}
-            {(vitalsItems.length > 0 ||
-              examItems.length > 0 ||
-              labOrderItems.length + radOrderItems.length > 0) && (
-              <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-5 text-sm text-gray-600">
-                <span className="font-medium text-gray-700">
-                  Findings summary:{' '}
-                </span>
-                {vitalsItems.length} vital sign
-                {vitalsItems.length !== 1 ? 's' : ''} &middot;{' '}
-                {examItems.length} exam finding
-                {examItems.length !== 1 ? 's' : ''} &middot; {labOrderItems.length + radOrderItems.length}{' '}
-                order{labOrderItems.length + radOrderItems.length !== 1 ? 's' : ''} placed
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className={labelCls}>
-                  Diagnosis <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Acute decompensated heart failure"
-                  className={fieldCls}
-                  value={diagForm.diagnosis}
-                  onChange={(e) =>
-                    setDiagForm((f) => ({ ...f, diagnosis: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>
-                  SNOMED Code{' '}
-                  <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 703328004"
-                  className={fieldCls}
-                  value={diagForm.snomedCode}
-                  onChange={(e) =>
-                    setDiagForm((f) => ({ ...f, snomedCode: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Verification Status</label>
-                <select
-                  className={fieldCls}
-                  value={diagForm.verification}
-                  onChange={(e) =>
-                    setDiagForm((f) => ({
-                      ...f,
-                      verification: e.target.value as any,
-                    }))
-                  }
-                >
-                  <option value="confirmed">Confirmed</option>
-                  <option value="provisional">Provisional</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Severity</label>
-                <select
-                  className={fieldCls}
-                  value={diagForm.severity}
-                  onChange={(e) =>
-                    setDiagForm((f) => ({
-                      ...f,
-                      severity: e.target.value as any,
-                    }))
-                  }
-                >
-                  <option value="mild">Mild</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="severe">Severe</option>
-                </select>
-              </div>
-            </div>
-
-            <ErrorBox msg={diagError} />
-
-            <button
-              onClick={handleSaveDiagnosis}
-              disabled={isCreating}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-            >
-              {isCreating ? 'Saving...' : 'Save Diagnosis'}
-            </button>
-
-            <RecordedList
-              items={diagnosisItems}
-              emptyLabel="No diagnoses recorded yet."
-            />
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── MANAGEMENT ── */}
-        {activeTab === 'management' && (
-          <div className="space-y-8">
-            {(medicationItems.length > 0 || carePlanItem != null) && !isAddingMore.management ? (
-              <>
-                {medicationItems.length > 0 && (
-                  <ExistingRecords
-                    items={medicationItems}
-                    label="Medications"
-                    onAddMore={() => setIsAddingMore((m) => ({ ...m, management: true }))}
-                  />
-                )}
-                {carePlanItem && (
-                  <div className="border-t border-gray-100 pt-4">
+                {vitalsItems.length > 0 && !isEditingVitals ? (
+                  <div>
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Care Plan</h4>
-                      {medicationItems.length === 0 && (
-                        <button
-                          onClick={() => setIsAddingMore((m) => ({ ...m, management: true }))}
-                          className="text-xs font-semibold text-blue-600 border border-blue-300 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Recorded Vitals ({vitalsItems.length})
+                      </h4>
+                      <button
+                        onClick={prepareVitalsEdit}
+                        className="text-xs font-semibold text-amber-600 border border-amber-300 px-3 py-1 rounded-md hover:bg-amber-50 transition-colors"
+                      >
+                        ✏️ Update Vitals
+                      </button>
+                    </div>
+                    <ul className="space-y-2">
+                      {vitalsItems.map((item) => (
+                        <li
+                          key={item.id}
+                          className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2"
                         >
-                          + Add More
-                        </button>
+                          <span className="font-medium text-gray-700">
+                            {item.display}
+                          </span>
+                          {item.note && (
+                            <span className="text-gray-500 text-xs flex-shrink-0">
+                              {item.note}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelCls}>SpO₂ (%)</label>
+                        <input
+                          type="number"
+                          min="50"
+                          max="100"
+                          step="1"
+                          placeholder="e.g. 98"
+                          className={fieldCls}
+                          value={vitalsForm.spo2}
+                          onChange={(e) =>
+                            setVitalsForm((f) => ({
+                              ...f,
+                              spo2: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Heart Rate (bpm)</label>
+                        <input
+                          type="number"
+                          min="20"
+                          max="300"
+                          step="1"
+                          placeholder="e.g. 72"
+                          className={fieldCls}
+                          value={vitalsForm.hr}
+                          onChange={(e) =>
+                            setVitalsForm((f) => ({ ...f, hr: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Systolic BP (mmHg)</label>
+                        <input
+                          type="number"
+                          min="50"
+                          max="300"
+                          step="1"
+                          placeholder="e.g. 120"
+                          className={fieldCls}
+                          value={vitalsForm.sbp}
+                          onChange={(e) =>
+                            setVitalsForm((f) => ({
+                              ...f,
+                              sbp: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Diastolic BP (mmHg)</label>
+                        <input
+                          type="number"
+                          min="20"
+                          max="200"
+                          step="1"
+                          placeholder="e.g. 80"
+                          className={fieldCls}
+                          value={vitalsForm.dbp}
+                          onChange={(e) =>
+                            setVitalsForm((f) => ({
+                              ...f,
+                              dbp: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>
+                          Resp. Rate (breaths/min)
+                        </label>
+                        <input
+                          type="number"
+                          min="4"
+                          max="60"
+                          step="1"
+                          placeholder="e.g. 16"
+                          className={fieldCls}
+                          value={vitalsForm.rr}
+                          onChange={(e) =>
+                            setVitalsForm((f) => ({ ...f, rr: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Temperature (°C)</label>
+                        <input
+                          type="number"
+                          min="30"
+                          max="43"
+                          step="0.1"
+                          placeholder="e.g. 36.8"
+                          className={fieldCls}
+                          value={vitalsForm.temp}
+                          onChange={(e) =>
+                            setVitalsForm((f) => ({
+                              ...f,
+                              temp: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <label className={labelCls}>Recorded At</label>
+                      <input
+                        type="datetime-local"
+                        className={`${fieldCls} max-w-xs`}
+                        value={vitalsForm.recordedAt}
+                        onChange={(e) =>
+                          setVitalsForm((f) => ({
+                            ...f,
+                            recordedAt: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <ErrorBox msg={vitalsError} />
+
+                    <button
+                      onClick={handleSaveVitals}
+                      disabled={isCreating}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                    >
+                      {isCreating
+                        ? 'Saving...'
+                        : vitalsItems.length > 0
+                          ? 'Update Vital Signs'
+                          : 'Save Vital Signs'}
+                    </button>
+                    {isEditingVitals && (
+                      <button
+                        onClick={() => setIsEditingVitals(false)}
+                        className="mt-2 ml-3 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    )}
+
+                    <RecordedList
+                      items={vitalsItems}
+                      emptyLabel="No vitals recorded yet."
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── PHYSICAL EXAM ── */}
+            {activeTab === 'exam' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                  Physical Examination
+                </h2>
+                <p className="text-sm text-gray-500 mb-5">
+                  Record findings by body system. Add one finding at a time.
+                </p>
+
+                {examItems.length > 0 && !isAddingMore.exam ? (
+                  <ExistingRecords
+                    items={examItems}
+                    label="Recorded Findings"
+                    onAddMore={() =>
+                      setIsAddingMore((m) => ({ ...m, exam: true }))
+                    }
+                  />
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Body System</label>
+                        <select
+                          className={fieldCls}
+                          value={examForm.bodySystem}
+                          onChange={(e) =>
+                            setExamForm((f) => ({
+                              ...f,
+                              bodySystem: e.target.value,
+                            }))
+                          }
+                        >
+                          {BODY_SYSTEMS.map((s) => (
+                            <option key={s.code} value={s.code}>
+                              {s.display}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Finding</label>
+                        <input
+                          type="text"
+                          placeholder="Describe the finding..."
+                          className={fieldCls}
+                          value={examForm.finding}
+                          onChange={(e) =>
+                            setExamForm((f) => ({
+                              ...f,
+                              finding: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="normality"
+                          checked={examForm.isNormal}
+                          onChange={() =>
+                            setExamForm((f) => ({ ...f, isNormal: true }))
+                          }
+                          className="text-green-600"
+                        />
+                        <span className="text-sm text-gray-700">Normal</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="normality"
+                          checked={!examForm.isNormal}
+                          onChange={() =>
+                            setExamForm((f) => ({ ...f, isNormal: false }))
+                          }
+                          className="text-red-500"
+                        />
+                        <span className="text-sm text-gray-700">Abnormal</span>
+                      </label>
+                    </div>
+
+                    <ErrorBox msg={examError} />
+
+                    <button
+                      onClick={handleSaveExam}
+                      disabled={isCreating}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                    >
+                      {isCreating ? 'Saving...' : 'Add Finding'}
+                    </button>
+
+                    <RecordedList
+                      items={examItems}
+                      emptyLabel="No examination findings recorded yet."
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── LAB INVESTIGATIONS ── */}
+            {activeTab === 'lab' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                  Lab Investigations
+                </h2>
+                <p className="text-sm text-gray-500 mb-5">
+                  Place laboratory investigation orders for this encounter.
+                </p>
+
+                {labOrderItems.length > 0 && !isAddingMore.lab ? (
+                  <ExistingRecords
+                    items={labOrderItems}
+                    label="Lab Orders"
+                    onAddMore={() =>
+                      setIsAddingMore((m) => ({ ...m, lab: true }))
+                    }
+                  />
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Category</label>
+                        <select
+                          className={fieldCls}
+                          value={orderForm.category}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              category: e.target.value,
+                            }))
+                          }
+                        >
+                          {LAB_CATEGORIES.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.display}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>
+                          Test Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Full Blood Count, LFT, HbA1c..."
+                          className={fieldCls}
+                          value={orderForm.testName}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              testName: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Priority</label>
+                        <select
+                          className={fieldCls}
+                          value={orderForm.priority}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              priority: e.target.value as any,
+                            }))
+                          }
+                        >
+                          <option value="routine">Routine</option>
+                          <option value="urgent">Urgent</option>
+                          <option value="stat">STAT</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Clinical Notes</label>
+                        <input
+                          type="text"
+                          placeholder="Optional clinical indication..."
+                          className={fieldCls}
+                          value={orderForm.notes}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              notes: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <ErrorBox msg={ordersError} />
+
+                    <button
+                      onClick={handleSaveOrder}
+                      disabled={isCreating}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                    >
+                      {isCreating ? 'Placing...' : 'Place Lab Order'}
+                    </button>
+
+                    <RecordedList
+                      items={labOrderItems}
+                      emptyLabel="No lab orders placed yet."
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── RADIOLOGY ORDERS ── */}
+            {activeTab === 'rad' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                  Radiology Orders
+                </h2>
+                <p className="text-sm text-gray-500 mb-5">
+                  Place radiology and imaging orders for this encounter.
+                </p>
+
+                {radOrderItems.length > 0 && !isAddingMore.rad ? (
+                  <ExistingRecords
+                    items={radOrderItems}
+                    label="Radiology Orders"
+                    onAddMore={() =>
+                      setIsAddingMore((m) => ({ ...m, rad: true }))
+                    }
+                  />
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Modality / Study</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Chest X-ray, CT Abdomen, MRI Brain..."
+                          className={fieldCls}
+                          value={orderForm.testName}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              testName: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Priority</label>
+                        <select
+                          className={fieldCls}
+                          value={orderForm.priority}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              priority: e.target.value as any,
+                            }))
+                          }
+                        >
+                          <option value="routine">Routine</option>
+                          <option value="urgent">Urgent</option>
+                          <option value="stat">STAT</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className={labelCls}>Clinical Indication</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. ?Pneumonia, rule out PE..."
+                          className={fieldCls}
+                          value={orderForm.notes}
+                          onChange={(e) =>
+                            setOrderForm((f) => ({
+                              ...f,
+                              notes: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <ErrorBox msg={ordersError} />
+
+                    <button
+                      onClick={handleSaveOrder}
+                      disabled={isCreating}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                    >
+                      {isCreating ? 'Placing...' : 'Place Radiology Order'}
+                    </button>
+
+                    <RecordedList
+                      items={radOrderItems}
+                      emptyLabel="No radiology orders placed yet."
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── ASSESSMENT ── */}
+            {activeTab === 'assessment' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                  Assessment / Diagnosis
+                </h2>
+                <p className="text-sm text-gray-500 mb-5">
+                  Record the clinical diagnosis for this encounter.
+                </p>
+
+                {diagnosisItems.length > 0 && !isAddingMore.assessment ? (
+                  <ExistingRecords
+                    items={diagnosisItems}
+                    label="Diagnoses"
+                    onAddMore={() =>
+                      setIsAddingMore((m) => ({ ...m, assessment: true }))
+                    }
+                  />
+                ) : (
+                  <>
+                    {/* Summary of findings */}
+                    {(vitalsItems.length > 0 ||
+                      examItems.length > 0 ||
+                      labOrderItems.length + radOrderItems.length > 0) && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-5 text-sm text-gray-600">
+                        <span className="font-medium text-gray-700">
+                          Findings summary:{' '}
+                        </span>
+                        {vitalsItems.length} vital sign
+                        {vitalsItems.length !== 1 ? 's' : ''} &middot;{' '}
+                        {examItems.length} exam finding
+                        {examItems.length !== 1 ? 's' : ''} &middot;{' '}
+                        {labOrderItems.length + radOrderItems.length} order
+                        {labOrderItems.length + radOrderItems.length !== 1
+                          ? 's'
+                          : ''}{' '}
+                        placed
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className={labelCls}>
+                          Diagnosis <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Acute decompensated heart failure"
+                          className={fieldCls}
+                          value={diagForm.diagnosis}
+                          onChange={(e) =>
+                            setDiagForm((f) => ({
+                              ...f,
+                              diagnosis: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>
+                          SNOMED Code{' '}
+                          <span className="text-gray-400 font-normal">
+                            (optional)
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 703328004"
+                          className={fieldCls}
+                          value={diagForm.snomedCode}
+                          onChange={(e) =>
+                            setDiagForm((f) => ({
+                              ...f,
+                              snomedCode: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Verification Status</label>
+                        <select
+                          className={fieldCls}
+                          value={diagForm.verification}
+                          onChange={(e) =>
+                            setDiagForm((f) => ({
+                              ...f,
+                              verification: e.target.value as any,
+                            }))
+                          }
+                        >
+                          <option value="confirmed">Confirmed</option>
+                          <option value="provisional">Provisional</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Severity</label>
+                        <select
+                          className={fieldCls}
+                          value={diagForm.severity}
+                          onChange={(e) =>
+                            setDiagForm((f) => ({
+                              ...f,
+                              severity: e.target.value as any,
+                            }))
+                          }
+                        >
+                          <option value="mild">Mild</option>
+                          <option value="moderate">Moderate</option>
+                          <option value="severe">Severe</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <ErrorBox msg={diagError} />
+
+                    <button
+                      onClick={handleSaveDiagnosis}
+                      disabled={isCreating}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                    >
+                      {isCreating ? 'Saving...' : 'Save Diagnosis'}
+                    </button>
+
+                    <RecordedList
+                      items={diagnosisItems}
+                      emptyLabel="No diagnoses recorded yet."
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── MANAGEMENT ── */}
+            {activeTab === 'management' && (
+              <div className="space-y-8">
+                {(medicationItems.length > 0 || carePlanItem != null) &&
+                !isAddingMore.management ? (
+                  <>
+                    {medicationItems.length > 0 && (
+                      <ExistingRecords
+                        items={medicationItems}
+                        label="Medications"
+                        onAddMore={() =>
+                          setIsAddingMore((m) => ({ ...m, management: true }))
+                        }
+                      />
+                    )}
+                    {carePlanItem && (
+                      <div className="border-t border-gray-100 pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Care Plan
+                          </h4>
+                          {medicationItems.length === 0 && (
+                            <button
+                              onClick={() =>
+                                setIsAddingMore((m) => ({
+                                  ...m,
+                                  management: true,
+                                }))
+                              }
+                              className="text-xs font-semibold text-blue-600 border border-blue-300 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                            >
+                              + Add More
+                            </button>
+                          )}
+                        </div>
+                        <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
+                          <span className="font-medium text-gray-700">
+                            {carePlanItem.display}
+                          </span>
+                          {carePlanItem.note && (
+                            <span className="text-gray-500 text-xs flex-shrink-0">
+                              {carePlanItem.note}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Medications */}
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                        Medications
+                      </h2>
+                      <p className="text-sm text-gray-500 mb-4">
+                        Add medication orders for this encounter.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className={labelCls}>
+                            Drug Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Furosemide"
+                            className={fieldCls}
+                            value={medForm.drugName}
+                            onChange={(e) =>
+                              setMedForm((f) => ({
+                                ...f,
+                                drugName: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className={labelCls}>Dose</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 40"
+                              className={fieldCls}
+                              value={medForm.dose}
+                              onChange={(e) =>
+                                setMedForm((f) => ({
+                                  ...f,
+                                  dose: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="w-24">
+                            <label className={labelCls}>Unit</label>
+                            <select
+                              className={fieldCls}
+                              value={medForm.unit}
+                              onChange={(e) =>
+                                setMedForm((f) => ({
+                                  ...f,
+                                  unit: e.target.value,
+                                }))
+                              }
+                            >
+                              {['mg', 'mcg', 'g', 'mL', 'units', 'IU', '%'].map(
+                                (u) => (
+                                  <option key={u} value={u}>
+                                    {u}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Route</label>
+                          <select
+                            className={fieldCls}
+                            value={medForm.route}
+                            onChange={(e) =>
+                              setMedForm((f) => ({
+                                ...f,
+                                route: e.target.value as any,
+                              }))
+                            }
+                          >
+                            {Object.keys(ROUTE_SNOMED).map((r) => (
+                              <option key={r} value={r}>
+                                {r.toUpperCase()}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Frequency</label>
+                          <select
+                            className={fieldCls}
+                            value={medForm.frequency}
+                            onChange={(e) =>
+                              setMedForm((f) => ({
+                                ...f,
+                                frequency: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">— Select —</option>
+                            {[
+                              'Once daily (OD)',
+                              'Twice daily (BD)',
+                              'Three times daily (TDS)',
+                              'Four times daily (QDS)',
+                              'Every 6 hours (Q6H)',
+                              'Every 8 hours (Q8H)',
+                              'Every 12 hours (Q12H)',
+                              'STAT (once only)',
+                              'PRN (as needed)',
+                              'Nightly (ON)',
+                            ].map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className={labelCls}>
+                            Special Instructions
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. With food, monitor potassium..."
+                            className={fieldCls}
+                            value={medForm.instructions}
+                            onChange={(e) =>
+                              setMedForm((f) => ({
+                                ...f,
+                                instructions: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <ErrorBox msg={medError} />
+
+                      <button
+                        onClick={handleSaveMedication}
+                        disabled={isCreating}
+                        className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                      >
+                        {isCreating ? 'Saving...' : 'Add Medication'}
+                      </button>
+
+                      <RecordedList
+                        items={medicationItems}
+                        emptyLabel="No medications ordered yet."
+                      />
+                    </div>
+
+                    {/* Care Plan */}
+                    <div className="border-t border-gray-100 pt-6">
+                      <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                        Care Plan
+                      </h2>
+                      <p className="text-sm text-gray-500 mb-4">
+                        Document the overall management and follow-up plan.
+                      </p>
+
+                      {carePlanItem ? (
+                        <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                          <div className="font-medium text-gray-800 text-sm">
+                            {carePlanItem.display}
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            {carePlanItem.note}
+                          </div>
+                          <div className="text-xs text-green-700 mt-2">
+                            Care plan saved (ID: {carePlanItem.id})
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-1 gap-4">
+                            <div>
+                              <label className={labelCls}>Plan Title</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. HFrEF Management Plan"
+                                className={fieldCls}
+                                value={carePlanForm.title}
+                                onChange={(e) =>
+                                  setCarePlanForm((f) => ({
+                                    ...f,
+                                    title: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className={labelCls}>
+                                Plan Description{' '}
+                                <span className="text-red-500">*</span>
+                              </label>
+                              <textarea
+                                rows={4}
+                                placeholder="Describe the management goals, plan, referrals, and follow-up..."
+                                className={fieldCls}
+                                value={carePlanForm.description}
+                                onChange={(e) =>
+                                  setCarePlanForm((f) => ({
+                                    ...f,
+                                    description: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          <ErrorBox msg={carePlanError} />
+
+                          <button
+                            onClick={handleSaveCarePlan}
+                            disabled={isCreating}
+                            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
+                          >
+                            {isCreating ? 'Saving...' : 'Save Care Plan'}
+                          </button>
+                        </>
                       )}
                     </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm flex items-center justify-between gap-2">
-                      <span className="font-medium text-gray-700">{carePlanItem.display}</span>
-                      {carePlanItem.note && <span className="text-gray-500 text-xs flex-shrink-0">{carePlanItem.note}</span>}
-                    </div>
-                  </div>
+                  </>
                 )}
-              </>
-            ) : (
-              <>
-            {/* Medications */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-1">
-                Medications
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Add medication orders for this encounter.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>
-                    Drug Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Furosemide"
-                    className={fieldCls}
-                    value={medForm.drugName}
-                    onChange={(e) =>
-                      setMedForm((f) => ({ ...f, drugName: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className={labelCls}>Dose</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 40"
-                      className={fieldCls}
-                      value={medForm.dose}
-                      onChange={(e) =>
-                        setMedForm((f) => ({ ...f, dose: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="w-24">
-                    <label className={labelCls}>Unit</label>
-                    <select
-                      className={fieldCls}
-                      value={medForm.unit}
-                      onChange={(e) =>
-                        setMedForm((f) => ({ ...f, unit: e.target.value }))
-                      }
-                    >
-                      {['mg', 'mcg', 'g', 'mL', 'units', 'IU', '%'].map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Route</label>
-                  <select
-                    className={fieldCls}
-                    value={medForm.route}
-                    onChange={(e) =>
-                      setMedForm((f) => ({
-                        ...f,
-                        route: e.target.value as any,
-                      }))
-                    }
-                  >
-                    {Object.keys(ROUTE_SNOMED).map((r) => (
-                      <option key={r} value={r}>
-                        {r.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Frequency</label>
-                  <select
-                    className={fieldCls}
-                    value={medForm.frequency}
-                    onChange={(e) =>
-                      setMedForm((f) => ({ ...f, frequency: e.target.value }))
-                    }
-                  >
-                    <option value="">— Select —</option>
-                    {[
-                      'Once daily (OD)',
-                      'Twice daily (BD)',
-                      'Three times daily (TDS)',
-                      'Four times daily (QDS)',
-                      'Every 6 hours (Q6H)',
-                      'Every 8 hours (Q8H)',
-                      'Every 12 hours (Q12H)',
-                      'STAT (once only)',
-                      'PRN (as needed)',
-                      'Nightly (ON)',
-                    ].map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className={labelCls}>Special Instructions</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. With food, monitor potassium..."
-                    className={fieldCls}
-                    value={medForm.instructions}
-                    onChange={(e) =>
-                      setMedForm((f) => ({
-                        ...f,
-                        instructions: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
               </div>
-
-              <ErrorBox msg={medError} />
-
-              <button
-                onClick={handleSaveMedication}
-                disabled={isCreating}
-                className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-              >
-                {isCreating ? 'Saving...' : 'Add Medication'}
-              </button>
-
-              <RecordedList
-                items={medicationItems}
-                emptyLabel="No medications ordered yet."
-              />
-            </div>
-
-            {/* Care Plan */}
-            <div className="border-t border-gray-100 pt-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-1">
-                Care Plan
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Document the overall management and follow-up plan.
-              </p>
-
-              {carePlanItem ? (
-                <div className="bg-green-50 border border-green-200 rounded-md p-4">
-                  <div className="font-medium text-gray-800 text-sm">
-                    {carePlanItem.display}
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {carePlanItem.note}
-                  </div>
-                  <div className="text-xs text-green-700 mt-2">
-                    Care plan saved (ID: {carePlanItem.id})
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 gap-4">
-                    <div>
-                      <label className={labelCls}>Plan Title</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. HFrEF Management Plan"
-                        className={fieldCls}
-                        value={carePlanForm.title}
-                        onChange={(e) =>
-                          setCarePlanForm((f) => ({
-                            ...f,
-                            title: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>
-                        Plan Description <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        rows={4}
-                        placeholder="Describe the management goals, plan, referrals, and follow-up..."
-                        className={fieldCls}
-                        value={carePlanForm.description}
-                        onChange={(e) =>
-                          setCarePlanForm((f) => ({
-                            ...f,
-                            description: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <ErrorBox msg={carePlanError} />
-
-                  <button
-                    onClick={handleSaveCarePlan}
-                    disabled={isCreating}
-                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded-md disabled:opacity-50 transition-colors"
-                  >
-                    {isCreating ? 'Saving...' : 'Save Care Plan'}
-                  </button>
-                </>
-              )}
-            </div>
-              </>
             )}
           </div>
-        )}
-
-      </div>
-      </main>
+        </main>
       </div>
     </div>
   );

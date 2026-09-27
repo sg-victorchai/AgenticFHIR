@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getAuthenticatedHeaders } from '../services/auth/oidc';
 
 // SSE server configuration (no FHIR context path)
 let SSE_BASE_URL = import.meta.env.VITE_SSE_BASE_URL || 'http://localhost:8080';
@@ -7,7 +8,7 @@ const API_KEY = import.meta.env.VITE_API_KEY;
 // Helper function - CORS now enabled on Azure server, so no proxy needed
 const getSseProxyUrl = (url: string): string => {
   // Return URL as-is since CORS is now enabled on the Azure server
-  return url;
+  return url.replace(/\/+$/, '');
 };
 
 // Use proxy URL in development mode
@@ -49,16 +50,56 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
   const [isConnected, setIsConnected] = useState(false);
   const [events, setEvents] = useState<FHIREventNotification[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectAttemptRef = useRef(0);
+  // Whether the hook should keep the stream alive across drops; distinct from
+  // abortControllerRef so a mid-stream reconnect isn't mistaken for a stop.
+  const shouldStayConnectedRef = useRef(false);
+  const MAX_RECONNECT_DELAY_MS = 15000;
 
-  const connect = () => {
-    // Close existing connection if any
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+  const handleEvent = (eventData: string) => {
+    try {
+      const data: FHIREventNotification = JSON.parse(eventData);
+      console.log('Received FHIR event:', data);
+      setEvents((prev) => [data, ...prev].slice(0, 100));
+      onEvent?.(data);
+    } catch (err) {
+      console.error('Error parsing event data:', err);
     }
+  };
+
+  const scheduleReconnect = () => {
+    if (!shouldStayConnectedRef.current || reconnectTimeoutRef.current) return;
+    const delayMs = Math.min(
+      1000 * 2 ** reconnectAttemptRef.current++,
+      MAX_RECONNECT_DELAY_MS,
+    );
+    reconnectTimeoutRef.current = setTimeout(() => {
+      reconnectTimeoutRef.current = undefined;
+      if (shouldStayConnectedRef.current) void connect();
+    }, delayMs);
+  };
+
+  // Closes the current socket only; does not stop the reconnect loop.
+  const closeCurrentConnection = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = undefined;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
+  const connect = async () => {
+    closeCurrentConnection();
+    shouldStayConnectedRef.current = true;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
-      // Connect directly to Azure server
       const url = new URL(`${SSE_BASE_URL}/api/events/stream`);
       if (topics.length > 0) {
         url.searchParams.set('topics', topics.join(','));
@@ -66,68 +107,69 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
       if (actions.length > 0) {
         url.searchParams.set('actions', actions.join(','));
       }
-      // Add API key as query parameter since EventSource doesn't support custom headers
+      const requestHeaders: Record<string, string> = {
+        Accept: 'text/event-stream',
+      };
       if (API_KEY) {
-        url.searchParams.set('apiKey', API_KEY);
+        requestHeaders['x-api-key'] = API_KEY;
       }
 
-      console.log('Connecting to SSE stream:', url.toString());
-
-      const eventSource = new EventSource(url.toString());
-
-      eventSource.onopen = () => {
-        console.log('SSE connection opened');
-        setIsConnected(true);
-        setError(null);
-        onOpen?.();
-      };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data: FHIREventNotification = JSON.parse(event.data);
-          console.log('Received FHIR event:', data);
-
-          setEvents((prev) => [data, ...prev].slice(0, 100)); // Keep last 100 events
-          onEvent?.(data);
-        } catch (err) {
-          console.error('Error parsing event data:', err);
-        }
-      };
-
-      eventSource.onerror = (err) => {
-        console.error('SSE connection error:', err);
-        setIsConnected(false);
-        setError('Connection error. Attempting to reconnect...');
-        onError?.(err);
-      };
-
-      // Listen for specific event types
-      eventSource.addEventListener('resource-change', (event: MessageEvent) => {
-        try {
-          const data: FHIREventNotification = JSON.parse(event.data);
-          console.log('Received resource-change event:', data);
-
-          setEvents((prev) => [data, ...prev].slice(0, 100));
-          onEvent?.(data);
-        } catch (err) {
-          console.error('Error parsing resource-change event:', err);
-        }
+      const headers = await getAuthenticatedHeaders(requestHeaders);
+      if (abortController.signal.aborted) return;
+      const response = await fetch(url, {
+        headers,
+        signal: abortController.signal,
       });
 
-      eventSourceRef.current = eventSource;
+      if (!response.ok || !response.body) {
+        throw new Error(`SSE connection failed (${response.status})`);
+      }
+
+      console.log('SSE connection opened:', url.toString());
+      setIsConnected(true);
+      setError(null);
+      reconnectAttemptRef.current = 0;
+      onOpen?.();
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (!abortController.signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() || '';
+        events.forEach((eventBlock) => {
+          const data = eventBlock
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).trim())
+            .join('\n');
+          if (data) handleEvent(data);
+        });
+      }
+      // Server or an intermediate proxy closed the stream — reconnect so
+      // events published after the drop are not missed.
+      if (!abortController.signal.aborted) {
+        setIsConnected(false);
+        scheduleReconnect();
+      }
     } catch (err) {
-      console.error('Error creating EventSource:', err);
-      setError('Failed to connect to event stream');
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.error('SSE connection error:', err);
+      setIsConnected(false);
+      setError('Connection error. Reconnecting…');
+      onError?.(new Event('error'));
+      scheduleReconnect();
     }
   };
 
   const disconnect = () => {
-    if (eventSourceRef.current) {
-      console.log('Closing SSE connection');
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-      setIsConnected(false);
-    }
+    console.log('Closing SSE connection');
+    shouldStayConnectedRef.current = false;
+    closeCurrentConnection();
+    setIsConnected(false);
   };
 
   const clearEvents = () => {
@@ -136,7 +178,7 @@ export const useSSESubscription = (options: SSESubscriptionOptions = {}) => {
 
   useEffect(() => {
     if (autoConnect) {
-      connect();
+      void connect();
     }
 
     return () => {

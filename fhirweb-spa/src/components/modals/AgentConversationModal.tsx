@@ -10,6 +10,9 @@ import {
   extractMissionId,
 } from '../../utils/agentResponseParser';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { extractOperationOutcomeText } from '../../utils/fhirError';
+import { getAuthenticatedHeaders } from '../../services/auth/oidc';
+import { useSSESubscription } from '../../hooks/useSSESubscription';
 
 interface AgentConversationModalProps {
   isOpen: boolean;
@@ -43,7 +46,13 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const modalPositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const pollIntervalRef = useRef<NodeJS.Timeout>();
+  // Mission completion is primarily detected via SSE "update AgentMission" events
+  // (see Persona_Integration_Guide.md); these refs back a polling fallback only.
+  const missionWatchIdRef = useRef<string | null>(null);
+  const missionResolvedRef = useRef(true);
+  const overallTimeoutRef = useRef<NodeJS.Timeout>();
+  const finalTimeoutRef = useRef<NodeJS.Timeout>();
+  const fallbackPollIntervalRef = useRef<NodeJS.Timeout>();
 
   const applyModalPosition = (x: number, y: number) => {
     modalPositionRef.current = { x, y };
@@ -103,19 +112,37 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           ? (payloadOutputs as any).confidence
           : typeof (resultOutputs as any).confidence === 'number'
             ? (resultOutputs as any).confidence
-            : undefined,
+            : typeof parsedResult?.confidence === 'number'
+              ? parsedResult.confidence
+              : typeof asObject.confidence === 'number'
+                ? asObject.confidence
+                : undefined,
       sources:
         (payloadOutputs as any).sources || (resultOutputs as any).sources,
       disclaimer:
         (payloadOutputs as any).disclaimer || (resultOutputs as any).disclaimer,
       executionTimeMs:
         (payloadOutputs as any).executionTimeMs ||
-        (resultOutputs as any).executionTimeMs,
+        (resultOutputs as any).executionTimeMs ||
+        parsedResult?.durationMs ||
+        asObject.durationMs,
       tokensUsed:
         (payloadOutputs as any).tokensUsed || (resultOutputs as any).tokensUsed,
       costBreakdown:
         (payloadOutputs as any).costBreakdown ||
         (resultOutputs as any).costBreakdown,
+      groundingEvidence:
+        (payloadOutputs as any).groundingEvidence ||
+        (resultOutputs as any).groundingEvidence ||
+        parsedResult?.groundingEvidence ||
+        parsedResult?.parameters?.groundingEvidence ||
+        asObject.groundingEvidence,
+      reasoningTrace:
+        (payloadOutputs as any).reasoningTrace ||
+        (resultOutputs as any).reasoningTrace ||
+        parsedResult?.reasoningTrace ||
+        parsedResult?.parameters?.reasoningTrace ||
+        asObject.reasoningTrace,
     };
 
     const missionIdFromHeader = headers
@@ -137,8 +164,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       missionIdFromHeader ||
       '';
 
-    const status = (asObject.status ||
-      'PENDING') as MissionExecutionResult['status'];
+    const status = String(
+      asObject.status || parsedResult?.status || 'PENDING',
+    ).toUpperCase() as MissionExecutionResult['status'];
     const failureReason =
       asObject.failureReason ||
       parsedResult?.failureReason ||
@@ -165,9 +193,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
   useEffect(() => {
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
+      clearMissionWatchers();
     };
   }, []);
 
@@ -182,9 +208,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         modalRef.current.style.left = '';
         modalRef.current.style.top = '';
       }
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
+      missionResolvedRef.current = true;
+      missionWatchIdRef.current = null;
+      clearMissionWatchers();
     }
   }, [isOpen]);
 
@@ -257,7 +283,6 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Tenant-ID': tenantId,
-      'X-Patient-ID': patientId,
       ...(agentConfig.headers || {}),
     };
 
@@ -265,10 +290,12 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
+    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
+
     // Use extended timeout for AI processing (can involve complex FHIR queries)
     const response = await fetchWithTimeout(agentConfig.endpoint, {
       method: 'POST',
-      headers,
+      headers: authenticatedHeaders,
       body: JSON.stringify({
         goal,
         context: {
@@ -283,7 +310,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
     if (!response.ok) {
       throw new Error(
-        parsed.message || `Failed to create mission (${response.status})`,
+        extractOperationOutcomeText(parsed) ||
+          parsed.message ||
+          `Failed to create mission (${response.status})`,
       );
     }
 
@@ -301,6 +330,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     if (accessToken) {
       headers.Authorization = `Bearer ${accessToken}`;
     }
+
+    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
 
     const endpoint = agentConfig.endpoint;
     const missionStatusPath = `/api/agent/AgentMission/${encodeURIComponent(missionId)}`;
@@ -324,12 +355,16 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
     // Use 10-second timeout for status checks
     const response = await fetchWithTimeout(statusUrl, {
-      headers,
+      headers: authenticatedHeaders,
       timeout: 10000, // 10 seconds for status polling
     });
 
     if (!response.ok) {
-      throw new Error(`Status check failed (${response.status})`);
+      const parsed = parseJsonSafely(await response.text());
+      throw new Error(
+        extractOperationOutcomeText(parsed) ||
+          `Status check failed (${response.status})`,
+      );
     }
 
     const parsed = parseJsonSafely(await response.text());
@@ -352,71 +387,117 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         executionTimeMs: parsed.executionTimeMs,
         tokensUsed: parsed.tokensUsed,
         costBreakdown: parsed.costBreakdown,
+        groundingEvidence: parsed.groundingEvidence,
+        reasoningTrace: parsed.reasoningTrace,
       },
     };
 
     setConversations((prev) => [...prev, agentMessage]);
   };
 
-  const startPollingMission = (missionId: string) => {
-    let pollCount = 0;
-    // Increased to 120 polls to handle longer-running AI queries (60s timeout)
-    // With 500ms interval: 120 * 0.5s = 60 seconds
-    // Accounts for: complex FHIR searches, LLM reasoning, budget iterations, and network latency
-    const maxPolls = 120;
-    const pollInterval = 500;
+  // Give SSE a short head start, then use polling if the stream misses an event.
+  const MISSION_WAIT_TIMEOUT_MS = 15000;
+  // Fallback poll cadence after the primary SSE wait times out.
+  const FALLBACK_POLL_INTERVAL_MS = 3000;
+  // Extra polling window after the primary SSE wait times out, before
+  // reporting a timeout to the user.
+  const MISSION_FINAL_TIMEOUT_MS = 60000;
 
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-    }
-
-    pollIntervalRef.current = setInterval(async () => {
-      pollCount++;
-
-      try {
-        const mission = await fetchMissionStatus(missionId);
-
-        if (mission.status === 'COMPLETED') {
-          clearInterval(pollIntervalRef.current);
-          if (mission.outputs?.response) {
-            addAgentMessage(mission.outputs.response, mission.outputs);
-          } else {
-            addAgentMessage(
-              'Mission completed, but no response body was returned.',
-            );
-          }
-          setLoading(false);
-          return;
-        }
-
-        if (mission.status === 'FAILED') {
-          clearInterval(pollIntervalRef.current);
-          setError(mission.failureReason || 'Mission execution failed');
-          setLoading(false);
-          return;
-        }
-
-        if (mission.status === 'AWAITING_INTERVENTION') {
-          clearInterval(pollIntervalRef.current);
-          // HITL (Human-In-The-Loop) triggered - assessment suspended for human review
-          const reason = mission.failureReason || 'Assessment under review';
-          setHitlReason(reason);
-          setLoading(false);
-          return;
-        }
-
-        if (pollCount >= maxPolls) {
-          clearInterval(pollIntervalRef.current);
-          setError('Request timed out. Please try again.');
-          setLoading(false);
-        }
-      } catch (err: any) {
-        clearInterval(pollIntervalRef.current);
-        setError(err?.message || 'Failed to check status');
-        setLoading(false);
-      }
-    }, pollInterval);
+  const clearMissionWatchers = () => {
+    if (overallTimeoutRef.current) clearTimeout(overallTimeoutRef.current);
+    if (finalTimeoutRef.current) clearTimeout(finalTimeoutRef.current);
+    if (fallbackPollIntervalRef.current)
+      clearInterval(fallbackPollIntervalRef.current);
+    overallTimeoutRef.current = undefined;
+    finalTimeoutRef.current = undefined;
+    fallbackPollIntervalRef.current = undefined;
   };
+
+  const handleMissionResolution = (mission: MissionExecutionResult) => {
+    if (missionResolvedRef.current) return;
+
+    if (mission.status === 'COMPLETED') {
+      missionResolvedRef.current = true;
+      clearMissionWatchers();
+      if (mission.outputs?.response) {
+        addAgentMessage(mission.outputs.response, mission.outputs);
+      } else {
+        addAgentMessage(
+          'Mission completed, but no response body was returned.',
+        );
+      }
+      setLoading(false);
+    } else if (mission.status === 'FAILED') {
+      missionResolvedRef.current = true;
+      clearMissionWatchers();
+      setError(mission.failureReason || 'Mission execution failed');
+      setLoading(false);
+    } else if (mission.status === 'AWAITING_INTERVENTION') {
+      missionResolvedRef.current = true;
+      clearMissionWatchers();
+      // HITL (Human-In-The-Loop) triggered - assessment suspended for human review
+      setHitlReason(mission.failureReason || 'Assessment under review');
+      setLoading(false);
+    }
+    // Otherwise still RUNNING/PENDING — keep waiting for the next SSE event or poll tick.
+  };
+
+  const checkMissionOnce = async (missionId: string) => {
+    if (missionResolvedRef.current) return;
+    try {
+      const mission = await fetchMissionStatus(missionId);
+      handleMissionResolution(mission);
+    } catch {
+      // Transient error — rely on the next SSE event, fallback poll tick, or overall timeout.
+    }
+  };
+
+  const startFallbackPolling = (missionId: string) => {
+    if (fallbackPollIntervalRef.current) return;
+    fallbackPollIntervalRef.current = setInterval(() => {
+      if (missionResolvedRef.current) return;
+      void checkMissionOnce(missionId);
+    }, FALLBACK_POLL_INTERVAL_MS);
+  };
+
+  // Watches a mission for completion primarily via SSE "update AgentMission"
+  // events (see Persona_Integration_Guide.md); only falls back to polling if
+  // the SSE wait times out.
+  const watchMissionForCompletion = (missionId: string) => {
+    clearMissionWatchers();
+    missionResolvedRef.current = false;
+    missionWatchIdRef.current = missionId;
+
+    overallTimeoutRef.current = setTimeout(() => {
+      if (missionResolvedRef.current) return;
+      startFallbackPolling(missionId);
+      finalTimeoutRef.current = setTimeout(() => {
+        if (missionResolvedRef.current) return;
+        missionResolvedRef.current = true;
+        clearMissionWatchers();
+        setError('Request timed out. Please try again.');
+        setLoading(false);
+      }, MISSION_FINAL_TIMEOUT_MS);
+    }, MISSION_WAIT_TIMEOUT_MS);
+
+    // Guard against a race where the mission already changed state before we
+    // started watching.
+    void checkMissionOnce(missionId);
+  };
+
+  useSSESubscription({
+    topics: ['AgentMission'],
+    actions: ['update'],
+    autoConnect: isOpen,
+    onEvent: (event) => {
+      if (
+        event.resourceType === 'AgentMission' &&
+        event.resourceId === missionWatchIdRef.current
+      ) {
+        void checkMissionOnce(event.resourceId);
+      }
+    },
+  });
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -453,7 +534,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         throw new Error(mission.failureReason || 'Mission execution failed.');
       }
 
-      startPollingMission(mission.missionId);
+      watchMissionForCompletion(mission.missionId);
     } catch (err: any) {
       setError(err?.message || 'Failed to send message. Please try again.');
       setLoading(false);
@@ -517,7 +598,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                 className={
                   msg.role === 'user'
                     ? 'max-w-xs md:max-w-md lg:max-w-lg rounded-lg px-4 py-2 bg-blue-600 text-white'
-                    : 'w-full max-w-[90%]'
+                    : 'w-full min-w-0 max-w-[90%]'
                 }
               >
                 {msg.role === 'agent' ? (
@@ -530,6 +611,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                       executionTimeMs: msg.metadata?.executionTimeMs,
                       tokensUsed: msg.metadata?.tokensUsed,
                       costBreakdown: msg.metadata?.costBreakdown,
+                      groundingEvidence: msg.metadata?.groundingEvidence,
+                      reasoningTrace: msg.metadata?.reasoningTrace,
                     }}
                     compact={true}
                   />

@@ -1,5 +1,13 @@
 import React from 'react';
-import { AgentResponse, ResponseType, RiskFlag } from '../../types/agent';
+import { createPortal } from 'react-dom';
+import {
+  AgentResponse,
+  GroundingEvidence,
+  ReasoningTraceStep,
+  ResponseType,
+  RiskFlag,
+} from '../../types/agent';
+import { useLazyGetResourceByIdQuery } from '../../services/fhir/client';
 
 interface AgentResponseFormatterProps {
   response: AgentResponse;
@@ -75,9 +83,407 @@ export const AgentResponseFormatter: React.FC<AgentResponseFormatterProps> = ({
           costBreakdown={response.costBreakdown}
         />
       )}
+
+      <GroundingEvidenceRenderer evidence={response.groundingEvidence || []} />
+
+      <ReasoningTraceRenderer steps={response.reasoningTrace || []} />
     </div>
   );
 };
+
+const GroundingEvidenceRenderer: React.FC<{
+  evidence: GroundingEvidence[];
+}> = ({ evidence }) => {
+  const [selectedResource, setSelectedResource] = React.useState<{
+    resourceType: string;
+    resourceId: string;
+  } | null>(null);
+  const [fetchResource, resourceQuery] = useLazyGetResourceByIdQuery();
+
+  const openResource = (item: GroundingEvidence) => {
+    if (!item.resourceId) return;
+    const selection = {
+      resourceType: item.resourceType,
+      resourceId: item.resourceId,
+    };
+    setSelectedResource(selection);
+    void fetchResource({
+      resourceType: selection.resourceType,
+      id: selection.resourceId,
+      summary: true,
+    });
+  };
+
+  return (
+    <>
+      <details className="rounded-lg border border-emerald-200 bg-emerald-50/60">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-emerald-900">
+          Grounding Evidence ({evidence.length})
+        </summary>
+        <div className="space-y-2 border-t border-emerald-200 px-3 py-3">
+          {evidence.length === 0 && (
+            <p className="text-xs text-gray-600">
+              No grounding evidence was provided for this response.
+            </p>
+          )}
+          {evidence.map((item, index) => (
+            <div
+              key={`${item.resourceType}-${item.resourceId || index}-${item.field}`}
+              className="rounded border border-emerald-100 bg-white px-3 py-2"
+            >
+              <p className="text-sm font-medium text-gray-900">{item.claim}</p>
+              <p className="mt-1 text-xs text-gray-600">
+                {item.resourceId ? (
+                  <button
+                    type="button"
+                    onClick={() => openResource(item)}
+                    className="font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-900"
+                    title={`View summary of ${item.resourceType}/${item.resourceId}`}
+                  >
+                    {item.resourceType}/{item.resourceId}
+                  </button>
+                ) : (
+                  item.resourceType
+                )}{' '}
+                · {item.field}: {item.value}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {[item.system, item.code, `Source: ${item.toolCall}`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      {selectedResource && (
+        <ResourceSummaryDialog
+          resourceType={selectedResource.resourceType}
+          resourceId={selectedResource.resourceId}
+          resource={resourceQuery.data}
+          isLoading={resourceQuery.isFetching}
+          hasError={resourceQuery.isError}
+          onClose={() => setSelectedResource(null)}
+        />
+      )}
+    </>
+  );
+};
+
+const formatFieldLabel = (field: string) =>
+  field
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/^./, (character) => character.toUpperCase());
+
+const formatDate = (value?: string): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString(undefined, {
+        dateStyle: 'medium',
+        ...(value.includes('T') ? { timeStyle: 'short' as const } : {}),
+      });
+};
+
+const getConceptText = (concept: any): string =>
+  concept?.text ||
+  concept?.coding?.find((coding: any) => coding.display)?.display ||
+  concept?.coding?.[0]?.code ||
+  '';
+
+const formatHumanValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) {
+    return value
+      .map(formatHumanValue)
+      .filter((item) => item !== '—')
+      .join('; ');
+  }
+
+  const objectValue = value as Record<string, any>;
+  const conceptText = getConceptText(objectValue);
+  if (conceptText) return conceptText;
+  if (objectValue.value !== undefined) {
+    return `${objectValue.value}${objectValue.unit ? ` ${objectValue.unit}` : ''}`;
+  }
+  if (objectValue.display || objectValue.reference) {
+    return objectValue.display || objectValue.reference;
+  }
+  if (objectValue.start || objectValue.end) {
+    return [formatDate(objectValue.start), formatDate(objectValue.end)]
+      .filter((item) => item !== '—')
+      .join(' to ');
+  }
+
+  return Object.entries(objectValue)
+    .filter(([field]) => !['id', 'extension'].includes(field))
+    .map(
+      ([field, nestedValue]) =>
+        `${formatFieldLabel(field)}: ${formatHumanValue(nestedValue)}`,
+    )
+    .join(' · ');
+};
+
+const SummaryRow: React.FC<{ label: string; value: unknown }> = ({
+  label,
+  value,
+}) => {
+  const displayValue = formatHumanValue(value);
+  if (!displayValue || displayValue === '—') return null;
+  return (
+    <div className="grid gap-1 border-b border-gray-100 py-3 last:border-b-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-xs font-semibold text-gray-500">{label}</dt>
+      <dd className="min-w-0 break-words text-sm text-gray-800">
+        {displayValue}
+      </dd>
+    </div>
+  );
+};
+
+const StatusBadge: React.FC<{ value?: string }> = ({ value }) => {
+  if (!value) return null;
+  return (
+    <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold capitalize text-emerald-800">
+      {value.replace(/-/g, ' ')}
+    </span>
+  );
+};
+
+const ConditionSummary: React.FC<{ condition: any }> = ({ condition }) => {
+  const clinicalStatus = getConceptText(condition.clinicalStatus);
+  const verificationStatus = getConceptText(condition.verificationStatus);
+  return (
+    <div>
+      <div className="border-b border-gray-200 pb-4">
+        <p className="text-lg font-semibold text-gray-900">
+          {getConceptText(condition.code) || 'Condition'}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <StatusBadge value={clinicalStatus} />
+          {verificationStatus && verificationStatus !== clinicalStatus && (
+            <StatusBadge value={verificationStatus} />
+          )}
+        </div>
+      </div>
+      <dl>
+        <SummaryRow label="Severity" value={condition.severity} />
+        <SummaryRow label="Category" value={condition.category} />
+        <SummaryRow
+          label="Onset"
+          value={
+            condition.onsetDateTime ||
+            condition.onsetPeriod ||
+            condition.onsetString
+          }
+        />
+        <SummaryRow
+          label="Recorded"
+          value={formatDate(condition.recordedDate)}
+        />
+        <SummaryRow label="Body site" value={condition.bodySite} />
+        <SummaryRow label="Notes" value={condition.note} />
+      </dl>
+    </div>
+  );
+};
+
+const getObservationValue = (observation: any): string => {
+  if (observation.valueQuantity) {
+    return formatHumanValue(observation.valueQuantity);
+  }
+  return (
+    observation.valueString ||
+    getConceptText(observation.valueCodeableConcept) ||
+    (observation.component?.length
+      ? `${observation.component.length} measured values`
+      : '—')
+  );
+};
+
+const formatReferenceRange = (ranges?: any[]): string => {
+  if (!ranges?.length) return '—';
+  return ranges
+    .map((range) => {
+      if (range.text) return range.text;
+      const low = range.low ? formatHumanValue(range.low) : '';
+      const high = range.high ? formatHumanValue(range.high) : '';
+      return [low, high].filter(Boolean).join(' to ');
+    })
+    .filter(Boolean)
+    .join('; ');
+};
+
+const ObservationSummary: React.FC<{ observation: any }> = ({
+  observation,
+}) => (
+  <div>
+    <div className="border-b border-gray-200 pb-4">
+      <p className="text-sm font-medium text-gray-600">
+        {getConceptText(observation.code) || 'Observation'}
+      </p>
+      <p className="mt-1 text-2xl font-semibold text-gray-900">
+        {getObservationValue(observation)}
+      </p>
+      <div className="mt-2">
+        <StatusBadge value={observation.status} />
+      </div>
+    </div>
+    <dl>
+      <SummaryRow
+        label="Date"
+        value={formatDate(observation.effectiveDateTime || observation.issued)}
+      />
+      <SummaryRow label="Category" value={observation.category} />
+      <SummaryRow label="Interpretation" value={observation.interpretation} />
+      <SummaryRow
+        label="Reference range"
+        value={formatReferenceRange(observation.referenceRange)}
+      />
+      <SummaryRow label="Measured values" value={observation.component} />
+      <SummaryRow label="Notes" value={observation.note} />
+    </dl>
+  </div>
+);
+
+const GenericResourceSummary: React.FC<{ resource: any }> = ({ resource }) => {
+  const fields = Object.entries(resource).filter(
+    ([field]) =>
+      !['resourceType', 'id', 'meta', 'text', 'contained'].includes(field),
+  );
+  return (
+    <dl>
+      {fields.map(([field, value]) => (
+        <SummaryRow key={field} label={formatFieldLabel(field)} value={value} />
+      ))}
+    </dl>
+  );
+};
+
+const ResourceSummaryContent: React.FC<{ resource: any }> = ({ resource }) => {
+  if (resource.resourceType === 'Condition') {
+    return <ConditionSummary condition={resource} />;
+  }
+  if (resource.resourceType === 'Observation') {
+    return <ObservationSummary observation={resource} />;
+  }
+  return <GenericResourceSummary resource={resource} />;
+};
+
+const ResourceSummaryDialog: React.FC<{
+  resourceType: string;
+  resourceId: string;
+  resource?: object;
+  isLoading: boolean;
+  hasError: boolean;
+  onClose: () => void;
+}> = ({ resourceType, resourceId, resource, isLoading, hasError, onClose }) => {
+  React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="resource-summary-title"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 sm:py-4">
+          <div className="min-w-0">
+            <h2
+              id="resource-summary-title"
+              className="text-base font-semibold text-gray-900"
+            >
+              {resourceType} Summary
+            </h2>
+            <p className="mt-1 break-all font-mono text-xs text-gray-500">
+              {resourceType}/{resourceId}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-2xl text-gray-500 hover:bg-gray-100 hover:text-gray-800 sm:h-8 sm:w-8 sm:text-xl"
+            aria-label="Close resource summary"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 overscroll-contain overflow-y-auto px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
+          {isLoading ? (
+            <p className="text-sm text-gray-600">Loading resource summary…</p>
+          ) : hasError ? (
+            <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Unable to load this resource summary.
+            </p>
+          ) : resource ? (
+            <ResourceSummaryContent resource={resource} />
+          ) : (
+            <p className="text-sm text-gray-600">
+              No summary fields were returned for this resource.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+
+const ReasoningTraceRenderer: React.FC<{ steps: ReasoningTraceStep[] }> = ({
+  steps,
+}) => (
+  <details className="rounded-lg border border-indigo-200 bg-indigo-50/60">
+    <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-indigo-900">
+      Reasoning Trace ({steps.length} steps)
+    </summary>
+    <ol className="space-y-3 border-t border-indigo-200 px-3 py-3">
+      {steps.length === 0 && (
+        <li className="text-xs text-gray-600">
+          No reasoning trace was provided for this response.
+        </li>
+      )}
+      {steps.map((step, index) => (
+        <li key={`${step.iteration}-${index}`} className="flex gap-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700">
+            {step.iteration + 1}
+          </span>
+          <div className="min-w-0">
+            <p className="whitespace-pre-wrap text-sm text-gray-800">
+              {step.thought}
+            </p>
+            {step.toolsCalled && (
+              <p className="mt-1 break-words font-mono text-xs text-indigo-700">
+                {step.toolsCalled}
+              </p>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  </details>
+);
 
 /**
  * Detect response type by analyzing content structure
@@ -222,56 +628,274 @@ const JsonObjectRenderer: React.FC<{ data: Record<string, any> }> = ({
 );
 
 /**
- * Markdown renderer (basic support)
+ * Render **bold** and *italic* inline markdown spans within a line of text.
+ */
+const renderInlineMarkdown = (
+  text: string,
+  keyPrefix: string,
+): React.ReactNode[] => {
+  const parts: React.ReactNode[] = [];
+  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let partIndex = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[1] !== undefined) {
+      parts.push(
+        <strong key={`${keyPrefix}-b-${partIndex++}`}>{match[1]}</strong>,
+      );
+    } else {
+      parts.push(<em key={`${keyPrefix}-i-${partIndex++}`}>{match[2]}</em>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+};
+
+const isTableSeparatorRow = (line: string): boolean =>
+  /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(line.trim());
+
+const parseMarkdownTableRow = (line: string): string[] =>
+  line
+    .trim()
+    .replace(/^\||\|$/g, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+/**
+ * Parse a markdown response into block-level elements: headings, tables,
+ * lists, horizontal rules, fenced code blocks (e.g. ASCII charts), and
+ * paragraphs with inline bold/italic support.
+ */
+const renderMarkdownBlocks = (text: string): React.ReactNode[] => {
+  const lines = text.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+  let blockIndex = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Fenced code block — rendered verbatim so ASCII charts stay aligned.
+    if (/^```/.test(trimmed)) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i].trim())) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing fence
+      blocks.push(
+        <div
+          key={`block-${blockIndex++}`}
+          className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900 p-3"
+        >
+          <pre className="whitespace-pre font-mono text-xs leading-relaxed text-gray-100">
+            {codeLines.join('\n')}
+          </pre>
+        </div>,
+      );
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+      blocks.push(
+        <hr key={`block-${blockIndex++}`} className="my-1 border-gray-200" />,
+      );
+      i++;
+      continue;
+    }
+
+    // Markdown table (header row followed by a separator row)
+    if (
+      /^\|.*\|$/.test(trimmed) &&
+      lines[i + 1] !== undefined &&
+      isTableSeparatorRow(lines[i + 1])
+    ) {
+      const headerCells = parseMarkdownTableRow(line);
+      const currentBlockIndex = blockIndex++;
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        rows.push(parseMarkdownTableRow(lines[i]));
+        i++;
+      }
+      blocks.push(
+        <div key={`block-${currentBlockIndex}`} className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {headerCells.map((cell, idx) => (
+                  <th
+                    key={idx}
+                    className="px-3 py-2 text-left font-semibold text-gray-700"
+                  >
+                    {renderInlineMarkdown(
+                      cell,
+                      `th-${currentBlockIndex}-${idx}`,
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx}>
+                  {row.map((cell, cellIdx) => (
+                    <td
+                      key={cellIdx}
+                      className="px-3 py-2 align-top text-gray-800"
+                    >
+                      {renderInlineMarkdown(
+                        cell,
+                        `td-${currentBlockIndex}-${rowIdx}-${cellIdx}`,
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    // Headings
+    if (/^#{1,3}\s+/.test(line)) {
+      const level = /^###/.test(line) ? 4 : /^##/.test(line) ? 3 : 2;
+      const headingText = line.replace(/^#+\s+/, '');
+      const currentBlockIndex = blockIndex++;
+      const content = renderInlineMarkdown(
+        headingText,
+        `h-${currentBlockIndex}`,
+      );
+      blocks.push(
+        level === 4 ? (
+          <h4
+            key={`block-${currentBlockIndex}`}
+            className="mt-2 font-bold text-gray-900"
+          >
+            {content}
+          </h4>
+        ) : level === 3 ? (
+          <h3
+            key={`block-${currentBlockIndex}`}
+            className="mt-2 text-base font-bold text-gray-900"
+          >
+            {content}
+          </h3>
+        ) : (
+          <h2
+            key={`block-${currentBlockIndex}`}
+            className="mt-2 text-lg font-bold text-gray-900"
+          >
+            {content}
+          </h2>
+        ),
+      );
+      i++;
+      continue;
+    }
+
+    // Unordered lists
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      const currentBlockIndex = blockIndex++;
+      blocks.push(
+        <ul
+          key={`block-${currentBlockIndex}`}
+          className="ml-5 list-disc space-y-1 text-gray-800"
+        >
+          {items.map((item, idx) => (
+            <li key={idx}>
+              {renderInlineMarkdown(item, `ul-${currentBlockIndex}-${idx}`)}
+            </li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    // Ordered lists
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      const currentBlockIndex = blockIndex++;
+      blocks.push(
+        <ol
+          key={`block-${currentBlockIndex}`}
+          className="ml-5 list-decimal space-y-1 text-gray-800"
+        >
+          {items.map((item, idx) => (
+            <li key={idx}>
+              {renderInlineMarkdown(item, `ol-${currentBlockIndex}-${idx}`)}
+            </li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    // Blank line — just a separator between blocks
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    // Paragraph — accumulate consecutive plain lines
+    const paraLines: string[] = [line];
+    i++;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^```/.test(lines[i].trim()) &&
+      !/^\|.*\|$/.test(lines[i].trim()) &&
+      !/^#{1,3}\s+/.test(lines[i]) &&
+      !/^\s*[-*]\s+/.test(lines[i]) &&
+      !/^\s*\d+\.\s+/.test(lines[i]) &&
+      !/^(-{3,}|\*{3,})$/.test(lines[i].trim())
+    ) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    const currentBlockIndex = blockIndex++;
+    blocks.push(
+      <p
+        key={`block-${currentBlockIndex}`}
+        className="leading-relaxed text-gray-800"
+      >
+        {renderInlineMarkdown(paraLines.join(' '), `p-${currentBlockIndex}`)}
+      </p>,
+    );
+  }
+
+  return blocks;
+};
+
+/**
+ * Markdown renderer — headings, tables, lists, horizontal rules, and fenced
+ * code blocks (used for ASCII charts) with inline bold/italic support.
  */
 const MarkdownResponseRenderer: React.FC<{ text: string }> = ({ text }) => (
-  <div className="prose prose-sm max-w-none">
-    <div className="text-sm text-gray-800 space-y-2">
-      {text.split('\n').map((line, idx) => {
-        // Headers
-        if (line.startsWith('###')) {
-          return (
-            <h4 key={idx} className="font-bold text-gray-900 mt-2">
-              {line.replace(/^#+\s/, '')}
-            </h4>
-          );
-        }
-        if (line.startsWith('##')) {
-          return (
-            <h3 key={idx} className="font-bold text-gray-900 mt-2">
-              {line.replace(/^#+\s/, '')}
-            </h3>
-          );
-        }
-        if (line.startsWith('#')) {
-          return (
-            <h2 key={idx} className="font-bold text-lg text-gray-900 mt-2">
-              {line.replace(/^#+\s/, '')}
-            </h2>
-          );
-        }
-
-        // Lists
-        if (line.match(/^\s*[-*]\s/)) {
-          return (
-            <li key={idx} className="ml-4 text-gray-800">
-              {line.replace(/^\s*[-*]\s/, '')}
-            </li>
-          );
-        }
-
-        // Regular paragraph
-        if (line.trim()) {
-          return (
-            <p key={idx} className="text-gray-800 leading-relaxed">
-              {line}
-            </p>
-          );
-        }
-
-        return <br key={idx} />;
-      })}
-    </div>
+  <div className="prose prose-sm max-w-none space-y-3 text-sm">
+    {renderMarkdownBlocks(text)}
   </div>
 );
 

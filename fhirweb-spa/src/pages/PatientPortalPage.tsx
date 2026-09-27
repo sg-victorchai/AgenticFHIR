@@ -11,6 +11,11 @@ import {
 } from '../services/fhir/client';
 import { setRole } from '../store/slices/uiSlice';
 import { Pagination } from '../components/common/Pagination';
+import {
+  getOidcUser,
+  isPatientFhirUser,
+  getOwnPatientFhirId,
+} from '../services/auth/oidc';
 
 interface PatientOption {
   id: string;
@@ -27,6 +32,25 @@ const PatientPortalPage: React.FC = () => {
     Bundle<FHIRPatient> | undefined
   >();
 
+  // A "patient" role JWT scopes this page to the caller's own record only —
+  // resolved from the token rather than the app's UI role selector.
+  const [isPatientRole, setIsPatientRole] = useState(false);
+  const [ownPatientId, setOwnPatientId] = useState<string | null>(null);
+  const [isResolvingIdentity, setIsResolvingIdentity] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getOidcUser().then((user) => {
+      if (!active) return;
+      setIsPatientRole(isPatientFhirUser(user));
+      setOwnPatientId(getOwnPatientFhirId(user));
+      setIsResolvingIdentity(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Initial search params - load all patients
   const initialSearchParams: Record<string, string> = {
     _count: '10',
@@ -35,13 +59,15 @@ const PatientPortalPage: React.FC = () => {
 
   // Dynamic search params - when user searches
   const searchParams: Record<string, string> =
-    hasSearched && searchTerm.trim()
-      ? { 'name:contains': searchTerm.trim(), _count: '10', _offset: '0' }
-      : initialSearchParams;
+    isPatientRole && ownPatientId
+      ? { _id: ownPatientId, _count: '10', _offset: '0' }
+      : hasSearched && searchTerm.trim()
+        ? { 'name:contains': searchTerm.trim(), _count: '10', _offset: '0' }
+        : initialSearchParams;
 
   // Query for patient list
   const { data: patientBundle, isLoading: patientListLoading } =
-    useSearchPatientsQuery(searchParams);
+    useSearchPatientsQuery(searchParams, { skip: isResolvingIdentity });
 
   // Update current bundle when results change
   useEffect(() => {
@@ -174,45 +200,49 @@ const PatientPortalPage: React.FC = () => {
         </div>
 
         {/* Search Card */}
-        <div className="bg-white rounded-2xl shadow-md p-4 sm:p-8 mb-6">
-          <form
-            onSubmit={handleSearch}
-            className="flex flex-col sm:flex-row gap-2 sm:gap-3"
-          >
-            <input
-              type="text"
-              placeholder="Enter your name to search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400 w-full"
-            />
-            <div className="flex gap-2 w-full sm:w-auto">
-              <button
-                type="submit"
-                className="flex-1 sm:flex-none px-4 sm:px-6 py-3 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors font-medium whitespace-nowrap"
-              >
-                Search
-              </button>
-              {hasSearched && (
+        {!isPatientRole && (
+          <div className="bg-white rounded-2xl shadow-md p-4 sm:p-8 mb-6">
+            <form
+              onSubmit={handleSearch}
+              className="flex flex-col sm:flex-row gap-2 sm:gap-3"
+            >
+              <input
+                type="text"
+                placeholder="Enter your name to search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400 w-full"
+              />
+              <div className="flex gap-2 w-full sm:w-auto">
                 <button
-                  type="button"
-                  onClick={handleClearSearch}
-                  className="flex-1 sm:flex-none px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium whitespace-nowrap"
+                  type="submit"
+                  className="flex-1 sm:flex-none px-4 sm:px-6 py-3 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors font-medium whitespace-nowrap"
                 >
-                  Clear
+                  Search
                 </button>
-              )}
-            </div>
-          </form>
-        </div>
+                {hasSearched && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="flex-1 sm:flex-none px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium whitespace-nowrap"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Results / Initial List */}
         <div className="bg-white rounded-2xl shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-700">
-              {hasSearched
-                ? `Search Results (${patientOptions.length})`
-                : 'All Patients'}
+              {isPatientRole
+                ? 'Your Record'
+                : hasSearched
+                  ? `Search Results (${patientOptions.length})`
+                  : 'All Patients'}
             </h3>
             {patientListLoading && (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-violet-600" />
@@ -228,21 +258,25 @@ const PatientPortalPage: React.FC = () => {
           {!patientListLoading && patientOptions.length === 0 && (
             <div className="py-8 text-center">
               <p className="text-gray-500">
-                {hasSearched && searchTerm.trim()
-                  ? 'No patient records found.'
-                  : 'No patients available.'}
+                {isPatientRole
+                  ? 'Unable to load your patient record.'
+                  : hasSearched && searchTerm.trim()
+                    ? 'No patient records found.'
+                    : 'No patients available.'}
               </p>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate('/patient/new', {
-                    state: { backTo: '/patient-portal' },
-                  })
-                }
-                className="mt-4 inline-flex items-center justify-center rounded-md bg-violet-600 px-5 py-2 font-medium text-white transition-colors hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2"
-              >
-                Create New Patient
-              </button>
+              {!isPatientRole && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/patient/new', {
+                      state: { backTo: '/patient-portal' },
+                    })
+                  }
+                  className="mt-4 inline-flex items-center justify-center rounded-md bg-violet-600 px-5 py-2 font-medium text-white transition-colors hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2"
+                >
+                  Create New Patient
+                </button>
+              )}
             </div>
           )}
 

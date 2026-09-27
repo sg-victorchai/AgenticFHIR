@@ -12,6 +12,11 @@ import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
 import { AgentEndpointConfig } from '../types/agent';
+import { getAuthenticatedHeaders } from '../services/auth/oidc';
+import {
+  extractOperationOutcomeText,
+  getOperationOutcomeMessage,
+} from '../utils/fhirError';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -357,7 +362,7 @@ let AGENT_API_BASE_URL =
 // Helper function - CORS now enabled on Azure server, so no proxy needed
 const getApiProxyUrl = (url: string): string => {
   // Return URL as-is since CORS is now enabled on the Azure server
-  return url;
+  return url.replace(/\/+$/, '');
 };
 
 // Use proxy URL in development mode
@@ -489,6 +494,17 @@ const Loading = () => (
 
 const Empty = () => (
   <div className="text-center py-12 text-gray-400">No records found.</div>
+);
+
+// Shown in place of a tab's table/list when its query fails (e.g. a 403 from
+// PatientScopeEnforcementFilter) instead of silently rendering an empty list.
+const ErrorState: React.FC<{ error: unknown }> = ({ error }) => (
+  <div className="text-center py-12">
+    <div className="inline-block bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+      {getOperationOutcomeMessage(error) ||
+        'Failed to load records. Please try again.'}
+    </div>
+  </div>
 );
 
 const parseReference = (
@@ -1710,7 +1726,10 @@ const PatientRecordsPage: React.FC = () => {
       }
 
       if (!response.ok) {
-        throw new Error(`Unable to fetch import summary (${response.status}).`);
+        throw new Error(
+          extractOperationOutcomeText(payload) ||
+            `Unable to fetch import summary (${response.status}).`,
+        );
       }
 
       // Map the status response to the summary format
@@ -1780,6 +1799,7 @@ const PatientRecordsPage: React.FC = () => {
           if (!response.ok) {
             const attemptedUrl = response.url || statusUrl;
             const serverMessage =
+              extractOperationOutcomeText(payload) ||
               payload.error ||
               payload.message ||
               `Harmonizer status request failed (${response.status}) at ${attemptedUrl}.`;
@@ -1942,6 +1962,7 @@ const PatientRecordsPage: React.FC = () => {
 
       if (!response.ok) {
         const serverMessage =
+          extractOperationOutcomeText(payload) ||
           payload?.message ||
           payload?.error ||
           `Harmonizer import failed (${response.status}).`;
@@ -2071,14 +2092,15 @@ const PatientRecordsPage: React.FC = () => {
 
     if (accessToken) {
       headers.Authorization = `Bearer ${accessToken}`;
-      return { headers, channel: 'patient-portal' };
+    } else if (API_KEY) {
+      headers['x-api-key'] = API_KEY;
     }
 
-    // Independent in-app mode fallback (non-SMART).
-    if (API_KEY) {
-      headers['x-api-key'] = API_KEY;
-      return { headers, channel: 'in-app' };
+    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
+    if (authenticatedHeaders.Authorization) {
+      return { headers: authenticatedHeaders, channel: 'patient-portal' };
     }
+    if (API_KEY) return { headers: authenticatedHeaders, channel: 'in-app' };
 
     throw new Error(
       'No authentication context available. Please sign in or configure API key access.',
@@ -2136,13 +2158,16 @@ const PatientRecordsPage: React.FC = () => {
     setSearchError(null);
     try {
       const resourceTypes = getResourceTypesFromQuery(query);
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
       if (API_KEY) {
         headers['x-api-key'] = API_KEY;
       }
+      const authenticatedHeaders = await getAuthenticatedHeaders(headers);
       const res = await fetch(`${AGENT_API_BASE_URL}/api/ai/hybrid-search`, {
         method: 'POST',
-        headers,
+        headers: authenticatedHeaders,
         body: JSON.stringify({
           query,
           scope: 'PATIENT',
@@ -2153,7 +2178,16 @@ const PatientRecordsPage: React.FC = () => {
           explain: true,
         }),
       });
-      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+      if (!res.ok) {
+        const errorPayload = await res
+          .clone()
+          .json()
+          .catch(() => null);
+        throw new Error(
+          extractOperationOutcomeText(errorPayload) ||
+            `Search failed (${res.status})`,
+        );
+      }
       setSearchResults(await res.json());
     } catch (err: any) {
       setSearchError(err.message || 'Search failed. Please try again.');
@@ -2276,6 +2310,7 @@ const PatientRecordsPage: React.FC = () => {
   const {
     data: encBundle,
     isLoading: encLoading,
+    error: encError,
     refetch: refetchEnc,
   } = useSearchByPatientQuery(
     {
@@ -2288,6 +2323,7 @@ const PatientRecordsPage: React.FC = () => {
   const {
     data: condBundle,
     isLoading: condLoading,
+    error: condError,
     refetch: refetchCond,
   } = useSearchByPatientQuery(
     {
@@ -2300,6 +2336,7 @@ const PatientRecordsPage: React.FC = () => {
   const {
     data: obsBundle,
     isLoading: obsLoading,
+    error: obsError,
     refetch: refetchObs,
   } = useSearchByPatientQuery(
     {
@@ -2313,6 +2350,7 @@ const PatientRecordsPage: React.FC = () => {
   const {
     data: srBundle,
     isLoading: srLoading,
+    error: srError,
     refetch: refetchSr,
   } = useSearchByPatientQuery(
     {
@@ -2325,6 +2363,7 @@ const PatientRecordsPage: React.FC = () => {
   const {
     data: labDrBundle,
     isLoading: labDrLoading,
+    error: labDrError,
     refetch: refetchLabDr,
   } = useSearchByPatientQuery(
     {
@@ -2338,6 +2377,7 @@ const PatientRecordsPage: React.FC = () => {
   const {
     data: radDrBundle,
     isLoading: radDrLoading,
+    error: radDrError,
     refetch: refetchRadDr,
   } = useSearchByPatientQuery(
     {
@@ -2347,34 +2387,47 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId },
   );
-  const { data: medReqBundle, isLoading: medReqLoading } =
-    useSearchByPatientQuery(
-      {
-        resourceType: 'MedicationRequest',
-        patientId: patientId!,
-        extraParams: medReqExtraParams,
-      },
-      { skip: !patientId },
-    );
-  const { data: medDispBundle, isLoading: medDispLoading } =
-    useSearchByPatientQuery(
-      {
-        resourceType: 'MedicationDispense',
-        patientId: patientId!,
-        extraParams: medDispExtraParams,
-      },
-      { skip: !patientId },
-    );
-  const { data: medStmtBundle, isLoading: medStmtLoading } =
-    useSearchByPatientQuery(
-      {
-        resourceType: 'MedicationStatement',
-        patientId: patientId!,
-        extraParams: medStmtExtraParams,
-      },
-      { skip: !patientId },
-    );
-  const { data: procBundle, isLoading: procLoading } = useSearchByPatientQuery(
+  const {
+    data: medReqBundle,
+    isLoading: medReqLoading,
+    error: medReqError,
+  } = useSearchByPatientQuery(
+    {
+      resourceType: 'MedicationRequest',
+      patientId: patientId!,
+      extraParams: medReqExtraParams,
+    },
+    { skip: !patientId },
+  );
+  const {
+    data: medDispBundle,
+    isLoading: medDispLoading,
+    error: medDispError,
+  } = useSearchByPatientQuery(
+    {
+      resourceType: 'MedicationDispense',
+      patientId: patientId!,
+      extraParams: medDispExtraParams,
+    },
+    { skip: !patientId },
+  );
+  const {
+    data: medStmtBundle,
+    isLoading: medStmtLoading,
+    error: medStmtError,
+  } = useSearchByPatientQuery(
+    {
+      resourceType: 'MedicationStatement',
+      patientId: patientId!,
+      extraParams: medStmtExtraParams,
+    },
+    { skip: !patientId },
+  );
+  const {
+    data: procBundle,
+    isLoading: procLoading,
+    error: procError,
+  } = useSearchByPatientQuery(
     {
       resourceType: 'Procedure',
       patientId: patientId!,
@@ -2382,7 +2435,11 @@ const PatientRecordsPage: React.FC = () => {
     },
     { skip: !patientId },
   );
-  const { data: cpBundle, isLoading: cpLoading } = useSearchByPatientQuery(
+  const {
+    data: cpBundle,
+    isLoading: cpLoading,
+    error: cpError,
+  } = useSearchByPatientQuery(
     {
       resourceType: 'CarePlan',
       patientId: patientId!,
@@ -2524,7 +2581,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={condBundle?.link as Array<{ relation: string; url: string }>}
         />
-        {condLoading ? (
+        {condError ? (
+          <ErrorState error={condError} />
+        ) : condLoading ? (
           <Loading />
         ) : !conditions.length ? (
           <Empty />
@@ -2844,7 +2903,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={encBundle?.link as Array<{ relation: string; url: string }>}
         />
-        {encLoading ? (
+        {encError ? (
+          <ErrorState error={encError} />
+        ) : encLoading ? (
           <Loading />
         ) : !encounters.length ? (
           <Empty />
@@ -3104,7 +3165,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={obsBundle?.link as Array<{ relation: string; url: string }>}
         />
-        {obsLoading ? (
+        {obsError ? (
+          <ErrorState error={obsError} />
+        ) : obsLoading ? (
           <Loading />
         ) : !observations.length ? (
           <Empty />
@@ -3466,7 +3529,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={srBundle?.link as Array<{ relation: string; url: string }>}
         />
-        {srLoading ? (
+        {srError ? (
+          <ErrorState error={srError} />
+        ) : srLoading ? (
           <Loading />
         ) : !serviceRequests.length ? (
           <Empty />
@@ -3572,6 +3637,7 @@ const PatientRecordsPage: React.FC = () => {
     reports: any[],
     loading: boolean,
     bundle?: any,
+    error?: unknown,
   ) => {
     return (
       <div>
@@ -3589,7 +3655,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={bundle?.link as Array<{ relation: string; url: string }>}
         />
-        {loading ? (
+        {error ? (
+          <ErrorState error={error} />
+        ) : loading ? (
           <Loading />
         ) : !reports.length ? (
           <Empty />
@@ -3721,7 +3789,9 @@ const PatientRecordsPage: React.FC = () => {
               medReqBundle?.link as Array<{ relation: string; url: string }>
             }
           />
-          {medReqLoading ? (
+          {medReqError ? (
+            <ErrorState error={medReqError} />
+          ) : medReqLoading ? (
             <Loading />
           ) : !medRequests.length ? (
             <Empty />
@@ -4145,7 +4215,9 @@ const PatientRecordsPage: React.FC = () => {
               medDispBundle?.link as Array<{ relation: string; url: string }>
             }
           />
-          {medDispLoading ? (
+          {medDispError ? (
+            <ErrorState error={medDispError} />
+          ) : medDispLoading ? (
             <Loading />
           ) : !medDispenses.length ? (
             <Empty />
@@ -4329,7 +4401,9 @@ const PatientRecordsPage: React.FC = () => {
               medStmtBundle?.link as Array<{ relation: string; url: string }>
             }
           />
-          {medStmtLoading ? (
+          {medStmtError ? (
+            <ErrorState error={medStmtError} />
+          ) : medStmtLoading ? (
             <Loading />
           ) : !medStatements.length ? (
             <Empty />
@@ -4541,7 +4615,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={procBundle?.link as Array<{ relation: string; url: string }>}
         />
-        {procLoading ? (
+        {procError ? (
+          <ErrorState error={procError} />
+        ) : procLoading ? (
           <Loading />
         ) : !procedures.length ? (
           <Empty />
@@ -4804,7 +4880,9 @@ const PatientRecordsPage: React.FC = () => {
           onChange={setCurrentPage}
           links={cpBundle?.link as Array<{ relation: string; url: string }>}
         />
-        {cpLoading ? (
+        {cpError ? (
+          <ErrorState error={cpError} />
+        ) : cpLoading ? (
           <Loading />
         ) : !carePlans.length ? (
           <Empty />
@@ -5499,12 +5577,14 @@ const PatientRecordsPage: React.FC = () => {
                   labResults,
                   labDrLoading,
                   labDrBundle,
+                  labDrError,
                 )}
               {activeTab === 'rad-report' &&
                 renderDiagnosticReportTable(
                   radReports,
                   radDrLoading,
                   radDrBundle,
+                  radDrError,
                 )}
               {activeTab === 'medication' && renderMedicationTab()}
               {activeTab === 'procedure' && renderProcedureTab()}

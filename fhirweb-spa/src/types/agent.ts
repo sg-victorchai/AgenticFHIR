@@ -24,6 +24,8 @@ export interface ConversationMetadata {
   tokensUsed?: number; // LLM tokens consumed
   missionId?: string; // Unique mission/execution ID
   costBreakdown?: CostBreakdown;
+  groundingEvidence?: GroundingEvidence[];
+  reasoningTrace?: ReasoningTraceStep[];
 }
 
 /**
@@ -47,6 +49,23 @@ export interface AgentSource {
   display?: string; // Human-readable display text
 }
 
+export interface GroundingEvidence {
+  claim: string;
+  resourceType: string;
+  resourceId?: string;
+  field: string;
+  value: string;
+  system?: string;
+  code?: string;
+  toolCall: string;
+}
+
+export interface ReasoningTraceStep {
+  iteration: number;
+  thought: string;
+  toolsCalled?: string;
+}
+
 /**
  * Normalized agent response structure
  */
@@ -59,6 +78,8 @@ export interface AgentResponse {
   tokensUsed?: number;
   costBreakdown?: CostBreakdown;
   riskFlags?: RiskFlag[]; // Potential issues to flag to user
+  groundingEvidence?: GroundingEvidence[];
+  reasoningTrace?: ReasoningTraceStep[];
 }
 
 /**
@@ -138,6 +159,8 @@ export interface MissionExecutionResult {
     carePlansCreated?: CarePlanCreated[];
     createdResourceIds?: string[]; // Resource IDs created by mission (e.g., ["CarePlan/id1", "CarePlan/id2"])
     cohortMetrics?: Record<string, number | string | boolean>;
+    groundingEvidence?: GroundingEvidence[];
+    reasoningTrace?: ReasoningTraceStep[];
   };
   failureReason?: string;
   startedAt?: string;
