@@ -22,7 +22,7 @@ export interface HarmonizerReviewRecord {
     approvedBy?: string;
     [key: string]: unknown;
   };
-  evidence?: string | string[];
+  evidence?: string | string[] | { quote?: string; [key: string]: unknown };
   dedup?: Record<string, unknown>;
   terminology?: Record<string, unknown>;
   [key: string]: unknown;

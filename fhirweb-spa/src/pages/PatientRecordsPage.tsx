@@ -615,16 +615,35 @@ const AiProvenancePanel: React.FC<{ resource: any }> = ({ resource }) => {
   );
 };
 
+// Review payload fields may arrive as strings, arrays or objects; React cannot render objects.
+const toDisplayText = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  if (Array.isArray(value))
+    return value.map(toDisplayText).filter(Boolean).join('\n');
+  if (typeof value === 'object') {
+    const item = value as Record<string, unknown>;
+    const text = toDisplayText(
+      item.quote ?? item.text ?? item.display ?? item.value ?? item.name,
+    );
+    return text || JSON.stringify(value);
+  }
+  return String(value);
+};
+
 const getReviewMetadata = (record: HarmonizerReviewRecord) => {
   const audit = record.review || {};
   const humanEdited = record.humanEdited ?? audit.humanEdited ?? false;
-  const outcome = record.outcome || record.status || 'PENDING_REVIEW';
+  const outcome =
+    toDisplayText(record.outcome || record.status) || 'PENDING_REVIEW';
   return {
     status: humanEdited ? 'Reviewed' : outcome,
     outcome,
     humanEdited,
-    reviewedAt: record.reviewedAt || audit.reviewedAt,
-    reviewedBy: record.reviewedBy || audit.reviewedBy,
+    reviewedAt: toDisplayText(record.reviewedAt || audit.reviewedAt),
+    reviewedBy: toDisplayText(record.reviewedBy || audit.reviewedBy),
   };
 };
 
@@ -681,11 +700,14 @@ const HarmonizerDuplicateDetails: React.FC<{
       </p>
       {dedup.classification && (
         <p className="mt-2 text-sm font-semibold text-red-800">
-          Classification: {dedup.classification.replace(/_/g, ' ')}
+          Classification:{' '}
+          {toDisplayText(dedup.classification).replace(/_/g, ' ')}
         </p>
       )}
       {dedup.reason && (
-        <p className="mt-2 text-sm text-red-800">{dedup.reason}</p>
+        <p className="mt-2 text-sm text-red-800">
+          {toDisplayText(dedup.reason)}
+        </p>
       )}
       {dedup.matchedOn && Object.keys(dedup.matchedOn).length > 0 && (
         <dl className="mt-3 space-y-1 border-t border-red-200 pt-2 text-xs text-red-900">
@@ -693,7 +715,7 @@ const HarmonizerDuplicateDetails: React.FC<{
           {Object.entries(dedup.matchedOn).map(([field, value]) => (
             <div key={field} className="flex gap-2">
               <dt className="font-medium">{friendlyFieldLabel(field)}:</dt>
-              <dd className="min-w-0 break-words">{String(value)}</dd>
+              <dd className="min-w-0 break-words">{toDisplayText(value)}</dd>
             </div>
           ))}
         </dl>
@@ -2299,9 +2321,8 @@ const PatientRecordsPage: React.FC = () => {
       const result = await harmonizerReviewService.getReview(jobId);
       setHarmonizerReviewEtag(result.etag);
       const payload = result.data as any;
-      setHarmonizerReviewRecords(
-        payload.records || payload.items || payload.review || [],
-      );
+      const records = payload.records || payload.items || payload.review;
+      setHarmonizerReviewRecords(Array.isArray(records) ? records : []);
     } catch (error: any) {
       setHarmonizerReviewActionError(
         error?.message || 'Unable to load generated resources for review.',
@@ -2480,6 +2501,8 @@ const PatientRecordsPage: React.FC = () => {
         harmonizerReviewEtag,
       );
       setHarmonizerReviewRecords([]);
+      setHarmonizerPanelTab('upload');
+      setShowPendingHarmonizerMissions(false);
       setNoteUploadJobStatus('RUNNING');
       setNoteUploadMessage('Review approved. Resuming Harmonizer…');
       await pollHarmonizerJobStatus(
@@ -2511,6 +2534,8 @@ const PatientRecordsPage: React.FC = () => {
         harmonizerReviewEtag,
       );
       setHarmonizerReviewRecords([]);
+      setHarmonizerPanelTab('upload');
+      setShowPendingHarmonizerMissions(false);
       setNoteUploadJobStatus(mode === 'REVISE' ? 'RUNNING' : 'COMPLETED');
       setNoteUploadMessage(
         mode === 'REVISE'
@@ -6778,9 +6803,10 @@ const PatientRecordsPage: React.FC = () => {
                                       'FHIR Resource'}
                                   </span>
                                   <span className="text-[11px] text-gray-500">
-                                    {record.confidence !== undefined
+                                    {typeof record.confidence === 'number'
                                       ? `${Math.round(record.confidence * 100)}% confidence`
-                                      : record.outcome || 'Review'}
+                                      : toDisplayText(record.outcome) ||
+                                        'Review'}
                                   </span>
                                 </div>
                                 <div className="mt-1">
@@ -6795,14 +6821,11 @@ const PatientRecordsPage: React.FC = () => {
                                   </p>
                                 )}
                                 <p className="mt-1 truncate text-sm text-gray-800">
-                                  {display}
+                                  {toDisplayText(display)}
                                 </p>
                                 {record.evidence && (
                                   <p className="mt-1 line-clamp-2 text-xs text-gray-600">
-                                    Evidence:{' '}
-                                    {Array.isArray(record.evidence)
-                                      ? record.evidence.join(' ')
-                                      : record.evidence}
+                                    Evidence: {toDisplayText(record.evidence)}
                                   </p>
                                 )}
                               </button>
@@ -6884,11 +6907,9 @@ const PatientRecordsPage: React.FC = () => {
                                 Evidence from source document
                               </p>
                               <p className="mt-1 whitespace-pre-wrap text-sm text-blue-800">
-                                {Array.isArray(
+                                {toDisplayText(
                                   selectedHarmonizerRecord.evidence,
-                                )
-                                  ? selectedHarmonizerRecord.evidence.join('\n')
-                                  : selectedHarmonizerRecord.evidence}
+                                )}
                               </p>
                             </div>
                           )}
