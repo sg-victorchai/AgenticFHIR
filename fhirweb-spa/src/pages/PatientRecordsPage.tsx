@@ -6621,8 +6621,40 @@ const PatientRecordsPage: React.FC = () => {
                         onChange={(e) =>
                           setSelectedNoteFile(e.target.files?.[0] ?? null)
                         }
-                        className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
+                        className="w-full cursor-pointer rounded-lg border-2 border-dashed border-emerald-400 bg-white p-2 text-xs text-emerald-800 hover:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white file:shadow-sm hover:file:bg-emerald-700"
                       />
+                      <label className="md:hidden flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 focus-within:ring-2 focus-within:ring-emerald-500/40">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.8}
+                          stroke="currentColor"
+                          className="h-5 w-5"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"
+                          />
+                        </svg>
+                        Take photo of report
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) =>
+                            setSelectedNoteFile(e.target.files?.[0] ?? null)
+                          }
+                          className="sr-only"
+                        />
+                      </label>
                       <button
                         type="submit"
                         disabled={!selectedNoteFile || isUploadingNotes}
@@ -6922,14 +6954,46 @@ const PatientRecordsPage: React.FC = () => {
                                     (expanded) => !expanded,
                                   )
                                 }
-                                className="mt-3 flex w-full items-center justify-between rounded-md bg-red-50 px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-100"
+                                className="mt-3 flex w-full flex-wrap items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-100"
                                 aria-expanded={showHarmonizerDuplicateDetails}
                               >
-                                <span>
+                                <span className="flex items-center gap-1.5">
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2}
+                                    stroke="currentColor"
+                                    className="h-4 w-4 shrink-0"
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+                                    />
+                                  </svg>
                                   This resource is marked as a duplicate.
                                 </span>
-                                <span aria-hidden="true">
-                                  {showHarmonizerDuplicateDetails ? '−' : '+'}
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 underline-offset-2">
+                                  {showHarmonizerDuplicateDetails
+                                    ? 'Hide details'
+                                    : 'View duplicate details'}
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2.5}
+                                    stroke="currentColor"
+                                    className={`h-3.5 w-3.5 transition-transform ${showHarmonizerDuplicateDetails ? 'rotate-180' : ''}`}
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                                    />
+                                  </svg>
                                 </span>
                               </button>
                               {showHarmonizerDuplicateDetails && (
