@@ -2415,24 +2415,34 @@ const PatientRecordsPage: React.FC = () => {
 
   const handleExpandedMissionApprove = async (missionId: string) => {
     try {
-      // First load the review data to populate etag and records
+      setIsNoteUploadPolling(true);
+      setHarmonizerReviewActionError(null);
+
+      // Load review data to get etag
       const result = await harmonizerReviewService.getReview(missionId);
-      setHarmonizerReviewEtag(result.etag);
-      const payload = result.data as any;
-      const records = payload.records || payload.items || payload.review;
-      setHarmonizerReviewRecords(Array.isArray(records) ? records : []);
-      setNoteUploadJobId(missionId);
-      setNoteUploadJobStatus('AWAITING_REVIEW');
+      const etag = result.etag;
 
-      // Now call the approve function which will use the loaded etag
-      await approveHarmonizerReview();
+      // Call approve with the loaded etag directly (not relying on state)
+      await harmonizerReviewService.approve(
+        missionId,
+        'Generated FHIR resources reviewed and approved.',
+        etag,
+      );
 
+      setIsNoteUploadPolling(false);
       // Clear and reset
       setExpandedMissionIds(new Set());
       setExpandedMissionRecords(new Map());
+      setNoteUploadJobId(null);
+      setHarmonizerReviewRecords([]);
+      setHarmonizerReviewEtag(undefined);
       setHarmonizerPanelTab('upload');
+      setNoteUploadMessage('Review approved. Resuming Harmonizer…');
+
+      // Reload missions
       await loadPendingHarmonizerMissions();
     } catch (error: any) {
+      setIsNoteUploadPolling(false);
       console.error('Failed to approve:', error);
       setHarmonizerReviewActionError(
         error?.message || 'Failed to approve review'
@@ -2442,24 +2452,35 @@ const PatientRecordsPage: React.FC = () => {
 
   const handleExpandedMissionReject = async (missionId: string, mode: 'REVISE' | 'DISCARD') => {
     try {
-      // First load the review data to populate etag
+      setIsNoteUploadPolling(true);
+      setHarmonizerReviewActionError(null);
+
+      // Load review data to get etag
       const result = await harmonizerReviewService.getReview(missionId);
-      setHarmonizerReviewEtag(result.etag);
-      const payload = result.data as any;
-      const records = payload.records || payload.items || payload.review;
-      setHarmonizerReviewRecords(Array.isArray(records) ? records : []);
-      setNoteUploadJobId(missionId);
-      setNoteUploadJobStatus('AWAITING_REVIEW');
+      const etag = result.etag;
 
-      // Now call the reject function which will use the loaded etag
-      await rejectHarmonizerReview(mode);
+      // Call reject with the loaded etag directly (not relying on state)
+      await harmonizerReviewService.reject(
+        missionId,
+        mode,
+        '',
+        etag,
+      );
 
+      setIsNoteUploadPolling(false);
       // Clear and reset
       setExpandedMissionIds(new Set());
       setExpandedMissionRecords(new Map());
+      setNoteUploadJobId(null);
+      setHarmonizerReviewRecords([]);
+      setHarmonizerReviewEtag(undefined);
       setHarmonizerPanelTab('upload');
+      setNoteUploadMessage('Review rejected. Resuming Harmonizer…');
+
+      // Reload missions
       await loadPendingHarmonizerMissions();
     } catch (error: any) {
+      setIsNoteUploadPolling(false);
       console.error('Failed to reject:', error);
       setHarmonizerReviewActionError(
         error?.message || 'Failed to reject review'
