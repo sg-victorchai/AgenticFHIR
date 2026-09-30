@@ -12,7 +12,6 @@ const Header: React.FC = () => {
   const { isAuthenticated, user } = useSelector(
     (state: RootState) => state.auth,
   );
-  const role = useSelector((state: RootState) => state.ui.role);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
