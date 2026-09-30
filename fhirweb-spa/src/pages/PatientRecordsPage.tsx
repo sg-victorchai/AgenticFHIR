@@ -2051,6 +2051,8 @@ const PatientRecordsPage: React.FC = () => {
     'upload' | 'review'
   >('upload');
   const [expandedMissionIds, setExpandedMissionIds] = useState<Set<string>>(new Set());
+  const [expandedMissionRecords, setExpandedMissionRecords] = useState<Map<string, HarmonizerReviewRecord[]>>(new Map());
+  const [loadingMissionIds, setLoadingMissionIds] = useState<Set<string>>(new Set());
 
   // ── Upload panel resize state ──
   const [uploadPanelWidth, setUploadPanelWidth] = useState(40); // Default 40% width
@@ -2378,16 +2380,42 @@ const PatientRecordsPage: React.FC = () => {
     await loadHarmonizerReview(mission.missionId);
   };
 
-  const toggleMissionExpanded = (missionId: string) => {
+  const toggleMissionExpanded = async (missionId: string) => {
     setExpandedMissionIds((prevIds) => {
       const newIds = new Set(prevIds);
       if (newIds.has(missionId)) {
         newIds.delete(missionId);
+        setExpandedMissionRecords((prev) => {
+          const newRecords = new Map(prev);
+          newRecords.delete(missionId);
+          return newRecords;
+        });
       } else {
         newIds.add(missionId);
+        // Fetch records for this mission if not already loaded
+        if (!expandedMissionRecords.has(missionId)) {
+          setLoadingMissionIds((prev) => new Set([...prev, missionId]));
+          loadHarmonizerReviewForMission(missionId);
+        }
       }
       return newIds;
     });
+  };
+
+  const loadHarmonizerReviewForMission = async (missionId: string) => {
+    try {
+      const result = await harmonizerReviewService.getReview(missionId);
+      const records = result.data.records || result.data.items || result.data.review || [];
+      setExpandedMissionRecords((prev) => new Map(prev).set(missionId, records));
+    } catch (error) {
+      console.error('Failed to load review records:', error);
+    } finally {
+      setLoadingMissionIds((prev) => {
+        const newLoading = new Set(prev);
+        newLoading.delete(missionId);
+        return newLoading;
+      });
+    }
   };
 
   const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
@@ -6656,17 +6684,91 @@ const PatientRecordsPage: React.FC = () => {
                               {expandedMissionIds.has(mission.missionId) && (
                                 <>
                                   <div className="border-t border-emerald-100 px-3 py-2 space-y-2">
-                                    {mission.counts && Object.keys(mission.counts).length > 0 ? (
-                                      <div className="space-y-1">
-                                        {Object.entries(mission.counts).map(([key, value]) => (
-                                          <div key={key} className="flex justify-between text-xs">
-                                            <span className="text-gray-600 capitalize">{key}:</span>
-                                            <span className="font-semibold text-gray-800">{value}</span>
-                                          </div>
-                                        ))}
+                                    {loadingMissionIds.has(mission.missionId) ? (
+                                      <p className="text-xs text-gray-600">Loading records…</p>
+                                    ) : expandedMissionRecords.get(mission.missionId)?.length ? (
+                                      <div className="space-y-2">
+                                        {expandedMissionRecords.get(mission.missionId)!.map((record) => {
+                                          const resource = (record.resource || record) as any;
+                                          const display =
+                                            resource.resourceType === 'Encounter'
+                                              ? [
+                                                  resource.actualPeriod?.start ||
+                                                  resource.period?.start
+                                                    ? fmt(
+                                                        resource.actualPeriod?.start ||
+                                                          resource.period?.start,
+                                                      )
+                                                    : null,
+                                                  resource.class?.display ||
+                                                    resource.class?.coding?.[0]?.display ||
+                                                    resource.class?.coding?.[0]?.code,
+                                                  resource.type?.[0]?.text ||
+                                                    resource.type?.[0]?.coding?.[0]
+                                                      ?.display ||
+                                                    resource.type?.[0]?.coding?.[0]?.code,
+                                                ]
+                                                  .filter(Boolean)
+                                                  .join(' · ') ||
+                                                record.resourceId ||
+                                                'Encounter'
+                                              : resource.code?.text ||
+                                                resource.code?.coding?.[0]?.display ||
+                                                resource.title ||
+                                                resource.medication?.concept?.text ||
+                                                record.resourceId ||
+                                                'Generated resource';
+                                          return (
+                                            <button
+                                              key={record.recordId}
+                                              type="button"
+                                              onClick={() => {
+                                                setNoteUploadJobId(mission.missionId);
+                                                setNoteUploadJobStatus('AWAITING_REVIEW');
+                                                setNoteUploadMessage('Generated resources are ready for review.');
+                                                setShowPendingHarmonizerMissions(false);
+                                                openHarmonizerRecord(record);
+                                              }}
+                                              className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50 text-xs"
+                                            >
+                                              <div className="flex items-start justify-between gap-2">
+                                                <span className="font-semibold text-gray-900">
+                                                  {record.resourceType ||
+                                                    resource.resourceType ||
+                                                    'FHIR Resource'}
+                                                </span>
+                                                <span className="text-[11px] text-gray-500">
+                                                  {typeof record.confidence === 'number'
+                                                    ? `${Math.round(record.confidence * 100)}% confidence`
+                                                    : toDisplayText(record.outcome) ||
+                                                      'Review'}
+                                                </span>
+                                              </div>
+                                              <div className="mt-1">
+                                                <HarmonizerReviewMetadata
+                                                  record={record}
+                                                  compact
+                                                />
+                                              </div>
+                                              {isHarmonizerDuplicate(record) && (
+                                                <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                                                  Duplicate candidate
+                                                </p>
+                                              )}
+                                              <p className="mt-1 truncate text-sm text-gray-800">
+                                                {toDisplayText(display)}
+                                              </p>
+                                              {record.evidence && (
+                                                <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                                                  Evidence: {toDisplayText(record.evidence)}
+                                                </p>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
                                       </div>
                                     ) : (
-                                      <p className="text-xs text-gray-500 py-1">Ready for review</p>
+                                      <p className="text-xs text-gray-600">No records available</p>
                                     )}
                                   </div>
                                   <div className="border-t border-emerald-100 px-3 py-2">
@@ -6677,7 +6779,7 @@ const PatientRecordsPage: React.FC = () => {
                                       }
                                       className="w-full rounded-md bg-amber-500 text-white px-3 py-1.5 text-xs font-semibold hover:bg-amber-600 transition-colors"
                                     >
-                                      Review
+                                      Review All
                                     </button>
                                   </div>
                                 </>
