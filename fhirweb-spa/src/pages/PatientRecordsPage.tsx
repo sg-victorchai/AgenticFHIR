@@ -2050,6 +2050,7 @@ const PatientRecordsPage: React.FC = () => {
   const [harmonizerPanelTab, setHarmonizerPanelTab] = useState<
     'upload' | 'review'
   >('upload');
+  const [expandedMissionIds, setExpandedMissionIds] = useState<Set<string>>(new Set());
 
   // ── Upload panel resize state ──
   const [uploadPanelWidth, setUploadPanelWidth] = useState(40); // Default 40% width
@@ -2338,7 +2339,7 @@ const PatientRecordsPage: React.FC = () => {
     setIsLoadingPendingHarmonizerMissions(true);
     setHarmonizerReviewActionError(null);
     try {
-      const missions = await harmonizerReviewService.getPendingMissions();
+      const missions = await harmonizerReviewService.getPendingMissions(patientId!);
       setPendingHarmonizerMissions(missions);
     } catch (error: any) {
       setHarmonizerReviewActionError(
@@ -2375,6 +2376,18 @@ const PatientRecordsPage: React.FC = () => {
     setNoteUploadMessage('Generated resources are ready for review.');
     setShowPendingHarmonizerMissions(false);
     await loadHarmonizerReview(mission.missionId);
+  };
+
+  const toggleMissionExpanded = (missionId: string) => {
+    setExpandedMissionIds((prevIds) => {
+      const newIds = new Set(prevIds);
+      if (newIds.has(missionId)) {
+        newIds.delete(missionId);
+      } else {
+        newIds.add(missionId);
+      }
+      return newIds;
+    });
   };
 
   const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
