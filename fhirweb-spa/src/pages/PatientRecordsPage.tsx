@@ -2539,7 +2539,14 @@ const PatientRecordsPage: React.FC = () => {
       setSelectedHarmonizerRecord(null);
       setIsAddingHarmonizerRecord(false);
       setIsEditingHarmonizerRecord(false);
-      await loadHarmonizerReview(noteUploadJobId);
+
+      // Reload expanded mission records if in expanded card view
+      if (expandedMissionIds.has(noteUploadJobId)) {
+        await loadHarmonizerReviewForMission(noteUploadJobId);
+      } else {
+        // Otherwise load full review panel data
+        await loadHarmonizerReview(noteUploadJobId);
+      }
     } catch (error: any) {
       setHarmonizerReviewActionError(
         error instanceof SyntaxError
@@ -6832,6 +6839,7 @@ const PatientRecordsPage: React.FC = () => {
                                               key={record.recordId}
                                               type="button"
                                               onClick={() => {
+                                                setNoteUploadJobId(mission.missionId);
                                                 openHarmonizerRecord(record);
                                               }}
                                               className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50 text-xs"
