@@ -6808,6 +6808,47 @@ const PatientRecordsPage: React.FC = () => {
                                       Review All
                                     </button>
                                   </div>
+
+                                  {/* Action Buttons */}
+                                  {(expandedMissionRecords.get(mission.missionId)?.length ?? 0) > 0 && (
+                                    <div className="border-t border-emerald-100 px-3 py-2">
+                                      <div className="flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setNoteUploadJobId(mission.missionId);
+                                            setNoteUploadJobStatus('AWAITING_REVIEW');
+                                            void approveHarmonizerReview();
+                                          }}
+                                          className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                                        >
+                                          Approve &amp; resume
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setNoteUploadJobId(mission.missionId);
+                                            setNoteUploadJobStatus('AWAITING_REVIEW');
+                                            void rejectHarmonizerReview('REVISE');
+                                          }}
+                                          className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                        >
+                                          Request changes
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setNoteUploadJobId(mission.missionId);
+                                            setNoteUploadJobStatus('AWAITING_REVIEW');
+                                            void rejectHarmonizerReview('DISCARD');
+                                          }}
+                                          className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                        >
+                                          Discard
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </>
                               )}
                             </div>
