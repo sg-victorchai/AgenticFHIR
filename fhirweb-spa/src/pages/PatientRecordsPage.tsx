@@ -6588,34 +6588,99 @@ const PatientRecordsPage: React.FC = () => {
                       ) : (
                         <div className="space-y-2">
                           {pendingHarmonizerMissions.map((mission) => (
-                            <button
-                              key={mission.missionId}
-                              type="button"
-                              onClick={() =>
-                                void openPendingHarmonizerMission(mission)
-                              }
-                              className="w-full rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-left hover:border-emerald-400"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-semibold text-gray-800">
-                                  Document import
-                                </span>
-                                <span className="text-[11px] font-medium text-amber-700">
-                                  Awaiting review
-                                </span>
-                              </div>
-                              <p className="mt-1 truncate font-mono text-[11px] text-gray-500">
-                                {mission.missionId}
-                              </p>
-                              {mission.submittedAt || mission.createdAt ? (
-                                <p className="mt-1 text-[11px] text-gray-600">
-                                  Submitted{' '}
-                                  {fmt(
-                                    mission.submittedAt || mission.createdAt,
+                            <div key={mission.missionId} className="rounded-md border border-emerald-100 bg-emerald-50">
+                              {/* Card Header - Always visible */}
+                              <button
+                                type="button"
+                                onClick={() => toggleMissionExpanded(mission.missionId)}
+                                className="w-full px-3 py-2 text-left hover:bg-emerald-100 transition-colors flex items-center justify-between gap-2"
+                              >
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-semibold text-gray-800">
+                                      Document import
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-600 font-mono mt-1">
+                                    {mission.missionId}
+                                  </div>
+                                  {mission.submittedAt || mission.createdAt ? (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      Submitted{' '}
+                                      {fmt(
+                                        mission.submittedAt || mission.createdAt,
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                                    Awaiting review
+                                  </span>
+                                  {/* Expand/Collapse Icon */}
+                                  {expandedMissionIds.has(mission.missionId) ? (
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth={2}
+                                      stroke="currentColor"
+                                      className="w-4 h-4 text-gray-600 shrink-0"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M19 9l-7 7-7-7"
+                                      />
+                                    </svg>
+                                  ) : (
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth={2}
+                                      stroke="currentColor"
+                                      className="w-4 h-4 text-gray-600 shrink-0"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M9 5l7 7-7 7"
+                                      />
+                                    </svg>
                                   )}
-                                </p>
-                              ) : null}
-                            </button>
+                                </div>
+                              </button>
+
+                              {/* Card Details - Only shown when expanded */}
+                              {expandedMissionIds.has(mission.missionId) && (
+                                <>
+                                  <div className="border-t border-emerald-100 px-3 py-2">
+                                    {mission.counts && (
+                                      <div className="text-xs text-gray-600 space-y-1">
+                                        {Object.entries(mission.counts).map(([key, value]) => (
+                                          <div key={key} className="flex justify-between">
+                                            <span>{key}:</span>
+                                            <span className="font-semibold">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="border-t border-emerald-100 px-3 py-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void openPendingHarmonizerMission(mission)
+                                      }
+                                      className="w-full rounded-md bg-amber-500 text-white px-3 py-1.5 text-xs font-semibold hover:bg-amber-600 transition-colors"
+                                    >
+                                      Review
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           ))}
                         </div>
                       )}
