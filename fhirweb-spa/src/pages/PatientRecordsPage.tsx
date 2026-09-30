@@ -2375,16 +2375,6 @@ const PatientRecordsPage: React.FC = () => {
     return null;
   };
 
-  const openPendingHarmonizerMission = async (
-    mission: HarmonizerPendingMission,
-  ) => {
-    setNoteUploadJobId(mission.missionId);
-    setNoteUploadJobStatus('AWAITING_REVIEW');
-    setNoteUploadMessage('Generated resources are ready for review.');
-    setShowPendingHarmonizerMissions(false);
-    await loadHarmonizerReview(mission.missionId);
-  };
-
   const toggleMissionExpanded = async (missionId: string) => {
     setExpandedMissionIds((prevIds) => {
       const newIds = new Set(prevIds);
