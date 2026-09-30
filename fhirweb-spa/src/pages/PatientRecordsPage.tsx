@@ -6655,18 +6655,18 @@ const PatientRecordsPage: React.FC = () => {
                               {/* Card Details - Only shown when expanded */}
                               {expandedMissionIds.has(mission.missionId) && (
                                 <>
-                                  <div className="border-t border-emerald-100 px-3 py-2">
-                                    {mission.counts && (
+                                  {mission.counts && Object.keys(mission.counts).length > 0 && (
+                                    <div className="border-t border-emerald-100 px-3 py-2">
                                       <div className="text-xs text-gray-600 space-y-1">
                                         {Object.entries(mission.counts).map(([key, value]) => (
                                           <div key={key} className="flex justify-between">
-                                            <span>{key}:</span>
-                                            <span className="font-semibold">{value}</span>
+                                            <span className="capitalize">{key}:</span>
+                                            <span className="font-semibold text-gray-800">{value}</span>
                                           </div>
                                         ))}
                                       </div>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
                                   <div className="border-t border-emerald-100 px-3 py-2">
                                     <button
                                       type="button"
