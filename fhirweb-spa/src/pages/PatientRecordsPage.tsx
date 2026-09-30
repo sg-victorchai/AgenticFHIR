@@ -6683,6 +6683,32 @@ const PatientRecordsPage: React.FC = () => {
                               {/* Card Details - Only shown when expanded */}
                               {expandedMissionIds.has(mission.missionId) && (
                                 <>
+                                  {/* Info Panel - Show when records are loaded */}
+                                  {(expandedMissionRecords.get(mission.missionId)?.length ?? 0) > 0 && (
+                                    <div className="border-t border-emerald-100 px-3 py-2">
+                                      <div className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+                                          Review required
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-amber-900">
+                                          Generated resources are ready for review.
+                                        </p>
+                                        <p className="mt-1 text-xs text-amber-800">
+                                          Nothing has been written to the patient record yet.
+                                          Review or edit each resource, then approve to resume
+                                          the import.
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={openNewHarmonizerRecord}
+                                          className="mt-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                        >
+                                          Add missing resource
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
                                   <div className="border-t border-emerald-100 px-3 py-2 space-y-2">
                                     {loadingMissionIds.has(mission.missionId) ? (
                                       <p className="text-xs text-gray-600">Loading records…</p>
