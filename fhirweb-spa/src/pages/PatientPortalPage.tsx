@@ -172,7 +172,7 @@ const PatientPortalPage: React.FC = () => {
   const handleSelectPatient = (patientId: string) => {
     sessionStorage.setItem('smartPatientId', patientId);
     dispatch(setRole('patient'));
-    navigate(`/patient/${patientId}/records`);
+    navigate(`/patient/${patientId}/records`, { state: { from: '/patient-portal' } });
   };
 
   const handleBack = () => {
