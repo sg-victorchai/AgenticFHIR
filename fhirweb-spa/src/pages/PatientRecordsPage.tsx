@@ -2566,15 +2566,22 @@ const PatientRecordsPage: React.FC = () => {
   ) => {
     if (!noteUploadJobId || !selectedHarmonizerRecord?.recordId) return;
     setHarmonizerReviewActionError(null);
+    const jobId = noteUploadJobId;
     try {
+      // Always fetch fresh etag before mutating
+      const fresh = await harmonizerReviewService.getReview(jobId);
       await harmonizerReviewService.resolveDuplicate(
-        noteUploadJobId,
+        jobId,
         selectedHarmonizerRecord.recordId,
         action,
-        harmonizerReviewEtag,
+        fresh.etag,
       );
       setSelectedHarmonizerRecord(null);
-      await loadHarmonizerReview(noteUploadJobId);
+      if (expandedMissionIds.has(jobId)) {
+        await loadHarmonizerReviewForMission(jobId);
+      } else {
+        await loadHarmonizerReview(jobId);
+      }
     } catch (error: any) {
       setHarmonizerReviewActionError(
         error?.message || 'Unable to update duplicate decision.',
@@ -2593,17 +2600,24 @@ const PatientRecordsPage: React.FC = () => {
       return;
     }
     setHarmonizerReviewActionError(null);
+    const jobId = noteUploadJobId;
     try {
+      // Always fetch fresh etag before mutating
+      const fresh = await harmonizerReviewService.getReview(jobId);
       await harmonizerReviewService.setRecordDisposition(
-        noteUploadJobId,
+        jobId,
         selectedHarmonizerRecord.recordId,
         disposition,
         disposition === 'IGNORE' ? harmonizerIgnoreReason : undefined,
-        harmonizerReviewEtag,
+        fresh.etag,
       );
       setSelectedHarmonizerRecord(null);
       setHarmonizerIgnoreReason('');
-      await loadHarmonizerReview(noteUploadJobId);
+      if (expandedMissionIds.has(jobId)) {
+        await loadHarmonizerReviewForMission(jobId);
+      } else {
+        await loadHarmonizerReview(jobId);
+      }
     } catch (error: any) {
       setHarmonizerReviewActionError(
         error?.message || 'Unable to update the record disposition.',
