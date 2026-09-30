@@ -2413,6 +2413,46 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const handleExpandedMissionApprove = async (missionId: string) => {
+    try {
+      setNoteUploadJobId(missionId);
+      setNoteUploadJobStatus('AWAITING_REVIEW');
+      await approveHarmonizerReview();
+      // Clear expanded state and switch to upload tab
+      setExpandedMissionIds(new Set());
+      setExpandedMissionRecords(new Map());
+      setHarmonizerPanelTab('upload');
+      // Reload missions after action
+      setTimeout(() => {
+        void loadPendingHarmonizerMissions();
+      }, 500);
+    } catch (error) {
+      console.error('Failed to approve:', error);
+      setNoteUploadJobId(null);
+      setNoteUploadJobStatus(null);
+    }
+  };
+
+  const handleExpandedMissionReject = async (missionId: string, mode: 'REVISE' | 'DISCARD') => {
+    try {
+      setNoteUploadJobId(missionId);
+      setNoteUploadJobStatus('AWAITING_REVIEW');
+      await rejectHarmonizerReview(mode);
+      // Clear expanded state and switch to upload tab
+      setExpandedMissionIds(new Set());
+      setExpandedMissionRecords(new Map());
+      setHarmonizerPanelTab('upload');
+      // Reload missions after action
+      setTimeout(() => {
+        void loadPendingHarmonizerMissions();
+      }, 500);
+    } catch (error) {
+      console.error('Failed to reject:', error);
+      setNoteUploadJobId(null);
+      setNoteUploadJobStatus(null);
+    }
+  };
+
   const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
     setSelectedHarmonizerRecord(record);
     setShowHarmonizerDuplicateDetails(false);
@@ -2998,6 +3038,10 @@ const PatientRecordsPage: React.FC = () => {
       setNoteUploadJobId(null);
       setNoteUploadJobStatus(null);
       setHarmonizerReviewRecords([]);
+    } else {
+      // When returning to review tab, collapse all expanded cards
+      setExpandedMissionIds(new Set());
+      setExpandedMissionRecords(new Map());
     }
   }, [harmonizerPanelTab]);
 
@@ -6807,33 +6851,21 @@ const PatientRecordsPage: React.FC = () => {
                                       <div className="flex flex-wrap gap-2">
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setNoteUploadJobId(mission.missionId);
-                                            setNoteUploadJobStatus('AWAITING_REVIEW');
-                                            void approveHarmonizerReview();
-                                          }}
+                                          onClick={() => void handleExpandedMissionApprove(mission.missionId)}
                                           className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                                         >
                                           Approve &amp; resume
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setNoteUploadJobId(mission.missionId);
-                                            setNoteUploadJobStatus('AWAITING_REVIEW');
-                                            void rejectHarmonizerReview('REVISE');
-                                          }}
+                                          onClick={() => void handleExpandedMissionReject(mission.missionId, 'REVISE')}
                                           className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
                                         >
                                           Request changes
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setNoteUploadJobId(mission.missionId);
-                                            setNoteUploadJobStatus('AWAITING_REVIEW');
-                                            void rejectHarmonizerReview('DISCARD');
-                                          }}
+                                          onClick={() => void handleExpandedMissionReject(mission.missionId, 'DISCARD')}
                                           className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
                                         >
                                           Discard
