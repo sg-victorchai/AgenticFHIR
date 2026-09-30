@@ -2336,6 +2336,7 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const loadPendingHarmonizerMissions = async () => {
+    uploadPollRunIdRef.current += 1;
     setHarmonizerPanelTab('review');
     setShowPendingHarmonizerMissions(true);
     setIsLoadingPendingHarmonizerMissions(true);
