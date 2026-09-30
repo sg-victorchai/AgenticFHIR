@@ -2340,6 +2340,10 @@ const PatientRecordsPage: React.FC = () => {
     setShowPendingHarmonizerMissions(true);
     setIsLoadingPendingHarmonizerMissions(true);
     setHarmonizerReviewActionError(null);
+    // Clear full review panel state
+    setNoteUploadJobId(null);
+    setNoteUploadJobStatus(null);
+    setHarmonizerReviewRecords([]);
     try {
       const missions = await harmonizerReviewService.getPendingMissions(patientId!);
       setPendingHarmonizerMissions(missions);
@@ -2996,6 +3000,15 @@ const PatientRecordsPage: React.FC = () => {
       uploadPollRunIdRef.current += 1;
     };
   }, []);
+
+  // Clear full review panel state when switching tabs
+  useEffect(() => {
+    if (harmonizerPanelTab !== 'review') {
+      setNoteUploadJobId(null);
+      setNoteUploadJobStatus(null);
+      setHarmonizerReviewRecords([]);
+    }
+  }, [harmonizerPanelTab]);
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -6797,18 +6810,6 @@ const PatientRecordsPage: React.FC = () => {
                                       <p className="text-xs text-gray-600">No records available</p>
                                     )}
                                   </div>
-                                  <div className="border-t border-emerald-100 px-3 py-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void openPendingHarmonizerMission(mission)
-                                      }
-                                      className="w-full rounded-md bg-amber-500 text-white px-3 py-1.5 text-xs font-semibold hover:bg-amber-600 transition-colors"
-                                    >
-                                      Review All
-                                    </button>
-                                  </div>
-
                                   {/* Action Buttons */}
                                   {(expandedMissionRecords.get(mission.missionId)?.length ?? 0) > 0 && (
                                     <div className="border-t border-emerald-100 px-3 py-2">
