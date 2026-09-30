@@ -24,17 +24,6 @@ const Header: React.FC = () => {
     });
   };
 
-  const getRoleLabel = () => {
-    if (!role) return '';
-    return role === 'psa'
-      ? 'PSA'
-      : role === 'clinician'
-        ? 'Clinician'
-        : role === 'CARE_COORDINATOR'
-          ? 'Care Manager'
-          : 'Patient';
-  };
-
   return (
     <header className="bg-blue-600 shadow-md">
       <div className="container mx-auto px-4 py-3">
