@@ -64,9 +64,9 @@ const parseResponse = async (response: Response): Promise<any> => {
 };
 
 export const createHarmonizerReviewService = (baseUrl: string) => ({
-  async getPendingMissions(): Promise<HarmonizerPendingMission[]> {
+  async getPendingMissions(patientId: string): Promise<HarmonizerPendingMission[]> {
     const headers = await getAuthenticatedHeaders();
-    const url = `${baseUrl}/api/persona/DataPipelinePersona/clinical-docs-harmonizer/$missions?status=awaiting_review&submittedBy=me&_count=100&_offset=0`;
+    const url = `${baseUrl}/api/persona/DataPipelinePersona/clinical-docs-harmonizer/$missions?status=awaiting_review&submittedBy=me&_count=100&_offset=0&patient=${encodeURIComponent(patientId)}`;
     const payload = await parseResponse(await fetch(url, { headers }));
     return payload.missions || payload.items || payload.data || [];
   },
