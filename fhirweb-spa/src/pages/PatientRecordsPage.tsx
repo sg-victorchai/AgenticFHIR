@@ -2415,41 +2415,55 @@ const PatientRecordsPage: React.FC = () => {
 
   const handleExpandedMissionApprove = async (missionId: string) => {
     try {
+      // First load the review data to populate etag and records
+      const result = await harmonizerReviewService.getReview(missionId);
+      setHarmonizerReviewEtag(result.etag);
+      const payload = result.data as any;
+      const records = payload.records || payload.items || payload.review;
+      setHarmonizerReviewRecords(Array.isArray(records) ? records : []);
       setNoteUploadJobId(missionId);
       setNoteUploadJobStatus('AWAITING_REVIEW');
+
+      // Now call the approve function which will use the loaded etag
       await approveHarmonizerReview();
-      // Clear expanded state and switch to upload tab
+
+      // Clear and reset
       setExpandedMissionIds(new Set());
       setExpandedMissionRecords(new Map());
       setHarmonizerPanelTab('upload');
-      // Reload missions after action
-      setTimeout(() => {
-        void loadPendingHarmonizerMissions();
-      }, 500);
-    } catch (error) {
+      await loadPendingHarmonizerMissions();
+    } catch (error: any) {
       console.error('Failed to approve:', error);
-      setNoteUploadJobId(null);
-      setNoteUploadJobStatus(null);
+      setHarmonizerReviewActionError(
+        error?.message || 'Failed to approve review'
+      );
     }
   };
 
   const handleExpandedMissionReject = async (missionId: string, mode: 'REVISE' | 'DISCARD') => {
     try {
+      // First load the review data to populate etag
+      const result = await harmonizerReviewService.getReview(missionId);
+      setHarmonizerReviewEtag(result.etag);
+      const payload = result.data as any;
+      const records = payload.records || payload.items || payload.review;
+      setHarmonizerReviewRecords(Array.isArray(records) ? records : []);
       setNoteUploadJobId(missionId);
       setNoteUploadJobStatus('AWAITING_REVIEW');
+
+      // Now call the reject function which will use the loaded etag
       await rejectHarmonizerReview(mode);
-      // Clear expanded state and switch to upload tab
+
+      // Clear and reset
       setExpandedMissionIds(new Set());
       setExpandedMissionRecords(new Map());
       setHarmonizerPanelTab('upload');
-      // Reload missions after action
-      setTimeout(() => {
-        void loadPendingHarmonizerMissions();
-      }, 500);
-    } catch (error) {
+      await loadPendingHarmonizerMissions();
+    } catch (error: any) {
       console.error('Failed to reject:', error);
-      setNoteUploadJobId(null);
-      setNoteUploadJobStatus(null);
+      setHarmonizerReviewActionError(
+        error?.message || 'Failed to reject review'
+      );
     }
   };
 
