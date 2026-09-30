@@ -50,9 +50,6 @@ const Header: React.FC = () => {
             {isAuthenticated && (
               <span className="text-white text-xs md:text-sm font-medium truncate">
                 {user?.name || 'User'}
-                {role && (
-                  <span className="text-blue-200"> [{getRoleLabel()}]</span>
-                )}
               </span>
             )}
           </div>
