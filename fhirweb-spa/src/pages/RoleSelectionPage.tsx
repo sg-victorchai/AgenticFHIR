@@ -162,7 +162,7 @@ const RoleSelectionPage: React.FC = () => {
 
               {/* CTA */}
               <div className={`w-full text-center text-sm font-semibold text-white py-2 rounded-lg ${c.btn} transition-colors`}>
-                Enter as {role.title.split(' ')[0]} →
+                Start →
               </div>
             </button>
           );
@@ -171,7 +171,7 @@ const RoleSelectionPage: React.FC = () => {
 
       {/* Footer tagline */}
       <p className="text-center text-xs text-gray-400 mt-10">
-        Powered by FHIR R4 · AI-Assisted Clinical Workflows · Secure &amp; Compliant
+        Powered by AI native agentic platform · AI-Assisted authoring · Secure &amp; Compliant
       </p>
     </div>
   );
