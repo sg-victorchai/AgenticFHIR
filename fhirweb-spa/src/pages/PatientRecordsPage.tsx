@@ -5984,6 +5984,12 @@ const PatientRecordsPage: React.FC = () => {
               ← Back to Queue
             </Link>
           )}
+          <Link
+            to="/patients"
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mb-2"
+          >
+            ← Back to Patient List
+          </Link>
           <div className="flex flex-col md:flex-row items-start md:items-start justify-between gap-3">
             <div className="flex flex-col md:flex-row md:items-center md:gap-4 gap-1">
               <h1 className="text-lg md:text-xl font-bold text-gray-900">
