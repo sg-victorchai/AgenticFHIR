@@ -7011,6 +7011,7 @@ const PatientRecordsPage: React.FC = () => {
                 )}
 
                 {harmonizerPanelTab === 'review' &&
+                  noteUploadJobId &&
                   noteUploadJobStatus === 'AWAITING_REVIEW' && (
                     <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
                       <div className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2">
