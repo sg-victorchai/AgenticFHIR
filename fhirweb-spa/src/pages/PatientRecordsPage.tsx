@@ -1944,7 +1944,7 @@ const SearchResultCard: React.FC<{
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
   const location = useLocation();
-  const isFromPatientList = location.state?.from === '/patients' || document.referrer.includes('/patients');
+  const isFromPatientPortal = location.state?.from === '/patient-portal' || document.referrer.includes('/patient-portal');
   const role = useSelector((state: RootState) => state.ui.role);
   const pollRunIdRef = useRef(0);
   const uploadPollRunIdRef = useRef(0);
@@ -5986,12 +5986,12 @@ const PatientRecordsPage: React.FC = () => {
               ← Back to Queue
             </Link>
           )}
-          {isFromPatientList && (
+          {isFromPatientPortal && (
             <Link
-              to="/patients"
+              to="/patient-portal"
               className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mb-2"
             >
-              ← Back to Patient List
+              ← Back to Patient Portal
             </Link>
           )}
           <div className="flex flex-col md:flex-row items-start md:items-start justify-between gap-3">
