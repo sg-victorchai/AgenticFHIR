@@ -11,6 +11,10 @@ import {
 import { RootState } from '../store';
 import AgentConversationModal from '../components/modals/AgentConversationModal';
 import { ResourceSummaryContent } from '../components/common/AgentResponseFormatter';
+import {
+  FhirResourceEditor as FriendlyHarmonizerEditor,
+  friendlyFieldLabel,
+} from '../components/common/FhirResourceEditor';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
 import { AgentEndpointConfig } from '../types/agent';
 import { getAuthenticatedHeaders, getOidcUser } from '../services/auth/oidc';
@@ -727,277 +731,6 @@ const HarmonizerDuplicateDetails: React.FC<{
             {dedup.duplicateOf.resourceType}/{dedup.duplicateOf.resourceId}
           </span>
         </p>
-      )}
-    </div>
-  );
-};
-
-const friendlyFieldLabel = (field: string) =>
-  field
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/^./, (character) => character.toUpperCase());
-
-const FriendlyHarmonizerEditor: React.FC<{
-  resource: Record<string, any>;
-  onChange: (resource: Record<string, any>) => void;
-}> = ({ resource, onChange }) => {
-  const update = (path: Array<string | number>, value: unknown) => {
-    const next = JSON.parse(JSON.stringify(resource));
-    let target = next;
-    path.slice(0, -1).forEach((key) => {
-      target[key] = target[key] || {};
-      target = target[key];
-    });
-    target[path[path.length - 1]] = value;
-    onChange(next);
-  };
-
-  const inputClass =
-    'mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30';
-
-  const temporalFieldPattern =
-    /(^|date|time|datetime|issued|authored|recorded|effective|onset|performed|occurrence|created|updated|start|end)$/i;
-
-  const isTemporalField = (path: Array<string | number>, value: unknown) => {
-    const field = String(path[path.length - 1]);
-    return (
-      temporalFieldPattern.test(field) ||
-      (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T|$)/.test(value))
-    );
-  };
-
-  const toDateInputValue = (value: string, dateTime: boolean) =>
-    dateTime ? value.slice(0, 16) : value.slice(0, 10);
-
-  const isReadOnlyReferenceField = (path: Array<string | number>) => {
-    const field = String(path[path.length - 1]).toLowerCase();
-    return (
-      field === 'id' ||
-      field.endsWith('id') ||
-      field === 'reference' ||
-      field.endsWith('reference') ||
-      field === 'resourcetype'
-    );
-  };
-
-  const renderCodeableConcept = (
-    value: Record<string, any>,
-    path: Array<string | number>,
-    label: string,
-  ): React.ReactNode => {
-    const coding = Array.isArray(value.coding) ? value.coding : [];
-    return (
-      <fieldset
-        key={path.join('.')}
-        className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3"
-      >
-        {coding.map((entry: Record<string, any>, index: number) => (
-          <div
-            key={`${path.join('.')}.coding.${index}`}
-            className="space-y-3 rounded-md border border-gray-200 bg-white p-3"
-          >
-            <label className="block text-xs font-semibold text-gray-600">
-              Code
-              <input
-                className={inputClass}
-                value={entry.code || ''}
-                onChange={(event) =>
-                  update([...path, 'coding', index, 'code'], event.target.value)
-                }
-              />
-            </label>
-            <label className="block text-xs font-semibold text-gray-600">
-              System
-              <input
-                className={inputClass}
-                value={entry.system || ''}
-                onChange={(event) =>
-                  update(
-                    [...path, 'coding', index, 'system'],
-                    event.target.value,
-                  )
-                }
-              />
-            </label>
-            <label className="block text-xs font-semibold text-gray-600">
-              Display
-              <input
-                className={inputClass}
-                value={entry.display || ''}
-                onChange={(event) =>
-                  update(
-                    [...path, 'coding', index, 'display'],
-                    event.target.value,
-                  )
-                }
-              />
-            </label>
-          </div>
-        ))}
-        <label className="block text-xs font-semibold text-gray-600">
-          Text
-          <input
-            className={inputClass}
-            value={value.text || ''}
-            onChange={(event) => update([...path, 'text'], event.target.value)}
-          />
-        </label>
-        {coding.length === 0 && !value.text && (
-          <p className="text-xs text-gray-500">No code or text supplied.</p>
-        )}
-        {label === 'Code' && (
-          <p className="text-[11px] text-gray-500">
-            Update the clinical code, terminology system, display label, or free
-            text.
-          </p>
-        )}
-      </fieldset>
-    );
-  };
-
-  const renderValue = (
-    value: any,
-    path: Array<string | number>,
-    label: string,
-    depth = 0,
-  ): React.ReactNode => {
-    if (value === null || value === undefined) {
-      const isTemporal = isTemporalField(path, value);
-      const readOnly = isReadOnlyReferenceField(path);
-      return (
-        <label
-          key={path.join('.')}
-          className="block text-xs font-semibold text-gray-600"
-        >
-          {label}
-          <input
-            type={isTemporal ? 'date' : 'text'}
-            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-200 text-gray-600' : ''}`}
-            value=""
-            readOnly={readOnly}
-            onChange={(event) => update(path, event.target.value)}
-          />
-        </label>
-      );
-    }
-
-    if (typeof value === 'object') {
-      if (
-        !Array.isArray(value) &&
-        ('coding' in value ||
-          (typeof value.text === 'string' &&
-            [
-              'code',
-              'category',
-              'severity',
-              'clinicalStatus',
-              'verificationStatus',
-              'interpretation',
-            ].includes(String(path[path.length - 1]))))
-      ) {
-        return renderCodeableConcept(value, path, label);
-      }
-      if (Array.isArray(value)) {
-        const readOnly = isReadOnlyReferenceField(path);
-        return (
-          <fieldset
-            key={path.join('.')}
-            className={`space-y-3 rounded-md border border-gray-300 p-3 ${readOnly ? 'bg-gray-200' : 'bg-gray-50'}`}
-          >
-            <legend className="px-1 text-xs font-semibold text-gray-600">
-              {label}
-            </legend>
-            {value.length === 0 ? (
-              <p className="text-xs text-gray-500">No entries</p>
-            ) : (
-              value.map((item, index) =>
-                renderValue(
-                  item,
-                  [...path, index],
-                  `${label} ${index + 1}`,
-                  depth + 1,
-                ),
-              )
-            )}
-          </fieldset>
-        );
-      }
-
-      return (
-        <fieldset
-          key={path.join('.')}
-          className={`space-y-3 rounded-md border border-gray-300 p-3 ${isReadOnlyReferenceField(path) ? 'bg-gray-200' : depth > 0 ? 'bg-gray-50' : 'bg-white'}`}
-        >
-          <legend className="px-1 text-xs font-semibold text-gray-600">
-            {label}
-          </legend>
-          {Object.entries(value).map(([field, nestedValue]) =>
-            renderValue(
-              nestedValue,
-              [...path, field],
-              friendlyFieldLabel(field),
-              depth + 1,
-            ),
-          )}
-        </fieldset>
-      );
-    }
-
-    const isBoolean = typeof value === 'boolean';
-    const isNumber = typeof value === 'number';
-    const isTemporal = isTemporalField(path, value);
-    const isDateTime = isTemporal && String(value).includes('T');
-    const readOnly = isReadOnlyReferenceField(path);
-    return (
-      <label
-        key={path.join('.')}
-        className="block text-xs font-semibold text-gray-600"
-      >
-        {label}
-        {isBoolean ? (
-          <select
-            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-200 text-gray-600' : ''}`}
-            value={String(value)}
-            disabled={readOnly}
-            onChange={(event) => update(path, event.target.value === 'true')}
-          >
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
-        ) : (
-          <input
-            type={
-              isNumber
-                ? 'number'
-                : isDateTime
-                  ? 'datetime-local'
-                  : isTemporal
-                    ? 'date'
-                    : 'text'
-            }
-            value={
-              isTemporal
-                ? toDateInputValue(String(value), isDateTime)
-                : String(value)
-            }
-            readOnly={readOnly}
-            className={`${inputClass} ${readOnly ? 'cursor-not-allowed bg-gray-200 text-gray-600' : ''}`}
-            onChange={(event) =>
-              update(
-                path,
-                isNumber ? Number(event.target.value) : event.target.value,
-              )
-            }
-          />
-        )}
-      </label>
-    );
-  };
-
-  return (
-    <div className="space-y-4">
-      {Object.entries(resource).map(([field, value]) =>
-        renderValue(value, [field], friendlyFieldLabel(field)),
       )}
     </div>
   );
@@ -1947,6 +1680,9 @@ const PatientRecordsPage: React.FC = () => {
   // Check if navigating from patient portal (for patient role users)
   const showBackToPatientPortal = location.state?.from === '/patient-portal';
   const role = useSelector((state: RootState) => state.ui.role);
+  const authUserId = useSelector((state: RootState) => state.auth.user?.id);
+  const canUseAgent = role === 'patient' || role === 'clinician';
+  const isClinicianAgent = role === 'clinician';
   const pollRunIdRef = useRef(0);
   const uploadPollRunIdRef = useRef(0);
 
@@ -2053,9 +1789,15 @@ const PatientRecordsPage: React.FC = () => {
   const [harmonizerPanelTab, setHarmonizerPanelTab] = useState<
     'upload' | 'review'
   >('upload');
-  const [expandedMissionIds, setExpandedMissionIds] = useState<Set<string>>(new Set());
-  const [expandedMissionRecords, setExpandedMissionRecords] = useState<Map<string, HarmonizerReviewRecord[]>>(new Map());
-  const [loadingMissionIds, setLoadingMissionIds] = useState<Set<string>>(new Set());
+  const [expandedMissionIds, setExpandedMissionIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedMissionRecords, setExpandedMissionRecords] = useState<
+    Map<string, HarmonizerReviewRecord[]>
+  >(new Map());
+  const [loadingMissionIds, setLoadingMissionIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   // ── Upload panel resize state ──
   const [uploadPanelWidth, setUploadPanelWidth] = useState(40); // Default 40% width
@@ -2349,7 +2091,9 @@ const PatientRecordsPage: React.FC = () => {
     setNoteUploadJobStatus(null);
     setHarmonizerReviewRecords([]);
     try {
-      const missions = await harmonizerReviewService.getPendingMissions(patientId!);
+      const missions = await harmonizerReviewService.getPendingMissions(
+        patientId!,
+      );
       setPendingHarmonizerMissions(missions);
     } catch (error: any) {
       setHarmonizerReviewActionError(
@@ -2403,8 +2147,11 @@ const PatientRecordsPage: React.FC = () => {
   const loadHarmonizerReviewForMission = async (missionId: string) => {
     try {
       const result = await harmonizerReviewService.getReview(missionId);
-      const records = result.data.records || result.data.items || result.data.review || [];
-      setExpandedMissionRecords((prev) => new Map(prev).set(missionId, records));
+      const records =
+        result.data.records || result.data.items || result.data.review || [];
+      setExpandedMissionRecords((prev) =>
+        new Map(prev).set(missionId, records),
+      );
     } catch (error) {
       console.error('Failed to load review records:', error);
     } finally {
@@ -2448,12 +2195,15 @@ const PatientRecordsPage: React.FC = () => {
       setIsNoteUploadPolling(false);
       console.error('Failed to approve:', error);
       setHarmonizerReviewActionError(
-        error?.message || 'Failed to approve review'
+        error?.message || 'Failed to approve review',
       );
     }
   };
 
-  const handleExpandedMissionReject = async (missionId: string, mode: 'REVISE' | 'DISCARD') => {
+  const handleExpandedMissionReject = async (
+    missionId: string,
+    mode: 'REVISE' | 'DISCARD',
+  ) => {
     try {
       setIsNoteUploadPolling(true);
       setHarmonizerReviewActionError(null);
@@ -2463,12 +2213,7 @@ const PatientRecordsPage: React.FC = () => {
       const etag = result.etag;
 
       // Call reject with the loaded etag directly (not relying on state)
-      await harmonizerReviewService.reject(
-        missionId,
-        mode,
-        '',
-        etag,
-      );
+      await harmonizerReviewService.reject(missionId, mode, '', etag);
 
       setIsNoteUploadPolling(false);
       // Clear and reset
@@ -2486,7 +2231,7 @@ const PatientRecordsPage: React.FC = () => {
       setIsNoteUploadPolling(false);
       console.error('Failed to reject:', error);
       setHarmonizerReviewActionError(
-        error?.message || 'Failed to reject review'
+        error?.message || 'Failed to reject review',
       );
     }
   };
@@ -3077,11 +2822,23 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const agentPersonaId = isClinicianAgent
+    ? 'clinician-digital-twin'
+    : 'digital-twin';
   const patientAgentConfig: AgentEndpointConfig = {
-    endpoint: `${AGENT_API_BASE_URL}/api/agent/AgentPersona/digital-twin/AgentMission`,
-    personaId: 'digital-twin',
+    endpoint: `${AGENT_API_BASE_URL}/api/agent/AgentPersona/${agentPersonaId}/AgentMission`,
+    personaId: agentPersonaId,
     headers: agentExtraHeaders,
     supportsContinuation: true,
+    ...(isClinicianAgent
+      ? {
+          audience: 'clinician' as const,
+          // clinician-digital-twin sets requiresDelegation; the backend 403s without it.
+          missionContext: { delegatedBy: authUserId || 'clinician' },
+          // Broad summaries fan out across several resource types.
+          missionTimeoutMs: 300000,
+        }
+      : {}),
   };
 
   useEffect(() => {
@@ -4764,22 +4521,17 @@ const PatientRecordsPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <TH>Date</TH>
+                      {['Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <SortHeader
-                        label="Date"
+                        label="Last Updated"
                         sortDir={sortDir}
                         onToggle={() =>
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {[
-                        'Medication',
-                        'Status',
-                        'Dosage',
-                        'Reason',
-                        'Last Updated',
-                      ].map((h) => (
-                        <TH key={h}>{h}</TH>
-                      ))}
                       <TH />
                     </tr>
                   </thead>
@@ -5192,18 +4944,17 @@ const PatientRecordsPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <TH>Date</TH>
+                      {['Medication', 'Status', 'Quantity'].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <SortHeader
-                        label="Date"
+                        label="Last Updated"
                         sortDir={sortDir}
                         onToggle={() =>
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {['Medication', 'Status', 'Quantity', 'Last Updated'].map(
-                        (h) => (
-                          <TH key={h}>{h}</TH>
-                        ),
-                      )}
                       <TH />
                     </tr>
                   </thead>
@@ -5380,21 +5131,17 @@ const PatientRecordsPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <TH>Date</TH>
+                      {['Medication', 'Status', 'Effective'].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <SortHeader
-                        label="Date"
+                        label="Last Updated"
                         sortDir={sortDir}
                         onToggle={() =>
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {[
-                        'Medication',
-                        'Status',
-                        'Effective',
-                        'Last Updated',
-                      ].map((h) => (
-                        <TH key={h}>{h}</TH>
-                      ))}
                       <TH />
                     </tr>
                   </thead>
@@ -6030,7 +5777,7 @@ const PatientRecordsPage: React.FC = () => {
             <div className="flex flex-col gap-2 w-full md:w-auto">
               {/* Mobile: Compact button row */}
               <div className="md:hidden flex items-center gap-1.5 w-full">
-                {role === 'patient' && (
+                {canUseAgent && (
                   <button
                     onClick={() => {
                       if (!showAgentModal) {
@@ -6064,8 +5811,12 @@ const PatientRecordsPage: React.FC = () => {
                         <path d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z" />
                       </svg>
                     </span>
-                    <span className="sm:hidden md:inline">Ask</span>
-                    <span className="hidden sm:inline md:hidden">Ask</span>
+                    <span className="sm:hidden md:inline">
+                      {isClinicianAgent ? 'AI Consult' : 'Ask'}
+                    </span>
+                    <span className="hidden sm:inline md:hidden">
+                      {isClinicianAgent ? 'AI Consult' : 'Ask'}
+                    </span>
                   </button>
                 )}
 
@@ -6153,7 +5904,7 @@ const PatientRecordsPage: React.FC = () => {
 
               {/* Desktop: Full button row */}
               <div className="hidden md:flex flex-row md:items-center gap-2 w-full md:w-auto">
-                {role === 'patient' && (
+                {canUseAgent && (
                   <button
                     onClick={() => {
                       if (!showAgentModal) {
@@ -6190,7 +5941,7 @@ const PatientRecordsPage: React.FC = () => {
                         <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-300 ring-1 ring-white" />
                       )}
                     </span>
-                    Ask AI
+                    {isClinicianAgent ? 'AI Consult' : 'Ask AI'}
                   </button>
                 )}
 
@@ -6348,7 +6099,7 @@ const PatientRecordsPage: React.FC = () => {
                   </button>
                 </form>
               )}
-              {agentModalError && role === 'patient' && (
+              {agentModalError && canUseAgent && (
                 <p className="text-xs text-red-600 max-w-[480px] text-right">
                   {agentModalError}
                 </p>
@@ -6574,7 +6325,7 @@ const PatientRecordsPage: React.FC = () => {
         {/* Resize handle — Desktop only */}
         {(((role === 'clinician' || role === 'patient') &&
           showClinicianUpload) ||
-          (role === 'patient' && showAgentModal)) && (
+          (canUseAgent && showAgentModal)) && (
           <div
             onMouseDown={handleMouseDown}
             className={`hidden md:block w-1 bg-gray-200 hover:bg-blue-400 transition-colors cursor-col-resize shrink-0 ${
@@ -6731,11 +6482,16 @@ const PatientRecordsPage: React.FC = () => {
                       ) : (
                         <div className="space-y-2">
                           {pendingHarmonizerMissions.map((mission) => (
-                            <div key={mission.missionId} className="rounded-md border border-emerald-100 bg-emerald-50">
+                            <div
+                              key={mission.missionId}
+                              className="rounded-md border border-emerald-100 bg-emerald-50"
+                            >
                               {/* Card Header - Always visible */}
                               <button
                                 type="button"
-                                onClick={() => toggleMissionExpanded(mission.missionId)}
+                                onClick={() =>
+                                  toggleMissionExpanded(mission.missionId)
+                                }
                                 className="w-full px-3 py-2 text-left hover:bg-emerald-100 transition-colors flex items-center justify-between gap-2"
                               >
                                 <div className="flex-1">
@@ -6751,7 +6507,8 @@ const PatientRecordsPage: React.FC = () => {
                                     <div className="text-xs text-gray-500 mt-1">
                                       Submitted{' '}
                                       {fmt(
-                                        mission.submittedAt || mission.createdAt,
+                                        mission.submittedAt ||
+                                          mission.createdAt,
                                       )}
                                     </div>
                                   ) : null}
@@ -6799,18 +6556,22 @@ const PatientRecordsPage: React.FC = () => {
                               {expandedMissionIds.has(mission.missionId) && (
                                 <>
                                   {/* Info Panel - Show when records are loaded */}
-                                  {(expandedMissionRecords.get(mission.missionId)?.length ?? 0) > 0 && (
+                                  {(expandedMissionRecords.get(
+                                    mission.missionId,
+                                  )?.length ?? 0) > 0 && (
                                     <div className="border-t border-emerald-100 px-3 py-2">
                                       <div className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2">
                                         <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
                                           Review required
                                         </p>
                                         <p className="mt-1 text-sm font-semibold text-amber-900">
-                                          Generated resources are ready for review.
+                                          Generated resources are ready for
+                                          review.
                                         </p>
                                         <p className="mt-1 text-xs text-amber-800">
-                                          Nothing has been written to the patient record yet.
-                                          Review or edit each resource, then approve to resume
+                                          Nothing has been written to the
+                                          patient record yet. Review or edit
+                                          each resource, then approve to resume
                                           the import.
                                         </p>
                                         <button
@@ -6825,111 +6586,158 @@ const PatientRecordsPage: React.FC = () => {
                                   )}
 
                                   <div className="border-t border-emerald-100 px-3 py-2 space-y-2">
-                                    {loadingMissionIds.has(mission.missionId) ? (
-                                      <p className="text-xs text-gray-600">Loading records…</p>
-                                    ) : expandedMissionRecords.get(mission.missionId)?.length ? (
+                                    {loadingMissionIds.has(
+                                      mission.missionId,
+                                    ) ? (
+                                      <p className="text-xs text-gray-600">
+                                        Loading records…
+                                      </p>
+                                    ) : expandedMissionRecords.get(
+                                        mission.missionId,
+                                      )?.length ? (
                                       <div className="space-y-2">
-                                        {expandedMissionRecords.get(mission.missionId)!.map((record) => {
-                                          const resource = (record.resource || record) as any;
-                                          const display =
-                                            resource.resourceType === 'Encounter'
-                                              ? [
-                                                  resource.actualPeriod?.start ||
-                                                  resource.period?.start
-                                                    ? fmt(
-                                                        resource.actualPeriod?.start ||
-                                                          resource.period?.start,
-                                                      )
-                                                    : null,
-                                                  resource.class?.display ||
-                                                    resource.class?.coding?.[0]?.display ||
-                                                    resource.class?.coding?.[0]?.code,
-                                                  resource.type?.[0]?.text ||
-                                                    resource.type?.[0]?.coding?.[0]
-                                                      ?.display ||
-                                                    resource.type?.[0]?.coding?.[0]?.code,
-                                                ]
-                                                  .filter(Boolean)
-                                                  .join(' · ') ||
-                                                record.resourceId ||
-                                                'Encounter'
-                                              : resource.code?.text ||
-                                                resource.code?.coding?.[0]?.display ||
-                                                resource.title ||
-                                                resource.medication?.concept?.text ||
-                                                record.resourceId ||
-                                                'Generated resource';
-                                          return (
-                                            <button
-                                              key={record.recordId}
-                                              type="button"
-                                              onClick={() => {
-                                                setNoteUploadJobId(mission.missionId);
-                                                openHarmonizerRecord(record);
-                                              }}
-                                              className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50 text-xs"
-                                            >
-                                              <div className="flex items-start justify-between gap-2">
-                                                <span className="font-semibold text-gray-900">
-                                                  {record.resourceType ||
-                                                    resource.resourceType ||
-                                                    'FHIR Resource'}
-                                                </span>
-                                                <span className="text-[11px] text-gray-500">
-                                                  {typeof record.confidence === 'number'
-                                                    ? `${Math.round(record.confidence * 100)}% confidence`
-                                                    : toDisplayText(record.outcome) ||
-                                                      'Review'}
-                                                </span>
-                                              </div>
-                                              <div className="mt-1">
-                                                <HarmonizerReviewMetadata
-                                                  record={record}
-                                                  compact
-                                                />
-                                              </div>
-                                              {isHarmonizerDuplicate(record) && (
-                                                <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
-                                                  Duplicate candidate
+                                        {expandedMissionRecords
+                                          .get(mission.missionId)!
+                                          .map((record) => {
+                                            const resource = (record.resource ||
+                                              record) as any;
+                                            const display =
+                                              resource.resourceType ===
+                                              'Encounter'
+                                                ? [
+                                                    resource.actualPeriod
+                                                      ?.start ||
+                                                    resource.period?.start
+                                                      ? fmt(
+                                                          resource.actualPeriod
+                                                            ?.start ||
+                                                            resource.period
+                                                              ?.start,
+                                                        )
+                                                      : null,
+                                                    resource.class?.display ||
+                                                      resource.class
+                                                        ?.coding?.[0]
+                                                        ?.display ||
+                                                      resource.class
+                                                        ?.coding?.[0]?.code,
+                                                    resource.type?.[0]?.text ||
+                                                      resource.type?.[0]
+                                                        ?.coding?.[0]
+                                                        ?.display ||
+                                                      resource.type?.[0]
+                                                        ?.coding?.[0]?.code,
+                                                  ]
+                                                    .filter(Boolean)
+                                                    .join(' · ') ||
+                                                  record.resourceId ||
+                                                  'Encounter'
+                                                : resource.code?.text ||
+                                                  resource.code?.coding?.[0]
+                                                    ?.display ||
+                                                  resource.title ||
+                                                  resource.medication?.concept
+                                                    ?.text ||
+                                                  record.resourceId ||
+                                                  'Generated resource';
+                                            return (
+                                              <button
+                                                key={record.recordId}
+                                                type="button"
+                                                onClick={() => {
+                                                  setNoteUploadJobId(
+                                                    mission.missionId,
+                                                  );
+                                                  openHarmonizerRecord(record);
+                                                }}
+                                                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50 text-xs"
+                                              >
+                                                <div className="flex items-start justify-between gap-2">
+                                                  <span className="font-semibold text-gray-900">
+                                                    {record.resourceType ||
+                                                      resource.resourceType ||
+                                                      'FHIR Resource'}
+                                                  </span>
+                                                  <span className="text-[11px] text-gray-500">
+                                                    {typeof record.confidence ===
+                                                    'number'
+                                                      ? `${Math.round(record.confidence * 100)}% confidence`
+                                                      : toDisplayText(
+                                                          record.outcome,
+                                                        ) || 'Review'}
+                                                  </span>
+                                                </div>
+                                                <div className="mt-1">
+                                                  <HarmonizerReviewMetadata
+                                                    record={record}
+                                                    compact
+                                                  />
+                                                </div>
+                                                {isHarmonizerDuplicate(
+                                                  record,
+                                                ) && (
+                                                  <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                                                    Duplicate candidate
+                                                  </p>
+                                                )}
+                                                <p className="mt-1 truncate text-sm text-gray-800">
+                                                  {toDisplayText(display)}
                                                 </p>
-                                              )}
-                                              <p className="mt-1 truncate text-sm text-gray-800">
-                                                {toDisplayText(display)}
-                                              </p>
-                                              {record.evidence && (
-                                                <p className="mt-1 line-clamp-2 text-xs text-gray-600">
-                                                  Evidence: {toDisplayText(record.evidence)}
-                                                </p>
-                                              )}
-                                            </button>
-                                          );
-                                        })}
+                                                {record.evidence && (
+                                                  <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                                                    Evidence:{' '}
+                                                    {toDisplayText(
+                                                      record.evidence,
+                                                    )}
+                                                  </p>
+                                                )}
+                                              </button>
+                                            );
+                                          })}
                                       </div>
                                     ) : (
-                                      <p className="text-xs text-gray-600">No records available</p>
+                                      <p className="text-xs text-gray-600">
+                                        No records available
+                                      </p>
                                     )}
                                   </div>
                                   {/* Action Buttons */}
-                                  {(expandedMissionRecords.get(mission.missionId)?.length ?? 0) > 0 && (
+                                  {(expandedMissionRecords.get(
+                                    mission.missionId,
+                                  )?.length ?? 0) > 0 && (
                                     <div className="border-t border-emerald-100 px-3 py-2">
                                       <div className="flex flex-wrap gap-2">
                                         <button
                                           type="button"
-                                          onClick={() => void handleExpandedMissionApprove(mission.missionId)}
+                                          onClick={() =>
+                                            void handleExpandedMissionApprove(
+                                              mission.missionId,
+                                            )
+                                          }
                                           className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                                         >
                                           Approve &amp; resume
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => void handleExpandedMissionReject(mission.missionId, 'REVISE')}
+                                          onClick={() =>
+                                            void handleExpandedMissionReject(
+                                              mission.missionId,
+                                              'REVISE',
+                                            )
+                                          }
                                           className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
                                         >
                                           Request changes
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => void handleExpandedMissionReject(mission.missionId, 'DISCARD')}
+                                          onClick={() =>
+                                            void handleExpandedMissionReject(
+                                              mission.missionId,
+                                              'DISCARD',
+                                            )
+                                          }
                                           className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
                                         >
                                           Discard
@@ -7550,7 +7358,7 @@ const PatientRecordsPage: React.FC = () => {
           )}
 
         {/* Right side: Ask AI panel — Desktop side panel, Mobile bottom sheet */}
-        {role === 'patient' && showAgentModal && (
+        {canUseAgent && showAgentModal && (
           <div
             ref={agentPanelRef}
             className="bg-indigo-50 border-l border-indigo-200 overflow-auto shrink-0
@@ -7570,10 +7378,14 @@ const PatientRecordsPage: React.FC = () => {
             <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
               <div className="flex-1">
                 <h2 className="text-sm font-semibold text-indigo-900">
-                  Ask About My Health Conditions
+                  {isClinicianAgent
+                    ? 'Clinical AI Assistant'
+                    : 'Ask About My Health Conditions'}
                 </h2>
                 <p className="text-xs text-indigo-800 mt-1">
-                  Chat with AI to get health insights based on your records.
+                  {isClinicianAgent
+                    ? `Ask about ${patientName}'s health concerns, assess the presenting problem, or type SOAP notes, and AI will summarise and generate structured data`
+                    : 'Chat with AI to get health insights based on your records.'}
                 </p>
               </div>
               {/* Mobile expand/collapse buttons */}
@@ -7650,7 +7462,11 @@ const PatientRecordsPage: React.FC = () => {
                   patientId={patientId}
                   tenantId={agentTenantId}
                   accessToken={agentAccessToken}
-                  title="Ask About My Health Conditions"
+                  title={
+                    isClinicianAgent
+                      ? 'Clinical AI Assistant'
+                      : 'Ask About My Health Conditions'
+                  }
                   mode="panel"
                 />
               )}

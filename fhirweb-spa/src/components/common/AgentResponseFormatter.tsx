@@ -7,12 +7,30 @@ import {
   ResponseType,
   RiskFlag,
 } from '../../types/agent';
-import { useLazyGetResourceByIdQuery } from '../../services/fhir/client';
+import {
+  useLazyGetResourceByIdQuery,
+  useUpdateResourceMutation,
+} from '../../services/fhir/client';
+import { getOperationOutcomeMessage } from '../../utils/fhirError';
+import { FhirResourceEditor } from './FhirResourceEditor';
 
 interface AgentResponseFormatterProps {
   response: AgentResponse;
   compact?: boolean; // Minimal mode (hide metadata)
+  resourceActions?: ResourceActions;
 }
+
+export interface ResourceActions {
+  allowEdit?: boolean;
+  // Entries may be "Type/id" or a bare id.
+  editableResourceIds?: string[];
+  // ISO time; records last updated at or after it are treated as changed in this session.
+  editableSince?: string;
+}
+
+const ResourceLinkContext = React.createContext<
+  ((resourceType: string, resourceId: string) => void) | null
+>(null);
 
 /**
  * AgentResponseFormatter
@@ -29,8 +47,18 @@ interface AgentResponseFormatterProps {
 export const AgentResponseFormatter: React.FC<AgentResponseFormatterProps> = ({
   response,
   compact = false,
+  resourceActions,
 }) => {
   const responseType = detectResponseType(response.text);
+  const [linkedResource, setLinkedResource] = React.useState<{
+    resourceType: string;
+    resourceId: string;
+  } | null>(null);
+  const openLinkedResource = React.useCallback(
+    (resourceType: string, resourceId: string) =>
+      setLinkedResource({ resourceType, resourceId }),
+    [],
+  );
 
   const renderResponseContent = () => {
     switch (responseType) {
@@ -60,8 +88,19 @@ export const AgentResponseFormatter: React.FC<AgentResponseFormatterProps> = ({
     <div className="space-y-3">
       {/* Main response content */}
       <div className="bg-white border border-gray-200 rounded-lg p-4">
-        {renderResponseContent()}
+        <ResourceLinkContext.Provider value={openLinkedResource}>
+          {renderResponseContent()}
+        </ResourceLinkContext.Provider>
       </div>
+
+      {linkedResource && (
+        <ResourceRecordDialog
+          resourceType={linkedResource.resourceType}
+          resourceId={linkedResource.resourceId}
+          resourceActions={resourceActions}
+          onClose={() => setLinkedResource(null)}
+        />
+      )}
 
       {/* Risk flags (if any) */}
       {response.riskFlags && response.riskFlags.length > 0 && (
@@ -428,6 +467,194 @@ const ResourceSummaryDialog: React.FC<{
   );
 };
 
+const isEditableResource = (
+  resourceType: string,
+  resourceId: string,
+  resource: any,
+  actions?: ResourceActions,
+): boolean => {
+  if (!actions?.allowEdit || !resource) return false;
+  const ids = actions.editableResourceIds || [];
+  if (ids.includes(`${resourceType}/${resourceId}`) || ids.includes(resourceId))
+    return true;
+  const lastUpdated = Date.parse(resource.meta?.lastUpdated || '');
+  const since = Date.parse(actions.editableSince || '');
+  return (
+    !Number.isNaN(lastUpdated) && !Number.isNaN(since) && lastUpdated >= since
+  );
+};
+
+const ResourceRecordDialog: React.FC<{
+  resourceType: string;
+  resourceId: string;
+  resourceActions?: ResourceActions;
+  onClose: () => void;
+}> = ({ resourceType, resourceId, resourceActions, onClose }) => {
+  const [fetchResource, resourceQuery] = useLazyGetResourceByIdQuery();
+  const [updateResource, updateState] = useUpdateResourceMutation();
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState<Record<string, any>>({});
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    void fetchResource({ resourceType, id: resourceId });
+  }, [fetchResource, resourceType, resourceId]);
+
+  React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  const resource = resourceQuery.data as any;
+  const editable = isEditableResource(
+    resourceType,
+    resourceId,
+    resource,
+    resourceActions,
+  );
+
+  const startEditing = () => {
+    setDraft(JSON.parse(JSON.stringify(resource)));
+    setSaveError(null);
+    setSavedMessage(null);
+    setIsEditing(true);
+  };
+
+  const saveResource = async () => {
+    setSaveError(null);
+    const result = await updateResource({
+      resourceType,
+      id: resourceId,
+      resource: draft as any,
+    });
+    if ('error' in result) {
+      setSaveError(
+        getOperationOutcomeMessage(result.error) ||
+          'Unable to save this record. Please try again.',
+      );
+      return;
+    }
+    setIsEditing(false);
+    setSavedMessage('Changes saved to the patient record.');
+    void fetchResource({ resourceType, id: resourceId });
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="resource-record-title"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 sm:py-4">
+          <div className="min-w-0">
+            <h2
+              id="resource-record-title"
+              className="text-base font-semibold text-gray-900"
+            >
+              {resourceType}
+            </h2>
+            <p className="mt-1 break-all font-mono text-xs text-gray-500">
+              {resourceType}/{resourceId}
+            </p>
+            {editable && !isEditing && (
+              <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                Created or updated in this conversation
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-2xl text-gray-500 hover:bg-gray-100 hover:text-gray-800 sm:h-8 sm:w-8 sm:text-xl"
+            aria-label="Close record"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 overscroll-contain overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+          {savedMessage && (
+            <p className="mb-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {savedMessage}
+            </p>
+          )}
+          {saveError && (
+            <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {saveError}
+            </p>
+          )}
+          {resourceQuery.isFetching && !resource ? (
+            <p className="text-sm text-gray-600">Loading record…</p>
+          ) : resourceQuery.isError ? (
+            <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {getOperationOutcomeMessage(resourceQuery.error) ||
+                'Unable to load this record.'}
+            </p>
+          ) : isEditing ? (
+            <FhirResourceEditor resource={draft} onChange={setDraft} />
+          ) : resource ? (
+            <ResourceSummaryContent resource={resource} />
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {editable &&
+            (isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void saveResource()}
+                  disabled={updateState.isLoading}
+                  className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {updateState.isLoading ? 'Saving…' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={startEditing}
+                className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+              >
+                Edit
+              </button>
+            ))}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+
 const ReasoningTraceRenderer: React.FC<{ steps: ReasoningTraceStep[] }> = ({
   steps,
 }) => (
@@ -605,14 +832,74 @@ const JsonObjectRenderer: React.FC<{ data: Record<string, any> }> = ({
 );
 
 /**
- * Render **bold** and *italic* inline markdown spans within a line of text.
+ * Render inline markdown: **bold**, *italic*, `code`, and FHIR record
+ * references ("Type/uuid", or a backticked uuid preceded by its type).
  */
+const FHIR_RESOURCE_TYPES = [
+  'Patient',
+  'Encounter',
+  'Condition',
+  'Observation',
+  'DiagnosticReport',
+  'MedicationRequest',
+  'MedicationDispense',
+  'MedicationStatement',
+  'Procedure',
+  'CarePlan',
+  'ServiceRequest',
+  'AllergyIntolerance',
+  'ImmunizationRecommendation',
+  'Immunization',
+  'FamilyMemberHistory',
+  'Appointment',
+  'DocumentReference',
+  'CareTeam',
+];
+const TYPE_ALTERNATION = FHIR_RESOURCE_TYPES.join('|');
+const UUID_SOURCE =
+  '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+const UUID_PATTERN = new RegExp(`^${UUID_SOURCE}$`);
+const TYPED_REFERENCE_PATTERN = new RegExp(
+  `^(${TYPE_ALTERNATION})/(${UUID_SOURCE})$`,
+);
+const LAST_TYPE_PATTERN = new RegExp(`\\b(${TYPE_ALTERNATION})\\b`, 'g');
+
+const findPrecedingResourceType = (text: string): string | null => {
+  let found: string | null = null;
+  for (const match of text.matchAll(LAST_TYPE_PATTERN)) found = match[1];
+  return found;
+};
+
+const ResourceLink: React.FC<{
+  resourceType: string;
+  resourceId: string;
+  label: string;
+}> = ({ resourceType, resourceId, label }) => {
+  const openResource = React.useContext(ResourceLinkContext);
+  if (!openResource) {
+    return <code className="rounded bg-gray-100 px-1 text-xs">{label}</code>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => openResource(resourceType, resourceId)}
+      className="rounded bg-blue-50 px-1 font-mono text-xs text-blue-700 underline decoration-blue-300 underline-offset-2 hover:bg-blue-100 hover:text-blue-900"
+      title={`View ${resourceType}/${resourceId}`}
+    >
+      {label}
+    </button>
+  );
+};
+
 const renderInlineMarkdown = (
   text: string,
   keyPrefix: string,
 ): React.ReactNode[] => {
   const parts: React.ReactNode[] = [];
-  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  const regex = new RegExp(
+    `\\*\\*(.+?)\\*\\*|\`([^\`]+)\`|\\b(${TYPE_ALTERNATION})/(${UUID_SOURCE})|\\*(.+?)\\*`,
+    'g',
+  );
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let partIndex = 0;
@@ -621,12 +908,53 @@ const renderInlineMarkdown = (
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
+    const key = `${keyPrefix}-${partIndex++}`;
     if (match[1] !== undefined) {
       parts.push(
-        <strong key={`${keyPrefix}-b-${partIndex++}`}>{match[1]}</strong>,
+        <strong key={key}>{renderInlineMarkdown(match[1], `${key}-b`)}</strong>,
+      );
+    } else if (match[2] !== undefined) {
+      const code = match[2].trim();
+      const typed = code.match(TYPED_REFERENCE_PATTERN);
+      const precedingType = UUID_PATTERN.test(code)
+        ? findPrecedingResourceType(text.slice(0, match.index))
+        : null;
+      if (typed) {
+        parts.push(
+          <ResourceLink
+            key={key}
+            resourceType={typed[1]}
+            resourceId={typed[2]}
+            label={code}
+          />,
+        );
+      } else if (precedingType) {
+        parts.push(
+          <ResourceLink
+            key={key}
+            resourceType={precedingType}
+            resourceId={code}
+            label={code}
+          />,
+        );
+      } else {
+        parts.push(
+          <code key={key} className="rounded bg-gray-100 px-1 text-xs">
+            {code}
+          </code>,
+        );
+      }
+    } else if (match[3] !== undefined) {
+      parts.push(
+        <ResourceLink
+          key={key}
+          resourceType={match[3]}
+          resourceId={match[4]}
+          label={`${match[3]}/${match[4]}`}
+        />,
       );
     } else {
-      parts.push(<em key={`${keyPrefix}-i-${partIndex++}`}>{match[2]}</em>);
+      parts.push(<em key={key}>{match[5]}</em>);
     }
     lastIndex = regex.lastIndex;
   }
