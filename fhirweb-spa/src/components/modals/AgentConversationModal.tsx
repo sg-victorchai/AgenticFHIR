@@ -1101,7 +1101,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                 e.currentTarget.form?.requestSubmit();
               }
             }}
-            rows={isClinician ? 3 : 1}
+            rows={1}
             placeholder={
               pendingIntervention
                 ? 'Respond to the pending approval above first'
@@ -1110,48 +1110,51 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                   : 'Type your question...'
             }
             disabled={loading || !!pendingIntervention}
-            className="flex-1 resize-none px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
+            // min-h matches the stacked mic + Send buttons (2 × h-10 + gap-2).
+            className="min-h-[5.5rem] flex-1 resize-none px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
           />
-          {speechSupported && (
-            <button
-              type="button"
-              onClick={toggleVoiceInput}
-              disabled={!voiceMode && (loading || !!pendingIntervention)}
-              className={`self-end rounded-lg border p-2 transition-colors disabled:opacity-50 ${
-                isListening
-                  ? 'animate-pulse border-red-300 bg-red-600 text-white hover:bg-red-700'
-                  : voiceMode
-                    ? 'border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200'
-                    : 'border-gray-300 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600'
-              }`}
-              title={voiceMode ? 'End voice mode' : 'Start voice input'}
-              aria-label={voiceMode ? 'End voice mode' : 'Start voice input'}
-              aria-pressed={voiceMode}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.8}
-                stroke="currentColor"
-                className="h-5 w-5"
-                aria-hidden="true"
+          <div className="flex w-24 shrink-0 flex-col justify-end gap-2 self-end">
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={toggleVoiceInput}
+                disabled={!voiceMode && (loading || !!pendingIntervention)}
+                className={`flex h-10 w-full items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
+                  isListening
+                    ? 'animate-pulse border-red-300 bg-red-600 text-white hover:bg-red-700'
+                    : voiceMode
+                      ? 'border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200'
+                      : 'border-gray-300 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600'
+                }`}
+                title={voiceMode ? 'End voice mode' : 'Start voice input'}
+                aria-label={voiceMode ? 'End voice mode' : 'Start voice input'}
+                aria-pressed={voiceMode}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
-                />
-              </svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.8}
+                  stroke="currentColor"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
+                  />
+                </svg>
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={loading || !input.trim() || !!pendingIntervention}
+              className="h-10 w-full bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors"
+            >
+              {loading ? 'Thinking...' : 'Send'}
             </button>
-          )}
-          <button
-            type="submit"
-            disabled={loading || !input.trim() || !!pendingIntervention}
-            className="self-end px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors"
-          >
-            {loading ? 'Thinking...' : 'Send'}
-          </button>
+          </div>
         </form>
 
         {isListening ? (
