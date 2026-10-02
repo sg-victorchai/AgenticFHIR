@@ -1524,6 +1524,29 @@ const FilterPanel: React.FC<{
 
 // ─── Search Result Card ───────────────────────────────────────────────────────
 
+const SEARCH_TYPE_LABELS: Record<string, string> = {
+  Observation: 'Observations',
+  Condition: 'Conditions',
+  Encounter: 'Encounters',
+  MedicationRequest: 'Medication requests',
+  MedicationDispense: 'Medication dispenses',
+  MedicationStatement: 'Medication statements',
+  DiagnosticReport: 'Reports',
+  ServiceRequest: 'Orders',
+  Procedure: 'Procedures',
+  CarePlan: 'Care plans',
+};
+
+const groupSearchResults = (results: HybridSearchResult[]) => {
+  const groups = new Map<string, HybridSearchResult[]>();
+  results.forEach((result) => {
+    const bucket = groups.get(result.resourceType) ?? [];
+    bucket.push(result);
+    groups.set(result.resourceType, bucket);
+  });
+  return Array.from(groups.entries());
+};
+
 const SearchResultCard: React.FC<{
   result: HybridSearchResult;
   onNavigate?: (tab: TabId, resourceId: string, medSubTab?: MedSubTab) => void;
@@ -1593,13 +1616,6 @@ const SearchResultCard: React.FC<{
     r.dateAsserted ||
     '';
 
-  const sourceCls =
-    result.sources.includes('vector') && result.sources.includes('keyword')
-      ? 'bg-purple-100 text-purple-700'
-      : result.sources.includes('vector')
-        ? 'bg-blue-100 text-blue-700'
-        : 'bg-amber-100 text-amber-700';
-
   const getNavTarget = (): { tab: TabId; medSubTab?: MedSubTab } | null => {
     const r2 = resource as any;
     switch (result.resourceType) {
@@ -1639,40 +1655,33 @@ const SearchResultCard: React.FC<{
   };
 
   const navTarget = resource ? getNavTarget() : null;
+  const clickable = Boolean(navTarget && onNavigate);
 
   return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 rounded transition-colors text-xs ${
-        navTarget && onNavigate
-          ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50'
-          : ''
-      }`}
-      title={navTarget ? 'Click to navigate to this record' : undefined}
-      onClick={
-        navTarget && onNavigate
-          ? () =>
-              onNavigate(navTarget.tab, result.resourceId, navTarget.medSubTab)
-          : undefined
+    <button
+      type="button"
+      disabled={!clickable}
+      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors enabled:hover:bg-blue-50 disabled:cursor-default"
+      title={`Matched by ${result.sources.join(' + ')} · relevance ${(result.score * 100).toFixed(0)}%`}
+      onClick={() =>
+        navTarget &&
+        onNavigate?.(navTarget.tab, result.resourceId, navTarget.medSubTab)
       }
     >
-      <span className="font-semibold text-indigo-600 uppercase tracking-wide w-28 shrink-0 truncate">
-        {result.resourceType}
+      <span className="min-w-0 flex-1 truncate text-gray-800">
+        {getSummary()}
       </span>
-      <span className="flex-1 text-gray-800 truncate">{getSummary()}</span>
       {getDate() && (
-        <span className="text-gray-400 whitespace-nowrap shrink-0">
+        <span className="shrink-0 whitespace-nowrap text-xs text-gray-400">
           {fmt(getDate())}
         </span>
       )}
-      <span
-        className={`px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0 ${sourceCls}`}
-      >
-        {result.sources.join('+')}
-      </span>
-      <span className="text-gray-400 whitespace-nowrap shrink-0 w-10 text-right">
-        {(result.score * 100).toFixed(0)}%
-      </span>
-    </div>
+      {clickable && (
+        <span className="shrink-0 text-xs text-blue-500" aria-hidden="true">
+          ›
+        </span>
+      )}
+    </button>
   );
 };
 
@@ -1725,6 +1734,8 @@ const PatientRecordsPage: React.FC = () => {
     useState<HybridSearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
 
   // ── Agent conversation modal state ──
   const [showAgentModal, setShowAgentModal] = useState(false);
@@ -2875,6 +2886,7 @@ const PatientRecordsPage: React.FC = () => {
     if (query.length < 6) return;
     setIsSearching(true);
     setSearchError(null);
+    setShowSearchResults(true);
     try {
       const resourceTypes = getResourceTypesFromQuery(query);
       const headers: Record<string, string> = {
@@ -2919,8 +2931,27 @@ const PatientRecordsPage: React.FC = () => {
     setSearchInput('');
     setSearchResults(null);
     setSearchError(null);
+    setShowSearchResults(false);
     setShowGlobalSearch(false);
   };
+
+  useEffect(() => {
+    if (!showSearchResults) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!searchBoxRef.current?.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowSearchResults(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSearchResults]);
 
   // ── Navigation from search results ──
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -2934,6 +2965,7 @@ const PatientRecordsPage: React.FC = () => {
     if (medSubTab) setMedSubTab(medSubTab);
     setExpandedId(resourceId);
     setHighlightId(resourceId);
+    setShowSearchResults(false);
   };
 
   useEffect(() => {
@@ -6044,51 +6076,126 @@ const PatientRecordsPage: React.FC = () => {
                 </div>
               </div>
               {showGlobalSearch && (
-                <form
-                  onSubmit={handleSearch}
-                  className="flex gap-2 w-full md:w-[480px]"
+                <div
+                  ref={searchBoxRef}
+                  className="relative w-full md:w-[480px]"
                 >
-                  <div className="relative flex-1">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                      />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder='e.g. "medications for hypertension"'
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                      autoFocus
-                    />
-                    {searchInput && (
-                      <button
-                        type="button"
-                        onClick={clearSearch}
-                        className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                  <form onSubmit={handleSearch} className="flex gap-2 w-full">
+                    <div className="relative flex-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none"
                       >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isSearching || searchInput.trim().length < 6}
-                    className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-                  >
-                    {isSearching ? 'Searching…' : 'Search'}
-                  </button>
-                </form>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                        />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder='e.g. "medications for hypertension"'
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onFocus={() => {
+                          if (searchResults || searchError)
+                            setShowSearchResults(true);
+                        }}
+                        className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                        autoFocus
+                      />
+                      {searchInput && (
+                        <button
+                          type="button"
+                          onClick={clearSearch}
+                          className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSearching || searchInput.trim().length < 6}
+                      className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                    >
+                      {isSearching ? 'Searching…' : 'Search'}
+                    </button>
+                  </form>
+                  {showSearchResults && (
+                    <div
+                      className="absolute right-0 top-full z-40 mt-2 flex max-h-[55vh] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-xl"
+                      role="dialog"
+                      aria-label="Search results"
+                    >
+                      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
+                        <span className="truncate text-xs font-semibold text-gray-600">
+                          {isSearching
+                            ? 'Searching…'
+                            : searchResults
+                              ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for “${searchResults.query}”`
+                              : 'Search error'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowSearchResults(false)}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                          aria-label="Close search results"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto px-2 py-2">
+                        {isSearching ? (
+                          <div className="space-y-2 px-2 py-1">
+                            {[0, 1, 2].map((key) => (
+                              <div
+                                key={key}
+                                className="h-6 animate-pulse rounded bg-gray-100"
+                              />
+                            ))}
+                          </div>
+                        ) : searchError ? (
+                          <p className="mx-2 my-1 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                            {searchError}
+                          </p>
+                        ) : searchResults?.results.length === 0 ? (
+                          <p className="px-3 py-3 text-sm text-gray-500">
+                            No matching records found.
+                          </p>
+                        ) : (
+                          groupSearchResults(searchResults?.results ?? []).map(
+                            ([resourceType, items]) => (
+                              <section
+                                key={resourceType}
+                                className="mb-2 last:mb-0"
+                              >
+                                <h3 className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
+                                  {SEARCH_TYPE_LABELS[resourceType] ||
+                                    resourceType}{' '}
+                                  <span className="text-gray-400">
+                                    ({items.length})
+                                  </span>
+                                </h3>
+                                {items.map((r) => (
+                                  <SearchResultCard
+                                    key={`${r.resourceType}/${r.resourceId}`}
+                                    result={r}
+                                    onNavigate={handleNavigate}
+                                  />
+                                ))}
+                              </section>
+                            ),
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
               {agentModalError && canUseAgent && (
                 <p className="text-xs text-red-600 max-w-[480px] text-right">
@@ -6099,60 +6206,6 @@ const PatientRecordsPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Search Results — shown above tab bar */}
-      {(searchResults !== null || searchError) && (
-        <div className="bg-blue-50 border-y-2 border-blue-300 px-6 py-3">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-3.5 h-3.5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                  />
-                </svg>
-                {searchResults
-                  ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for "${searchResults.query}"`
-                  : 'Search error'}
-              </span>
-              <button
-                onClick={clearSearch}
-                className="text-xs text-blue-400 hover:text-blue-700 font-medium"
-              >
-                Clear ×
-              </button>
-            </div>
-            {searchError ? (
-              <div className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded">
-                {searchError}
-              </div>
-            ) : searchResults?.results.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">
-                No matching records found.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {searchResults?.results.map((r) => (
-                  <SearchResultCard
-                    key={`${r.resourceType}/${r.resourceId}`}
-                    result={r}
-                    onNavigate={handleNavigate}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Tab bar and Content — Responsive Split Pane Layout */}
       <div
