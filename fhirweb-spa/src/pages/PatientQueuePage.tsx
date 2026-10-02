@@ -9,6 +9,7 @@ import {
 } from '../services/fhir/client';
 import { RootState } from '../store';
 import { getOperationOutcomeMessage } from '../utils/fhirError';
+import AiConsultPatientPicker from '../components/clinician/AiConsultPatientPicker';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -761,6 +762,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
 
 const PatientQueuePage: React.FC = () => {
   const role = useSelector((state: RootState) => state.ui.role);
+  const [showConsultPicker, setShowConsultPicker] = useState(false);
   const queueRole: 'psa' | 'clinician' | 'patient' =
     role === 'clinician' || role === 'patient' ? role : 'psa';
   const todayISO = new Date().toISOString().split('T')[0];
@@ -923,6 +925,10 @@ const PatientQueuePage: React.FC = () => {
 
   return (
     <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-6xl">
+      <AiConsultPatientPicker
+        isOpen={showConsultPicker}
+        onClose={() => setShowConsultPicker(false)}
+      />
       {/* Page header */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -942,6 +948,23 @@ const PatientQueuePage: React.FC = () => {
               >
                 + Search
               </Link>
+            )}
+            {role === 'clinician' && (
+              <button
+                type="button"
+                onClick={() => setShowConsultPicker(true)}
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-white rounded-md bg-gradient-to-r from-indigo-500 to-fuchsia-500 hover:from-indigo-600 hover:to-fuchsia-600 transition-colors"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Z" />
+                </svg>
+                AI Consult
+              </button>
             )}
             <button
               onClick={() => refetch()}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import FHIR from 'fhirclient';
+import { rememberRecentPatient } from '../utils/recentPatients';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
@@ -9,7 +10,9 @@ import {
   useGetObservationsByIdsQuery,
 } from '../services/fhir/client';
 import { RootState } from '../store';
-import AgentConversationModal from '../components/modals/AgentConversationModal';
+import AgentConversationModal, {
+  ASSISTANT_NAME,
+} from '../components/modals/AgentConversationModal';
 import { ResourceSummaryContent } from '../components/common/AgentResponseFormatter';
 import {
   FhirResourceEditor as FriendlyHarmonizerEditor,
@@ -1677,6 +1680,10 @@ const SearchResultCard: React.FC<{
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
+  const consultRequestedRef = useRef(
+    new URLSearchParams(location.search).get('consult') === '1',
+  );
   // Check if navigating from patient portal (for patient role users)
   const showBackToPatientPortal = location.state?.from === '/patient-portal';
   const role = useSelector((state: RootState) => state.ui.role);
@@ -2954,6 +2961,26 @@ const PatientRecordsPage: React.FC = () => {
       .join(' ') ||
     'Unknown Patient';
   const mrn = patient?.identifier?.[0]?.value || '—';
+
+  useEffect(() => {
+    if (role !== 'clinician' || !patient?.id) return;
+    rememberRecentPatient({
+      id: patient.id,
+      name: patientName,
+      mrn: patient.identifier?.[0]?.value,
+    });
+  }, [role, patient?.id, patientName]);
+
+  useEffect(() => {
+    if (!consultRequestedRef.current || !isClinicianAgent || !patientId) return;
+    consultRequestedRef.current = false;
+    void openAgentConversationModal();
+    // Drop ?consult=1 so a refresh or closing the panel doesn't reopen it.
+    navigate(
+      { pathname: location.pathname, search: '' },
+      { replace: true, state: location.state },
+    );
+  }, [isClinicianAgent, patientId]);
 
   // ── Data fetching (lazy) — all via searchByPatient for unified sort + filter ──
   const pageOffset = {
@@ -7379,7 +7406,7 @@ const PatientRecordsPage: React.FC = () => {
               <div className="flex-1">
                 <h2 className="text-sm font-semibold text-indigo-900">
                   {isClinicianAgent
-                    ? 'Clinical AI Assistant'
+                    ? `${ASSISTANT_NAME} · Clinical AI Assistant`
                     : 'Ask About My Health Conditions'}
                 </h2>
                 <p className="text-xs text-indigo-800 mt-1">
@@ -7464,7 +7491,7 @@ const PatientRecordsPage: React.FC = () => {
                   accessToken={agentAccessToken}
                   title={
                     isClinicianAgent
-                      ? 'Clinical AI Assistant'
+                      ? `${ASSISTANT_NAME} · Clinical AI Assistant`
                       : 'Ask About My Health Conditions'
                   }
                   mode="panel"

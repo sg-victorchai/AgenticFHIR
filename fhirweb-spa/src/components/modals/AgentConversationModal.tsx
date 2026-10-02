@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import AgentResponseFormatter from '../common/AgentResponseFormatter';
 import {
@@ -73,9 +73,27 @@ const getSpeechRecognition = (): any =>
     : (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
-// Trailing voice command that ends dictation and sends the message.
-const VOICE_SEND_PATTERN =
-  /[\s,.!?，。]*(?:\b(?:send now|stop and send)\b|发送)[\s,.!?，。]*$/i;
+export const ASSISTANT_NAME = 'Nova';
+
+const isMobileDevice = () =>
+  typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    // iPadOS reports a desktop Safari user agent.
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+
+const joinWords = (first: string, second: string) =>
+  first && second ? `${first} ${second}` : first || second;
+
+// Trailing send command: "Nova, over to you" / "Nova, please check" or "over to Nova".
+// A bare trailing "Nova" does not send: phones split "Nova… over to you" at the pause.
+// 发送 covers Mandarin, where recognizers do not transcribe the English name reliably.
+const VOICE_SEND_LEAD_IN = '(?:over to|thanks|thank you|okay|ok|hey)';
+const VOICE_SEND_SUFFIX =
+  '(?:over to you|over|please check|please send|go ahead|go|send it|send)';
+const VOICE_SEND_PATTERN = new RegExp(
+  `[\\s,.!?，。]*(?:\\b${VOICE_SEND_LEAD_IN}[\\s,]+${ASSISTANT_NAME}\\b|\\b${ASSISTANT_NAME}[\\s,.!?]+${VOICE_SEND_SUFFIX}\\b|发送)[\\s,.!?，。]*$`,
+  'i',
+);
 
 export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   isOpen,
@@ -112,9 +130,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   // Hands-free mode: listening pauses while the AI works and resumes after it replies.
   const [voiceMode, setVoiceMode] = useState(false);
   const recognitionRef = useRef<any>(null);
-  const dictationBaseRef = useRef('');
   const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const modalPositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -262,6 +280,18 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations]);
+
+  useLayoutEffect(() => {
+    const element = inputRef.current;
+    if (!element) return;
+    const maxHeight = Math.round(window.innerHeight * 0.4);
+    element.style.height = 'auto';
+    const overflowing = element.scrollHeight > maxHeight;
+    element.style.height = `${overflowing ? maxHeight : element.scrollHeight}px`;
+    element.style.overflowY = overflowing ? 'auto' : 'hidden';
+    // Keep the newest dictated words in view once the box stops growing.
+    if (overflowing && isListening) element.scrollTop = element.scrollHeight;
+  }, [input, isListening]);
 
   useEffect(() => {
     return () => {
@@ -724,27 +754,39 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     if (!Recognition) return;
     const recognition = new Recognition();
     recognition.lang = navigator.language || 'en-US';
-    recognition.continuous = true;
+    // Mobile engines repeat earlier words in continuous mode; use one utterance per session
+    // there and let hands-free mode restart listening after each pause.
+    recognition.continuous = !isMobileDevice();
     recognition.interimResults = true;
-    dictationBaseRef.current = input.trim() ? `${input.trimEnd()} ` : '';
+    let committed = input.trim() ? input.trimEnd() : '';
+    let lastFinal = '';
     recognition.onresult = (event: any) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index++) {
-        transcript += event.results[index][0].transcript;
+      let interim = '';
+      for (
+        let index = event.resultIndex;
+        index < event.results.length;
+        index++
+      ) {
+        const text = String(event.results[index][0].transcript || '').trim();
+        if (!text) continue;
+        if (event.results[index].isFinal) {
+          if (text !== lastFinal) {
+            committed = joinWords(committed, text);
+            lastFinal = text;
+          }
+        } else {
+          interim = joinWords(interim, text);
+        }
       }
-      const lastResult = event.results[event.results.length - 1];
-      if (lastResult?.isFinal && VOICE_SEND_PATTERN.test(transcript)) {
+      if (VOICE_SEND_PATTERN.test(committed)) {
         recognition.onresult = null;
         recognition.stop();
-        const message = (
-          dictationBaseRef.current +
-          transcript.replace(VOICE_SEND_PATTERN, '').trimStart()
-        ).trim();
+        const message = committed.replace(VOICE_SEND_PATTERN, '').trim();
         setInput('');
         if (message) void sendMessage(message);
         return;
       }
-      setInput(dictationBaseRef.current + transcript.trimStart());
+      setInput(joinWords(committed, interim));
     };
     recognition.onerror = (event: any) => {
       if (
@@ -1025,35 +1067,27 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
       <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
         <form onSubmit={handleSendMessage} className="flex gap-2">
-          {isClinician ? (
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  e.currentTarget.form?.requestSubmit();
-                }
-              }}
-              rows={3}
-              placeholder={
-                pendingIntervention
-                  ? 'Respond to the pending approval above first'
-                  : 'Ask about this patient, or type S/O/A/P notes (Shift+Enter for a new line)'
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
               }
-              disabled={loading || !!pendingIntervention}
-              className="flex-1 resize-y px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
-            />
-          ) : (
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your question..."
-              disabled={loading}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
-            />
-          )}
+            }}
+            rows={isClinician ? 3 : 1}
+            placeholder={
+              pendingIntervention
+                ? 'Respond to the pending approval above first'
+                : isClinician
+                  ? 'Ask about this patient, or type S/O/A/P notes (Shift+Enter for a new line)'
+                  : 'Type your question...'
+            }
+            disabled={loading || !!pendingIntervention}
+            className="flex-1 resize-none px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
+          />
           {speechSupported && (
             <button
               type="button"
@@ -1098,8 +1132,8 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
 
         {isListening ? (
           <p className="mt-2 text-xs font-medium text-red-600">
-            Listening… say “send now” to send. Tap the microphone to end voice
-            mode and review the text first.
+            Listening… say “{ASSISTANT_NAME}, over to you” to send. Tap the
+            microphone to end voice mode and review the text first.
           </p>
         ) : voiceMode ? (
           <p className="mt-2 text-xs font-medium text-amber-700">
