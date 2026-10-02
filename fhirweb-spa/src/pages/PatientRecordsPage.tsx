@@ -19,6 +19,7 @@ import {
   friendlyFieldLabel,
 } from '../components/common/FhirResourceEditor';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
+import { CarePlanDetails } from '../components/patient-records/CarePlanDetails';
 import { AgentEndpointConfig } from '../types/agent';
 import { getAuthenticatedHeaders, getOidcUser } from '../services/auth/oidc';
 import {
@@ -5706,44 +5707,7 @@ const PatientRecordsPage: React.FC = () => {
                         />
                       </div>
                     )}
-                    {cp.goal?.length ? (
-                      <div className="mb-3">
-                        <p className="font-medium mb-1 text-sm text-gray-700">
-                          Goals:
-                        </p>
-                        <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
-                          {cp.goal.map((g: any, i: number) => (
-                            <li key={i}>
-                              {g.display || g.reference || JSON.stringify(g)}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {cp.activity?.length ? (
-                      <div>
-                        <p className="font-medium mb-1 text-sm text-gray-700">
-                          Activities:
-                        </p>
-                        <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
-                          {cp.activity.map((act: any, i: number) => {
-                            const detail =
-                              act.plannedActivityDetail || act.detail;
-                            const label =
-                              detail?.code?.coding?.[0]?.display ||
-                              detail?.code?.text ||
-                              act.reference?.display ||
-                              act.reference?.reference ||
-                              '—';
-                            return (
-                              <li key={i}>
-                                {label} — {detail?.status || '—'}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ) : null}
+                    <CarePlanDetails carePlan={cp} />
                     <AiProvenancePanel resource={cp} />
                   </div>
                 )}
@@ -6388,31 +6352,39 @@ const PatientRecordsPage: React.FC = () => {
                   <p className="text-xs text-emerald-800 mt-1">
                     Select a scanned file (PDF/image) to extract clinical data
                   </p>
-                  <div className="mt-3 flex rounded-lg border border-emerald-200 bg-white p-1">
+                  <div
+                    role="tablist"
+                    aria-label="Report upload sections"
+                    className="mt-3 flex border-b border-emerald-200"
+                  >
                     <button
                       type="button"
+                      role="tab"
+                      aria-selected={harmonizerPanelTab === 'upload'}
                       onClick={() => {
                         setHarmonizerPanelTab('upload');
                         setShowPendingHarmonizerMissions(false);
                       }}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`-mb-px flex-1 border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
                         harmonizerPanelTab === 'upload'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-emerald-700 hover:bg-emerald-50'
+                          ? 'border-emerald-600 text-emerald-800'
+                          : 'border-transparent text-gray-500 hover:text-emerald-700'
                       }`}
                     >
-                      Upload
+                      New upload
                     </button>
                     <button
                       type="button"
+                      role="tab"
+                      aria-selected={harmonizerPanelTab === 'review'}
                       onClick={() => void loadPendingHarmonizerMissions()}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`-mb-px flex-1 border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
                         harmonizerPanelTab === 'review'
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200 hover:bg-amber-100'
+                          ? 'border-amber-500 text-amber-800'
+                          : 'border-transparent text-gray-500 hover:text-amber-700'
                       }`}
                     >
-                      Review
+                      Pending reviews
                     </button>
                   </div>
                 </div>

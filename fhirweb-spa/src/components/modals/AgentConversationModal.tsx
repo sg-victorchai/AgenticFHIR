@@ -90,10 +90,14 @@ const joinWords = (first: string, second: string) =>
 const VOICE_SEND_LEAD_IN = '(?:over to|thanks|thank you|okay|ok|hey)';
 const VOICE_SEND_SUFFIX =
   '(?:over to you|over|please check|please send|go ahead|go|send it|send)';
+// Common recogniser spellings of the spoken name.
+const VOICE_NAME = `(?:${ASSISTANT_NAME}|novah|noba|nava)`;
 const VOICE_SEND_PATTERN = new RegExp(
-  `[\\s,.!?，。]*(?:\\b${VOICE_SEND_LEAD_IN}[\\s,]+${ASSISTANT_NAME}\\b|\\b${ASSISTANT_NAME}[\\s,.!?]+${VOICE_SEND_SUFFIX}\\b|发送)[\\s,.!?，。]*$`,
+  `[\\s,.!?，。—-]*(?:\\b${VOICE_SEND_LEAD_IN}[\\s,]+${VOICE_NAME}\\b|\\b${VOICE_NAME}[\\s,.!?—-]+${VOICE_SEND_SUFFIX}\\b|发送)[\\s,.!?，。—-]*$`,
   'i',
 );
+// Wait for speech to settle before sending on a command seen only in interim results.
+const VOICE_SEND_SETTLE_MS = 900;
 
 export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   isOpen,
@@ -760,7 +764,19 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     recognition.interimResults = true;
     let committed = input.trim() ? input.trimEnd() : '';
     let lastFinal = '';
+    let pendingSend: string | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const sendDictation = (text: string) => {
+      clearTimeout(settleTimer);
+      pendingSend = null;
+      recognition.onresult = null;
+      const message = text.replace(VOICE_SEND_PATTERN, '').trim();
+      setInput('');
+      if (message) void sendMessage(message);
+    };
     recognition.onresult = (event: any) => {
+      clearTimeout(settleTimer);
+      pendingSend = null;
       let interim = '';
       for (
         let index = event.resultIndex;
@@ -779,14 +795,21 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         }
       }
       if (VOICE_SEND_PATTERN.test(committed)) {
-        recognition.onresult = null;
+        sendDictation(committed);
         recognition.stop();
-        const message = committed.replace(VOICE_SEND_PATTERN, '').trim();
-        setInput('');
-        if (message) void sendMessage(message);
         return;
       }
-      setInput(joinWords(committed, interim));
+      const visible = joinWords(committed, interim);
+      setInput(visible);
+      // Some engines finalize late (desktop Chrome) or only on stop (Safari).
+      if (VOICE_SEND_PATTERN.test(visible)) {
+        pendingSend = visible;
+        settleTimer = setTimeout(() => {
+          if (!pendingSend) return;
+          sendDictation(pendingSend);
+          recognition.stop();
+        }, VOICE_SEND_SETTLE_MS);
+      }
     };
     recognition.onerror = (event: any) => {
       if (
@@ -804,6 +827,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     };
     recognition.onend = () => {
       recognitionRef.current = null;
+      if (pendingSend) sendDictation(pendingSend);
       setIsListening(false);
     };
     recognitionRef.current = recognition;
