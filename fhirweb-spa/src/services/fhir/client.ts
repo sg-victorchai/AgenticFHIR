@@ -1243,6 +1243,7 @@ export const {
   useGetLocationsQuery,
   useSearchByEncounterQuery,
   useSearchByPatientQuery,
+  useLazySearchByPatientQuery,
   useSearchChildEncountersQuery,
   useGetTodayEncountersQuery,
   useGetObservationsByIdsQuery,

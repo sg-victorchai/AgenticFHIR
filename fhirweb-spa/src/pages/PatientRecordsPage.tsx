@@ -6,6 +6,7 @@ import { rememberRecentPatient } from '../utils/recentPatients';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
+  useLazySearchByPatientQuery,
   useGetResourceByIdQuery,
   useGetObservationsByIdsQuery,
 } from '../services/fhir/client';
@@ -1721,8 +1722,15 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const [currentPage, setCurrentPage] = useState(1);
+  // Page to restore after a filter/sort reset triggered by search navigation.
+  const pendingPageRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (pendingPageRef.current !== null) {
+      setCurrentPage(pendingPageRef.current);
+      pendingPageRef.current = null;
+      return;
+    }
     setCurrentPage(1);
   }, [filterValues, sortDir]);
 
@@ -2955,29 +2963,128 @@ const PatientRecordsPage: React.FC = () => {
 
   // ── Navigation from search results ──
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [searchByPatient] = useLazySearchByPatientQuery();
 
-  const handleNavigate = (
+  // Mirrors each tab's own query so the record is located in the same list the tab shows.
+  const getTabQuery = (tab: TabId, subTab?: MedSubTab) => {
+    const ALL_REPOSITORIES = { 'x-api-repository': 'ALL' };
+    switch (tab) {
+      case 'encounter':
+        return { resourceType: 'Encounter' };
+      case 'condition':
+        return { resourceType: 'Condition' };
+      case 'observation':
+        return {
+          resourceType: 'Observation',
+          customHeaders: ALL_REPOSITORIES,
+        };
+      case 'orders':
+        return { resourceType: 'ServiceRequest' };
+      case 'lab-results':
+        return {
+          resourceType: 'DiagnosticReport',
+          extra: { category: 'LAB,PAT' },
+          customHeaders: ALL_REPOSITORIES,
+        };
+      case 'rad-report':
+        return {
+          resourceType: 'DiagnosticReport',
+          extra: { category: 'RAD' },
+        };
+      case 'medication':
+        return {
+          resourceType:
+            subTab === 'dispense'
+              ? 'MedicationDispense'
+              : subTab === 'statement'
+                ? 'MedicationStatement'
+                : 'MedicationRequest',
+        };
+      case 'procedure':
+        return { resourceType: 'Procedure' };
+      default:
+        return { resourceType: 'CarePlan' };
+    }
+  };
+
+  // Lists are paged, so find which page holds the record before opening its tab.
+  const locateRecordPage = async (
+    tab: TabId,
+    resourceId: string,
+    subTab?: MedSubTab,
+  ): Promise<number> => {
+    if (!patientId) return 1;
+    const query = getTabQuery(tab, subTab) as {
+      resourceType: string;
+      extra?: Record<string, string>;
+      customHeaders?: Record<string, string>;
+    };
+    const batchSize = 100;
+    try {
+      for (let offset = 0; offset < 2000; offset += batchSize) {
+        const bundle = await searchByPatient({
+          resourceType: query.resourceType,
+          patientId,
+          extraParams: {
+            _sort: '-_lastUpdated',
+            _count: String(batchSize),
+            _offset: String(offset),
+            ...(query.extra ?? {}),
+          },
+          customHeaders: query.customHeaders,
+        }).unwrap();
+        const entries = bundle.entry ?? [];
+        const index = entries.findIndex(
+          (entry) => (entry.resource as any)?.id === resourceId,
+        );
+        if (index >= 0) return Math.floor((offset + index) / PAGE_SIZE) + 1;
+        if (entries.length < batchSize) break;
+      }
+    } catch (error) {
+      console.error('Unable to locate record page:', error);
+    }
+    return 1;
+  };
+
+  const handleNavigate = async (
     tab: TabId,
     resourceId: string,
     medSubTab?: MedSubTab,
   ) => {
+    setShowSearchResults(false);
+    const page = await locateRecordPage(tab, resourceId, medSubTab);
+    // Show the record in the default view: no filters, newest first.
+    if (Object.keys(filterValues).length > 0 || sortDir !== 'desc') {
+      pendingPageRef.current = page;
+      setFilterValues({});
+      setSortDir('desc');
+    }
+    setShowFilter(false);
     setActiveTab(tab);
     if (medSubTab) setMedSubTab(medSubTab);
+    setCurrentPage(page);
     setExpandedId(resourceId);
     setHighlightId(resourceId);
-    setShowSearchResults(false);
   };
 
   useEffect(() => {
     if (!highlightId) return;
-    const scrollTimer = setTimeout(() => {
-      document
-        .getElementById(`record-${highlightId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 120);
-    const clearTimer = setTimeout(() => setHighlightId(null), 2500);
+    let clearTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    // The row only exists once its page has loaded, so poll for it.
+    const poll = setInterval(() => {
+      const element = document.getElementById(`record-${highlightId}`);
+      if (element) {
+        clearInterval(poll);
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearTimer = setTimeout(() => setHighlightId(null), 2500);
+      } else if (++attempts > 40) {
+        clearInterval(poll);
+        setHighlightId(null);
+      }
+    }, 150);
     return () => {
-      clearTimeout(scrollTimer);
+      clearInterval(poll);
       clearTimeout(clearTimer);
     };
   }, [highlightId]);
