@@ -52,6 +52,16 @@ const Header: React.FC = () => {
                   Home
                 </Link>
               </li>
+              {canUseAgentBuilder && (
+                <li>
+                  <Link
+                    to="/agent-builder"
+                    className="hover:text-blue-200 transition-colors"
+                  >
+                    Agent Marketplace
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link
                   to="/events"
@@ -70,16 +80,6 @@ const Header: React.FC = () => {
               </li>
               {isAuthenticated ? (
                 <>
-                  {canUseAgentBuilder && (
-                    <li>
-                      <Link
-                        to="/agent-builder"
-                        className="hover:text-blue-200 transition-colors"
-                      >
-                        Agent Marketplace
-                      </Link>
-                    </li>
-                  )}
                   <li>
                     <button
                       onClick={handleLogout}
@@ -137,6 +137,15 @@ const Header: React.FC = () => {
                     >
                       Home
                     </Link>
+                    {canUseAgentBuilder && (
+                      <Link
+                        to="/agent-builder"
+                        onClick={() => setMenuOpen(false)}
+                        className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                      >
+                        Agent Marketplace
+                      </Link>
+                    )}
                     <Link
                       to="/events"
                       onClick={() => setMenuOpen(false)}
@@ -153,15 +162,6 @@ const Header: React.FC = () => {
                     </Link>
                     {isAuthenticated && (
                       <>
-                        {canUseAgentBuilder && (
-                          <Link
-                            to="/agent-builder"
-                            onClick={() => setMenuOpen(false)}
-                            className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
-                          >
-                            Agent Marketplace
-                          </Link>
-                        )}
                         <button
                           onClick={() => {
                             setMenuOpen(false);

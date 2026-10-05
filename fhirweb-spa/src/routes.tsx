@@ -35,6 +35,7 @@ import SilentRenewPage from './pages/SilentRenewPage';
 import RoleGuard from './components/common/RoleGuard';
 import { isSMARTContext } from './services/fhir/smartClient';
 import AgentBuilderPage from './pages/AgentBuilderPage';
+import InformationPage from './pages/InformationPage';
 
 const AgentBuilderRoute: React.FC = () => {
   const { isAuthenticated, token } = useSelector(
@@ -91,6 +92,10 @@ const AppRoutes: React.FC = () => {
           {/* Shared */}
           <Route path="/queue" element={<PatientQueuePage />} />
           <Route path="/agent-builder" element={<AgentBuilderRoute />} />
+          <Route path="/about" element={<InformationPage kind="about" />} />
+          <Route path="/privacy" element={<InformationPage kind="privacy" />} />
+          <Route path="/terms" element={<InformationPage kind="terms" />} />
+          <Route path="/contact" element={<InformationPage kind="contact" />} />
           <Route path="/webhooks" element={<WebhookManagementPage />} />
           <Route path="/events" element={<EventMonitorPage />} />
           <Route path="/patient-portal" element={<PatientPortalPage />} />
