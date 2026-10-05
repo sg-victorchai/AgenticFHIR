@@ -26,6 +26,7 @@ export interface ConversationMetadata {
   costBreakdown?: CostBreakdown;
   groundingEvidence?: GroundingEvidence[];
   reasoningTrace?: ReasoningTraceStep[];
+  createdResourceIds?: string[]; // "Type/id" entries reported by the mission
 }
 
 /**
@@ -121,6 +122,10 @@ export interface AgentEndpointConfig {
   headers?: Record<string, string>; // Additional headers (tenant, patient ID, auth)
   parser?: (raw: RawAgentResponse) => AgentResponse; // Custom response parser
   supportsContinuation?: boolean; // Can agent handle follow-up questions?
+  // 'clinician' enables in-widget HITL decisions and clinician-facing copy.
+  audience?: 'patient' | 'clinician';
+  missionContext?: Record<string, unknown>; // Merged into the mission request context
+  missionTimeoutMs?: number; // Max wait for a mission after the initial SSE window
 }
 
 /**
@@ -161,6 +166,7 @@ export interface MissionExecutionResult {
     cohortMetrics?: Record<string, number | string | boolean>;
     groundingEvidence?: GroundingEvidence[];
     reasoningTrace?: ReasoningTraceStep[];
+    proposedPlan?: { steps?: ProposedPlanStep[] };
   };
   failureReason?: string;
   startedAt?: string;

@@ -81,6 +81,11 @@ export const fhirApi = createApi({
     'Organization',
     'Condition',
     'Location',
+    'MedicationDispense',
+    'MedicationStatement',
+    'Procedure',
+    'ServiceRequest',
+    'DiagnosticReport',
   ],
   endpoints: (builder) => ({
     getPatient: builder.query<Patient, string>({
@@ -1238,6 +1243,7 @@ export const {
   useGetLocationsQuery,
   useSearchByEncounterQuery,
   useSearchByPatientQuery,
+  useLazySearchByPatientQuery,
   useSearchChildEncountersQuery,
   useGetTodayEncountersQuery,
   useGetObservationsByIdsQuery,

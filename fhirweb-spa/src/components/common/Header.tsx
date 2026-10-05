@@ -12,7 +12,6 @@ const Header: React.FC = () => {
   const { isAuthenticated, user } = useSelector(
     (state: RootState) => state.auth,
   );
-  const role = useSelector((state: RootState) => state.ui.role);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -22,17 +21,6 @@ const Header: React.FC = () => {
       console.error('Unable to start OIDC sign-out:', error);
       navigate('/login');
     });
-  };
-
-  const getRoleLabel = () => {
-    if (!role) return '';
-    return role === 'psa'
-      ? 'PSA'
-      : role === 'clinician'
-        ? 'Clinician'
-        : role === 'CARE_COORDINATOR'
-          ? 'Care Manager'
-          : 'Patient';
   };
 
   return (
@@ -50,9 +38,6 @@ const Header: React.FC = () => {
             {isAuthenticated && (
               <span className="text-white text-xs md:text-sm font-medium truncate">
                 {user?.name || 'User'}
-                {role && (
-                  <span className="text-blue-200"> [{getRoleLabel()}]</span>
-                )}
               </span>
             )}
           </div>

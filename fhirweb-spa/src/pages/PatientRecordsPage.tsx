@@ -1,22 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import FHIR from 'fhirclient';
+import { rememberRecentPatient } from '../utils/recentPatients';
 import {
   useGetPatientQuery,
   useSearchByPatientQuery,
+  useLazySearchByPatientQuery,
   useGetResourceByIdQuery,
   useGetObservationsByIdsQuery,
 } from '../services/fhir/client';
 import { RootState } from '../store';
-import AgentConversationModal from '../components/modals/AgentConversationModal';
+import AgentConversationModal, {
+  ASSISTANT_NAME,
+} from '../components/modals/AgentConversationModal';
+import { ResourceSummaryContent } from '../components/common/AgentResponseFormatter';
+import {
+  FhirResourceEditor as FriendlyHarmonizerEditor,
+  friendlyFieldLabel,
+} from '../components/common/FhirResourceEditor';
 import { CarePlanDisplay } from '../components/patient-records/CarePlanDisplay';
+import { CarePlanDetails } from '../components/patient-records/CarePlanDetails';
 import { AgentEndpointConfig } from '../types/agent';
-import { getAuthenticatedHeaders } from '../services/auth/oidc';
+import { getAuthenticatedHeaders, getOidcUser } from '../services/auth/oidc';
 import {
   extractOperationOutcomeText,
   getOperationOutcomeMessage,
 } from '../utils/fhirError';
+import {
+  createHarmonizerReviewService,
+  HarmonizerPendingMission,
+  HarmonizerReviewRecord,
+} from '../services/harmonizerReviewService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +82,8 @@ interface HarmonizerJobStatusResponse {
   error?: string;
   message?: string;
   pollUrl?: string;
+  reviewUrl?: string;
+  interventionId?: string;
 }
 
 interface HarmonizerStepResult {
@@ -374,6 +391,8 @@ const HARMONIZER_IMPORT_URL =
 const HARMONIZER_STATUS_URL_BASE =
   import.meta.env.VITE_HARMONIZER_STATUS_URL_BASE ||
   `${AGENT_API_BASE_URL}/api/persona/DataPipelinePersona/${HARMONIZER_PERSONA_ID}/$status`;
+const harmonizerReviewService =
+  createHarmonizerReviewService(AGENT_API_BASE_URL);
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 if (!API_KEY && import.meta.env.DEV) {
@@ -506,6 +525,221 @@ const ErrorState: React.FC<{ error: unknown }> = ({ error }) => (
     </div>
   </div>
 );
+
+const AI_PROVENANCE_EXTENSION_URL =
+  'http://fhir4java.org/StructureDefinition/ai-generation-provenance';
+
+const AiProvenancePanel: React.FC<{ resource: any }> = ({ resource }) => {
+  const provenance = resource?.extension?.find(
+    (extension: any) => extension.url === AI_PROVENANCE_EXTENSION_URL,
+  );
+  const [currentUser, setCurrentUser] = React.useState<{
+    id?: string;
+    login?: string;
+  }>({});
+
+  React.useEffect(() => {
+    let active = true;
+    void getOidcUser().then((user) => {
+      if (!active || !user) return;
+      setCurrentUser({
+        id: user.profile.sub,
+        login: String(
+          user.profile.preferred_username ||
+            user.profile.email ||
+            user.profile.name ||
+            '',
+        ),
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!provenance) return null;
+
+  const values = (provenance.extension || []).reduce(
+    (result: Record<string, unknown>, item: any) => {
+      const valueKey = Object.keys(item).find((key) => key.startsWith('value'));
+      if (valueKey) result[item.url] = item[valueKey];
+      return result;
+    },
+    {},
+  );
+
+  const reviewerName = (value: unknown) =>
+    value && currentUser.id === value && currentUser.login
+      ? currentUser.login
+      : value;
+
+  const reviewBy = reviewerName(values.reviewedBy);
+  const approvedBy = reviewerName(values.approvedBy);
+  const reviewDetails = [values.reviewedAt, reviewBy]
+    .filter(Boolean)
+    .join(' · ');
+  const approvalDetails = [values.approvedAt, approvedBy]
+    .filter(Boolean)
+    .join(' · ');
+  const reviewSummary = [
+    values.revision !== undefined ? `Revision ${values.revision}` : '',
+    typeof values.confidence === 'number'
+      ? `Confidence ${Math.round(values.confidence * 100)}%`
+      : '',
+    values.humanEdited === true
+      ? 'Human edited'
+      : values.humanEdited === false
+        ? 'Not human edited'
+        : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const rows = [
+    ['Generated at', values.generatedAt],
+    ['Mission ID', values.missionId],
+    [
+      'Persona',
+      [values.personaId, values.personaVersion].filter(Boolean).join(' · '),
+    ],
+    ['Review details', reviewDetails],
+    ['Approval details', approvalDetails],
+    ['Review summary', reviewSummary],
+  ].filter(
+    ([, value]) => value !== undefined && value !== null && value !== '',
+  );
+
+  return (
+    <div className="mt-3 rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+      <p className="font-semibold">AI-generated resource provenance</p>
+      <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="min-w-0 py-1">
+            <dt className="font-medium text-red-800">{label}</dt>
+            <dd className="break-words text-red-900">{String(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+};
+
+// Review payload fields may arrive as strings, arrays or objects; React cannot render objects.
+const toDisplayText = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  if (Array.isArray(value))
+    return value.map(toDisplayText).filter(Boolean).join('\n');
+  if (typeof value === 'object') {
+    const item = value as Record<string, unknown>;
+    const text = toDisplayText(
+      item.quote ?? item.text ?? item.display ?? item.value ?? item.name,
+    );
+    return text || JSON.stringify(value);
+  }
+  return String(value);
+};
+
+const getReviewMetadata = (record: HarmonizerReviewRecord) => {
+  const audit = record.review || {};
+  const humanEdited = record.humanEdited ?? audit.humanEdited ?? false;
+  const outcome =
+    toDisplayText(record.outcome || record.status) || 'PENDING_REVIEW';
+  return {
+    status: humanEdited ? 'Reviewed' : outcome,
+    outcome,
+    humanEdited,
+    reviewedAt: toDisplayText(record.reviewedAt || audit.reviewedAt),
+    reviewedBy: toDisplayText(record.reviewedBy || audit.reviewedBy),
+  };
+};
+
+const HarmonizerReviewMetadata: React.FC<{
+  record: HarmonizerReviewRecord;
+  compact?: boolean;
+}> = ({ record, compact = false }) => {
+  const metadata = getReviewMetadata(record);
+  return (
+    <div className={compact ? 'flex flex-wrap gap-2 text-[11px]' : 'space-y-2'}>
+      <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 font-semibold uppercase tracking-wide text-amber-800">
+        {metadata.status}
+      </span>
+      {metadata.outcome !== metadata.status && (
+        <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-700">
+          Outcome: {metadata.outcome}
+        </span>
+      )}
+      {!compact && metadata.humanEdited && (
+        <p className="text-sm text-emerald-700">Human reviewed and edited</p>
+      )}
+      {metadata.reviewedAt && (
+        <p className={compact ? 'text-gray-600' : 'text-sm text-gray-600'}>
+          Reviewed at: {fmt(metadata.reviewedAt)}
+        </p>
+      )}
+      {metadata.reviewedBy && (
+        <p className={compact ? 'text-gray-600' : 'text-sm text-gray-600'}>
+          Reviewed by: {metadata.reviewedBy}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const HarmonizerDuplicateDetails: React.FC<{
+  record: HarmonizerReviewRecord;
+}> = ({ record }) => {
+  const dedup = record.dedup as
+    | {
+        reason?: string;
+        classification?: string;
+        matchedOn?: Record<string, unknown>;
+        duplicateOf?: { resourceType?: string; resourceId?: string };
+      }
+    | undefined;
+
+  if (!dedup) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-red-900">
+        Duplicate details
+      </p>
+      {dedup.classification && (
+        <p className="mt-2 text-sm font-semibold text-red-800">
+          Classification:{' '}
+          {toDisplayText(dedup.classification).replace(/_/g, ' ')}
+        </p>
+      )}
+      {dedup.reason && (
+        <p className="mt-2 text-sm text-red-800">
+          {toDisplayText(dedup.reason)}
+        </p>
+      )}
+      {dedup.matchedOn && Object.keys(dedup.matchedOn).length > 0 && (
+        <dl className="mt-3 space-y-1 border-t border-red-200 pt-2 text-xs text-red-900">
+          <dt className="font-semibold">Matched fields</dt>
+          {Object.entries(dedup.matchedOn).map(([field, value]) => (
+            <div key={field} className="flex gap-2">
+              <dt className="font-medium">{friendlyFieldLabel(field)}:</dt>
+              <dd className="min-w-0 break-words">{toDisplayText(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {dedup.duplicateOf?.resourceType && dedup.duplicateOf.resourceId && (
+        <p className="mt-3 border-t border-red-200 pt-2 text-xs text-red-900">
+          Existing record:{' '}
+          <span className="font-mono font-semibold">
+            {dedup.duplicateOf.resourceType}/{dedup.duplicateOf.resourceId}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+};
 
 const parseReference = (
   reference?: string,
@@ -1291,6 +1525,29 @@ const FilterPanel: React.FC<{
 
 // ─── Search Result Card ───────────────────────────────────────────────────────
 
+const SEARCH_TYPE_LABELS: Record<string, string> = {
+  Observation: 'Observations',
+  Condition: 'Conditions',
+  Encounter: 'Encounters',
+  MedicationRequest: 'Medication requests',
+  MedicationDispense: 'Medication dispenses',
+  MedicationStatement: 'Medication statements',
+  DiagnosticReport: 'Reports',
+  ServiceRequest: 'Orders',
+  Procedure: 'Procedures',
+  CarePlan: 'Care plans',
+};
+
+const groupSearchResults = (results: HybridSearchResult[]) => {
+  const groups = new Map<string, HybridSearchResult[]>();
+  results.forEach((result) => {
+    const bucket = groups.get(result.resourceType) ?? [];
+    bucket.push(result);
+    groups.set(result.resourceType, bucket);
+  });
+  return Array.from(groups.entries());
+};
+
 const SearchResultCard: React.FC<{
   result: HybridSearchResult;
   onNavigate?: (tab: TabId, resourceId: string, medSubTab?: MedSubTab) => void;
@@ -1360,13 +1617,6 @@ const SearchResultCard: React.FC<{
     r.dateAsserted ||
     '';
 
-  const sourceCls =
-    result.sources.includes('vector') && result.sources.includes('keyword')
-      ? 'bg-purple-100 text-purple-700'
-      : result.sources.includes('vector')
-        ? 'bg-blue-100 text-blue-700'
-        : 'bg-amber-100 text-amber-700';
-
   const getNavTarget = (): { tab: TabId; medSubTab?: MedSubTab } | null => {
     const r2 = resource as any;
     switch (result.resourceType) {
@@ -1406,40 +1656,33 @@ const SearchResultCard: React.FC<{
   };
 
   const navTarget = resource ? getNavTarget() : null;
+  const clickable = Boolean(navTarget && onNavigate);
 
   return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 rounded transition-colors text-xs ${
-        navTarget && onNavigate
-          ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50'
-          : ''
-      }`}
-      title={navTarget ? 'Click to navigate to this record' : undefined}
-      onClick={
-        navTarget && onNavigate
-          ? () =>
-              onNavigate(navTarget.tab, result.resourceId, navTarget.medSubTab)
-          : undefined
+    <button
+      type="button"
+      disabled={!clickable}
+      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors enabled:hover:bg-blue-50 disabled:cursor-default"
+      title={`Matched by ${result.sources.join(' + ')} · relevance ${(result.score * 100).toFixed(0)}%`}
+      onClick={() =>
+        navTarget &&
+        onNavigate?.(navTarget.tab, result.resourceId, navTarget.medSubTab)
       }
     >
-      <span className="font-semibold text-indigo-600 uppercase tracking-wide w-28 shrink-0 truncate">
-        {result.resourceType}
+      <span className="min-w-0 flex-1 truncate text-gray-800">
+        {getSummary()}
       </span>
-      <span className="flex-1 text-gray-800 truncate">{getSummary()}</span>
       {getDate() && (
-        <span className="text-gray-400 whitespace-nowrap shrink-0">
+        <span className="shrink-0 whitespace-nowrap text-xs text-gray-400">
           {fmt(getDate())}
         </span>
       )}
-      <span
-        className={`px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0 ${sourceCls}`}
-      >
-        {result.sources.join('+')}
-      </span>
-      <span className="text-gray-400 whitespace-nowrap shrink-0 w-10 text-right">
-        {(result.score * 100).toFixed(0)}%
-      </span>
-    </div>
+      {clickable && (
+        <span className="shrink-0 text-xs text-blue-500" aria-hidden="true">
+          ›
+        </span>
+      )}
+    </button>
   );
 };
 
@@ -1447,7 +1690,17 @@ const SearchResultCard: React.FC<{
 
 const PatientRecordsPage: React.FC = () => {
   const { id: patientId } = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const consultRequestedRef = useRef(
+    new URLSearchParams(location.search).get('consult') === '1',
+  );
+  // Check if navigating from patient portal (for patient role users)
+  const showBackToPatientPortal = location.state?.from === '/patient-portal';
   const role = useSelector((state: RootState) => state.ui.role);
+  const authUserId = useSelector((state: RootState) => state.auth.user?.id);
+  const canUseAgent = role === 'patient' || role === 'clinician';
+  const isClinicianAgent = role === 'clinician';
   const pollRunIdRef = useRef(0);
   const uploadPollRunIdRef = useRef(0);
 
@@ -1469,8 +1722,15 @@ const PatientRecordsPage: React.FC = () => {
   };
 
   const [currentPage, setCurrentPage] = useState(1);
+  // Page to restore after a filter/sort reset triggered by search navigation.
+  const pendingPageRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (pendingPageRef.current !== null) {
+      setCurrentPage(pendingPageRef.current);
+      pendingPageRef.current = null;
+      return;
+    }
     setCurrentPage(1);
   }, [filterValues, sortDir]);
 
@@ -1482,6 +1742,8 @@ const PatientRecordsPage: React.FC = () => {
     useState<HybridSearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
 
   // ── Agent conversation modal state ──
   const [showAgentModal, setShowAgentModal] = useState(false);
@@ -1520,15 +1782,59 @@ const PatientRecordsPage: React.FC = () => {
     useState<HarmonizerJobSummaryResponse | null>(null);
   const [isLoadingNoteUploadSummary, setIsLoadingNoteUploadSummary] =
     useState(false);
+  const [harmonizerReviewRecords, setHarmonizerReviewRecords] = useState<
+    HarmonizerReviewRecord[]
+  >([]);
+  const [harmonizerReviewEtag, setHarmonizerReviewEtag] = useState<string>();
+  const [isLoadingHarmonizerReview, setIsLoadingHarmonizerReview] =
+    useState(false);
+  const [selectedHarmonizerRecord, setSelectedHarmonizerRecord] =
+    useState<HarmonizerReviewRecord | null>(null);
+  const [showHarmonizerDuplicateDetails, setShowHarmonizerDuplicateDetails] =
+    useState(false);
+  const [isAddingHarmonizerRecord, setIsAddingHarmonizerRecord] =
+    useState(false);
+  const [isEditingHarmonizerRecord, setIsEditingHarmonizerRecord] =
+    useState(false);
+  const [harmonizerRecordDraftObject, setHarmonizerRecordDraftObject] =
+    useState<Record<string, any>>({});
+  const [harmonizerRecordDraft, setHarmonizerRecordDraft] = useState('');
+  const [isSavingHarmonizerRecord, setIsSavingHarmonizerRecord] =
+    useState(false);
+  const [harmonizerIgnoreReason, setHarmonizerIgnoreReason] = useState('');
+  const [harmonizerReviewActionError, setHarmonizerReviewActionError] =
+    useState<string | null>(null);
+  const [pendingHarmonizerMissions, setPendingHarmonizerMissions] = useState<
+    HarmonizerPendingMission[]
+  >([]);
+  const [
+    isLoadingPendingHarmonizerMissions,
+    setIsLoadingPendingHarmonizerMissions,
+  ] = useState(false);
+  const [showPendingHarmonizerMissions, setShowPendingHarmonizerMissions] =
+    useState(false);
+  const [harmonizerPanelTab, setHarmonizerPanelTab] = useState<
+    'upload' | 'review'
+  >('upload');
+  const [expandedMissionIds, setExpandedMissionIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedMissionRecords, setExpandedMissionRecords] = useState<
+    Map<string, HarmonizerReviewRecord[]>
+  >(new Map());
+  const [loadingMissionIds, setLoadingMissionIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   // ── Upload panel resize state ──
-  const [uploadPanelWidth, setUploadPanelWidth] = useState(30); // Default 30% width
+  const [uploadPanelWidth, setUploadPanelWidth] = useState(40); // Default 40% width
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ── Ask AI panel mobile resize state ──
   const [agentPanelHeight, setAgentPanelHeight] = useState(50); // Default 50vh
   const agentPanelRef = useRef<HTMLDivElement>(null);
+  const [uploadPanelHeight, setUploadPanelHeight] = useState(50); // Default 50vh
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true);
@@ -1574,6 +1880,22 @@ const PatientRecordsPage: React.FC = () => {
 
   const handleCollapsePanel = () => {
     setAgentPanelHeight((prev) => {
+      if (prev >= 80) return 50;
+      if (prev > 30) return 30;
+      return 30;
+    });
+  };
+
+  const handleExpandUploadPanel = () => {
+    setUploadPanelHeight((prev) => {
+      if (prev <= 30) return 50;
+      if (prev < 80) return 80;
+      return 80;
+    });
+  };
+
+  const handleCollapseUploadPanel = () => {
+    setUploadPanelHeight((prev) => {
       if (prev >= 80) return 50;
       if (prev > 30) return 30;
       return 30;
@@ -1657,7 +1979,12 @@ const PatientRecordsPage: React.FC = () => {
   const normalizeHarmonizerStatus = (status?: string): string =>
     String(status || '').toUpperCase();
 
-  const HARMONIZER_STATUS_STEPS = ['QUEUE', 'RUNNING', 'COMPLETED'] as const;
+  const HARMONIZER_STATUS_STEPS = [
+    'QUEUE',
+    'RUNNING',
+    'REVIEW',
+    'COMPLETED',
+  ] as const;
 
   const mapHarmonizerStatusToStep = (
     status?: string,
@@ -1680,6 +2007,13 @@ const PatientRecordsPage: React.FC = () => {
       normalized === 'QUEUE'
     ) {
       return 'QUEUE';
+    }
+
+    if (
+      normalized === 'AWAITING_REVIEW' ||
+      normalized === 'AWAITING_INTERVENTION'
+    ) {
+      return 'REVIEW';
     }
 
     if (normalized === 'RUNNING' || normalized === 'IN_PROGRESS') {
@@ -1755,6 +2089,373 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const loadHarmonizerReview = async (jobId: string) => {
+    setIsLoadingHarmonizerReview(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      const result = await harmonizerReviewService.getReview(jobId);
+      setHarmonizerReviewEtag(result.etag);
+      const payload = result.data as any;
+      const records = payload.records || payload.items || payload.review;
+      setHarmonizerReviewRecords(Array.isArray(records) ? records : []);
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to load generated resources for review.',
+      );
+    } finally {
+      setIsLoadingHarmonizerReview(false);
+    }
+  };
+
+  const loadPendingHarmonizerMissions = async () => {
+    uploadPollRunIdRef.current += 1;
+    setHarmonizerPanelTab('review');
+    setShowPendingHarmonizerMissions(true);
+    setIsLoadingPendingHarmonizerMissions(true);
+    setHarmonizerReviewActionError(null);
+    // Clear full review panel state
+    setNoteUploadJobId(null);
+    setNoteUploadJobStatus(null);
+    setHarmonizerReviewRecords([]);
+    try {
+      const missions = await harmonizerReviewService.getPendingMissions(
+        patientId!,
+      );
+      setPendingHarmonizerMissions(missions);
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to load pending document reviews.',
+      );
+    } finally {
+      setIsLoadingPendingHarmonizerMissions(false);
+    }
+  };
+
+  const isHarmonizerDuplicate = (record: HarmonizerReviewRecord) => {
+    const dedup = record.dedup || {};
+    return Boolean(
+      dedup.isDuplicate ||
+      dedup.duplicate ||
+      dedup.outcome === 'DUPLICATE' ||
+      record.outcome === 'SKIPPED_DUPLICATE' ||
+      record.status === 'SKIPPED_DUPLICATE',
+    );
+  };
+
+  const getHarmonizerDisposition = (record: HarmonizerReviewRecord) => {
+    const value = String(record.outcome || record.status || '').toUpperCase();
+    if (value.includes('IGNOR')) return 'IGNORE';
+    if (value.includes('EXCLUD')) return 'EXCLUDE';
+    return null;
+  };
+
+  const toggleMissionExpanded = async (missionId: string) => {
+    setExpandedMissionIds((prevIds) => {
+      const newIds = new Set(prevIds);
+      if (newIds.has(missionId)) {
+        newIds.delete(missionId);
+        setExpandedMissionRecords((prev) => {
+          const newRecords = new Map(prev);
+          newRecords.delete(missionId);
+          return newRecords;
+        });
+      } else {
+        newIds.add(missionId);
+        // Fetch records for this mission if not already loaded
+        if (!expandedMissionRecords.has(missionId)) {
+          setLoadingMissionIds((prev) => new Set([...prev, missionId]));
+          loadHarmonizerReviewForMission(missionId);
+        }
+      }
+      return newIds;
+    });
+  };
+
+  const loadHarmonizerReviewForMission = async (missionId: string) => {
+    try {
+      const result = await harmonizerReviewService.getReview(missionId);
+      const records =
+        result.data.records || result.data.items || result.data.review || [];
+      setExpandedMissionRecords((prev) =>
+        new Map(prev).set(missionId, records),
+      );
+    } catch (error) {
+      console.error('Failed to load review records:', error);
+    } finally {
+      setLoadingMissionIds((prev) => {
+        const newLoading = new Set(prev);
+        newLoading.delete(missionId);
+        return newLoading;
+      });
+    }
+  };
+
+  const handleExpandedMissionApprove = async (missionId: string) => {
+    try {
+      setIsNoteUploadPolling(true);
+      setHarmonizerReviewActionError(null);
+
+      // Load review data to get etag
+      const result = await harmonizerReviewService.getReview(missionId);
+      const etag = result.etag;
+
+      // Call approve with the loaded etag directly (not relying on state)
+      await harmonizerReviewService.approve(
+        missionId,
+        'Generated FHIR resources reviewed and approved.',
+        etag,
+      );
+
+      setIsNoteUploadPolling(false);
+      // Clear and reset
+      setExpandedMissionIds(new Set());
+      setExpandedMissionRecords(new Map());
+      setNoteUploadJobId(null);
+      setHarmonizerReviewRecords([]);
+      setHarmonizerReviewEtag(undefined);
+      setHarmonizerPanelTab('upload');
+      setNoteUploadMessage('Review approved. Resuming Harmonizer…');
+
+      // Reload missions
+      await loadPendingHarmonizerMissions();
+    } catch (error: any) {
+      setIsNoteUploadPolling(false);
+      console.error('Failed to approve:', error);
+      setHarmonizerReviewActionError(
+        error?.message || 'Failed to approve review',
+      );
+    }
+  };
+
+  const handleExpandedMissionReject = async (
+    missionId: string,
+    mode: 'REVISE' | 'DISCARD',
+  ) => {
+    try {
+      setIsNoteUploadPolling(true);
+      setHarmonizerReviewActionError(null);
+
+      // Load review data to get etag
+      const result = await harmonizerReviewService.getReview(missionId);
+      const etag = result.etag;
+
+      // Call reject with the loaded etag directly (not relying on state)
+      await harmonizerReviewService.reject(missionId, mode, '', etag);
+
+      setIsNoteUploadPolling(false);
+      // Clear and reset
+      setExpandedMissionIds(new Set());
+      setExpandedMissionRecords(new Map());
+      setNoteUploadJobId(null);
+      setHarmonizerReviewRecords([]);
+      setHarmonizerReviewEtag(undefined);
+      setHarmonizerPanelTab('upload');
+      setNoteUploadMessage('Review rejected. Resuming Harmonizer…');
+
+      // Reload missions
+      await loadPendingHarmonizerMissions();
+    } catch (error: any) {
+      setIsNoteUploadPolling(false);
+      console.error('Failed to reject:', error);
+      setHarmonizerReviewActionError(
+        error?.message || 'Failed to reject review',
+      );
+    }
+  };
+
+  const openHarmonizerRecord = (record: HarmonizerReviewRecord) => {
+    setSelectedHarmonizerRecord(record);
+    setShowHarmonizerDuplicateDetails(false);
+    setHarmonizerIgnoreReason('');
+    setIsAddingHarmonizerRecord(false);
+    setIsEditingHarmonizerRecord(false);
+    const resource = (record.resource || record) as Record<string, any>;
+    setHarmonizerRecordDraftObject(JSON.parse(JSON.stringify(resource)));
+    setHarmonizerRecordDraft(JSON.stringify(resource, null, 2));
+  };
+
+  const openNewHarmonizerRecord = () => {
+    const resource = { resourceType: 'Observation', status: 'final' };
+    setSelectedHarmonizerRecord({
+      recordId: '',
+      resourceType: 'Observation',
+      resource,
+    });
+    setHarmonizerIgnoreReason('');
+    setIsAddingHarmonizerRecord(true);
+    setIsEditingHarmonizerRecord(true);
+    setHarmonizerRecordDraftObject(resource);
+    setHarmonizerRecordDraft(JSON.stringify(resource, null, 2));
+  };
+
+  const saveHarmonizerRecord = async () => {
+    if (!noteUploadJobId || !selectedHarmonizerRecord) return;
+    setIsSavingHarmonizerRecord(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      const resource = JSON.parse(harmonizerRecordDraft) as Record<
+        string,
+        unknown
+      >;
+      if (isAddingHarmonizerRecord) {
+        await harmonizerReviewService.addRecord(
+          noteUploadJobId,
+          resource,
+          harmonizerReviewEtag,
+        );
+      } else {
+        await harmonizerReviewService.updateRecord(
+          noteUploadJobId,
+          selectedHarmonizerRecord.recordId,
+          resource,
+          harmonizerReviewEtag,
+        );
+      }
+      setSelectedHarmonizerRecord(null);
+      setIsAddingHarmonizerRecord(false);
+      setIsEditingHarmonizerRecord(false);
+
+      // Reload expanded mission records if in expanded card view
+      if (expandedMissionIds.has(noteUploadJobId)) {
+        await loadHarmonizerReviewForMission(noteUploadJobId);
+      } else {
+        // Otherwise load full review panel data
+        await loadHarmonizerReview(noteUploadJobId);
+      }
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error instanceof SyntaxError
+          ? 'The resource draft is not valid JSON.'
+          : error?.message || 'Unable to save this generated resource.',
+      );
+    } finally {
+      setIsSavingHarmonizerRecord(false);
+    }
+  };
+
+  const resolveSelectedDuplicate = async (
+    action: 'CREATE_NEW' | 'SKIP' | 'UPDATE_EXISTING',
+  ) => {
+    if (!noteUploadJobId || !selectedHarmonizerRecord?.recordId) return;
+    setHarmonizerReviewActionError(null);
+    const jobId = noteUploadJobId;
+    try {
+      // Always fetch fresh etag before mutating
+      const fresh = await harmonizerReviewService.getReview(jobId);
+      await harmonizerReviewService.resolveDuplicate(
+        jobId,
+        selectedHarmonizerRecord.recordId,
+        action,
+        fresh.etag,
+      );
+      setSelectedHarmonizerRecord(null);
+      if (expandedMissionIds.has(jobId)) {
+        await loadHarmonizerReviewForMission(jobId);
+      } else {
+        await loadHarmonizerReview(jobId);
+      }
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to update duplicate decision.',
+      );
+    }
+  };
+
+  const setSelectedRecordDisposition = async (
+    disposition: 'EXCLUDE' | 'IGNORE' | 'INCLUDE',
+  ) => {
+    if (!noteUploadJobId || !selectedHarmonizerRecord?.recordId) return;
+    if (disposition === 'IGNORE' && !harmonizerIgnoreReason.trim()) {
+      setHarmonizerReviewActionError(
+        'Please provide a reason before marking this record as ignored.',
+      );
+      return;
+    }
+    setHarmonizerReviewActionError(null);
+    const jobId = noteUploadJobId;
+    try {
+      // Always fetch fresh etag before mutating
+      const fresh = await harmonizerReviewService.getReview(jobId);
+      await harmonizerReviewService.setRecordDisposition(
+        jobId,
+        selectedHarmonizerRecord.recordId,
+        disposition,
+        disposition === 'IGNORE' ? harmonizerIgnoreReason : undefined,
+        fresh.etag,
+      );
+      setSelectedHarmonizerRecord(null);
+      setHarmonizerIgnoreReason('');
+      if (expandedMissionIds.has(jobId)) {
+        await loadHarmonizerReviewForMission(jobId);
+      } else {
+        await loadHarmonizerReview(jobId);
+      }
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to update the record disposition.',
+      );
+    }
+  };
+
+  const approveHarmonizerReview = async () => {
+    if (!noteUploadJobId) return;
+    setIsNoteUploadPolling(true);
+    setHarmonizerReviewActionError(null);
+    try {
+      await harmonizerReviewService.approve(
+        noteUploadJobId,
+        'Generated FHIR resources reviewed and approved.',
+        harmonizerReviewEtag,
+      );
+      setHarmonizerReviewRecords([]);
+      setHarmonizerPanelTab('upload');
+      setShowPendingHarmonizerMissions(false);
+      setNoteUploadJobStatus('RUNNING');
+      setNoteUploadMessage('Review approved. Resuming Harmonizer…');
+      await pollHarmonizerJobStatus(
+        noteUploadJobId,
+        await buildMissionRequestConfig().then((result) => result.headers),
+        uploadPollRunIdRef.current,
+      );
+    } catch (error: any) {
+      setIsNoteUploadPolling(false);
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to approve generated resources.',
+      );
+    }
+  };
+
+  const rejectHarmonizerReview = async (mode: 'REVISE' | 'DISCARD') => {
+    if (!noteUploadJobId) return;
+    const instructions =
+      mode === 'REVISE'
+        ? window.prompt('Describe the changes required:', '')?.trim()
+        : 'Discard this document import.';
+    if (mode === 'REVISE' && !instructions) return;
+    setHarmonizerReviewActionError(null);
+    try {
+      await harmonizerReviewService.reject(
+        noteUploadJobId,
+        mode,
+        instructions || '',
+        harmonizerReviewEtag,
+      );
+      setHarmonizerReviewRecords([]);
+      setHarmonizerPanelTab('upload');
+      setShowPendingHarmonizerMissions(false);
+      setNoteUploadJobStatus(mode === 'REVISE' ? 'RUNNING' : 'COMPLETED');
+      setNoteUploadMessage(
+        mode === 'REVISE'
+          ? 'Changes requested. Harmonizer is regenerating…'
+          : 'Completed: user rejected the document import. No records were written.',
+      );
+    } catch (error: any) {
+      setHarmonizerReviewActionError(
+        error?.message || 'Unable to submit the review decision.',
+      );
+    }
+  };
+
   const pollHarmonizerJobStatus = async (
     jobId: string,
     headers: Record<string, string>,
@@ -1825,6 +2526,18 @@ const PatientRecordsPage: React.FC = () => {
               ? payload.progress.percentComplete
               : null,
           );
+
+          if (normalizeHarmonizerStatus(payload.status) === 'AWAITING_REVIEW') {
+            setNoteUploadJobStatus('AWAITING_REVIEW');
+            setIsNoteUploadPolling(false);
+            setHarmonizerPanelTab('review');
+            setShowPendingHarmonizerMissions(false);
+            setNoteUploadMessage(
+              'Review required: generated resources are ready. Review them before approval.',
+            );
+            await loadHarmonizerReview(jobId);
+            return;
+          }
 
           if (mappedStatus === 'COMPLETED') {
             setNoteUploadJobStatus('COMPLETED');
@@ -2136,11 +2849,23 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
+  const agentPersonaId = isClinicianAgent
+    ? 'clinician-digital-twin'
+    : 'digital-twin';
   const patientAgentConfig: AgentEndpointConfig = {
-    endpoint: `${AGENT_API_BASE_URL}/api/agent/AgentPersona/digital-twin/AgentMission`,
-    personaId: 'digital-twin',
+    endpoint: `${AGENT_API_BASE_URL}/api/agent/AgentPersona/${agentPersonaId}/AgentMission`,
+    personaId: agentPersonaId,
     headers: agentExtraHeaders,
     supportsContinuation: true,
+    ...(isClinicianAgent
+      ? {
+          audience: 'clinician' as const,
+          // clinician-digital-twin sets requiresDelegation; the backend 403s without it.
+          missionContext: { delegatedBy: authUserId || 'clinician' },
+          // Broad summaries fan out across several resource types.
+          missionTimeoutMs: 300000,
+        }
+      : {}),
   };
 
   useEffect(() => {
@@ -2150,12 +2875,26 @@ const PatientRecordsPage: React.FC = () => {
     };
   }, []);
 
+  // Clear full review panel state when switching tabs
+  useEffect(() => {
+    if (harmonizerPanelTab !== 'review') {
+      setNoteUploadJobId(null);
+      setNoteUploadJobStatus(null);
+      setHarmonizerReviewRecords([]);
+    } else {
+      // When returning to review tab, collapse all expanded cards
+      setExpandedMissionIds(new Set());
+      setExpandedMissionRecords(new Map());
+    }
+  }, [harmonizerPanelTab]);
+
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const query = searchInput.trim();
     if (query.length < 6) return;
     setIsSearching(true);
     setSearchError(null);
+    setShowSearchResults(true);
     try {
       const resourceTypes = getResourceTypesFromQuery(query);
       const headers: Record<string, string> = {
@@ -2200,33 +2939,152 @@ const PatientRecordsPage: React.FC = () => {
     setSearchInput('');
     setSearchResults(null);
     setSearchError(null);
+    setShowSearchResults(false);
     setShowGlobalSearch(false);
   };
 
+  useEffect(() => {
+    if (!showSearchResults) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!searchBoxRef.current?.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowSearchResults(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSearchResults]);
+
   // ── Navigation from search results ──
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [searchByPatient] = useLazySearchByPatientQuery();
 
-  const handleNavigate = (
+  // Mirrors each tab's own query so the record is located in the same list the tab shows.
+  const getTabQuery = (tab: TabId, subTab?: MedSubTab) => {
+    const ALL_REPOSITORIES = { 'x-api-repository': 'ALL' };
+    switch (tab) {
+      case 'encounter':
+        return { resourceType: 'Encounter' };
+      case 'condition':
+        return { resourceType: 'Condition' };
+      case 'observation':
+        return {
+          resourceType: 'Observation',
+          customHeaders: ALL_REPOSITORIES,
+        };
+      case 'orders':
+        return { resourceType: 'ServiceRequest' };
+      case 'lab-results':
+        return {
+          resourceType: 'DiagnosticReport',
+          extra: { category: 'LAB,PAT' },
+          customHeaders: ALL_REPOSITORIES,
+        };
+      case 'rad-report':
+        return {
+          resourceType: 'DiagnosticReport',
+          extra: { category: 'RAD' },
+        };
+      case 'medication':
+        return {
+          resourceType:
+            subTab === 'dispense'
+              ? 'MedicationDispense'
+              : subTab === 'statement'
+                ? 'MedicationStatement'
+                : 'MedicationRequest',
+        };
+      case 'procedure':
+        return { resourceType: 'Procedure' };
+      default:
+        return { resourceType: 'CarePlan' };
+    }
+  };
+
+  // Lists are paged, so find which page holds the record before opening its tab.
+  const locateRecordPage = async (
+    tab: TabId,
+    resourceId: string,
+    subTab?: MedSubTab,
+  ): Promise<number> => {
+    if (!patientId) return 1;
+    const query = getTabQuery(tab, subTab) as {
+      resourceType: string;
+      extra?: Record<string, string>;
+      customHeaders?: Record<string, string>;
+    };
+    const batchSize = 100;
+    try {
+      for (let offset = 0; offset < 2000; offset += batchSize) {
+        const bundle = await searchByPatient({
+          resourceType: query.resourceType,
+          patientId,
+          extraParams: {
+            _sort: '-_lastUpdated',
+            _count: String(batchSize),
+            _offset: String(offset),
+            ...(query.extra ?? {}),
+          },
+          customHeaders: query.customHeaders,
+        }).unwrap();
+        const entries = bundle.entry ?? [];
+        const index = entries.findIndex(
+          (entry) => (entry.resource as any)?.id === resourceId,
+        );
+        if (index >= 0) return Math.floor((offset + index) / PAGE_SIZE) + 1;
+        if (entries.length < batchSize) break;
+      }
+    } catch (error) {
+      console.error('Unable to locate record page:', error);
+    }
+    return 1;
+  };
+
+  const handleNavigate = async (
     tab: TabId,
     resourceId: string,
     medSubTab?: MedSubTab,
   ) => {
+    setShowSearchResults(false);
+    const page = await locateRecordPage(tab, resourceId, medSubTab);
+    // Show the record in the default view: no filters, newest first.
+    if (Object.keys(filterValues).length > 0 || sortDir !== 'desc') {
+      pendingPageRef.current = page;
+      setFilterValues({});
+      setSortDir('desc');
+    }
+    setShowFilter(false);
     setActiveTab(tab);
     if (medSubTab) setMedSubTab(medSubTab);
+    setCurrentPage(page);
     setExpandedId(resourceId);
     setHighlightId(resourceId);
   };
 
   useEffect(() => {
     if (!highlightId) return;
-    const scrollTimer = setTimeout(() => {
-      document
-        .getElementById(`record-${highlightId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 120);
-    const clearTimer = setTimeout(() => setHighlightId(null), 2500);
+    let clearTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    // The row only exists once its page has loaded, so poll for it.
+    const poll = setInterval(() => {
+      const element = document.getElementById(`record-${highlightId}`);
+      if (element) {
+        clearInterval(poll);
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearTimer = setTimeout(() => setHighlightId(null), 2500);
+      } else if (++attempts > 40) {
+        clearInterval(poll);
+        setHighlightId(null);
+      }
+    }, 150);
     return () => {
-      clearTimeout(scrollTimer);
+      clearInterval(poll);
       clearTimeout(clearTimer);
     };
   }, [highlightId]);
@@ -2243,6 +3101,26 @@ const PatientRecordsPage: React.FC = () => {
       .join(' ') ||
     'Unknown Patient';
   const mrn = patient?.identifier?.[0]?.value || '—';
+
+  useEffect(() => {
+    if (role !== 'clinician' || !patient?.id) return;
+    rememberRecentPatient({
+      id: patient.id,
+      name: patientName,
+      mrn: patient.identifier?.[0]?.value,
+    });
+  }, [role, patient?.id, patientName]);
+
+  useEffect(() => {
+    if (!consultRequestedRef.current || !isClinicianAgent || !patientId) return;
+    consultRequestedRef.current = false;
+    void openAgentConversationModal();
+    // Drop ?consult=1 so a refresh or closing the panel doesn't reopen it.
+    navigate(
+      { pathname: location.pathname, search: '' },
+      { replace: true, state: location.state },
+    );
+  }, [isClinicianAgent, patientId]);
 
   // ── Data fetching (lazy) — all via searchByPatient for unified sort + filter ──
   const pageOffset = {
@@ -2729,6 +3607,7 @@ const PatientRecordsPage: React.FC = () => {
                                 </div>
                               ) : null}
                             </div>
+                            <AiProvenancePanel resource={cond} />
                           </td>
                         </tr>
                       )}
@@ -2868,6 +3747,7 @@ const PatientRecordsPage: React.FC = () => {
                           </div>
                         )}
                       </div>
+                      <AiProvenancePanel resource={cond} />
                     </div>
                   )}
                 </div>
@@ -3009,6 +3889,7 @@ const PatientRecordsPage: React.FC = () => {
                                   .join(', ') || '—'}
                               </div>
                             </div>
+                            <AiProvenancePanel resource={enc} />
                           </td>
                         </tr>
                       )}
@@ -3107,6 +3988,7 @@ const PatientRecordsPage: React.FC = () => {
                             )
                             .join(', ') || '—'}
                         </div>
+                        <AiProvenancePanel resource={enc} />
                       </div>
                     </div>
                   )}
@@ -3372,6 +4254,7 @@ const PatientRecordsPage: React.FC = () => {
                                   ) : null}
                                 </div>
                               )}
+                              <AiProvenancePanel resource={obs} />
                             </td>
                           </tr>
                         )}
@@ -3411,6 +4294,7 @@ const PatientRecordsPage: React.FC = () => {
                         <div className="mt-1">
                           <StatusBadge status={obs.status} />
                         </div>
+                        <AiProvenancePanel resource={obs} />
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">
@@ -3613,6 +4497,7 @@ const PatientRecordsPage: React.FC = () => {
                                 '—'}
                             </div>
                           </div>
+                          <AiProvenancePanel resource={sr} />
                         </td>
                       </tr>
                     )}
@@ -3743,6 +4628,7 @@ const PatientRecordsPage: React.FC = () => {
                             <span className="font-medium">Conclusion:</span>{' '}
                             {dr.conclusion || '—'}
                           </div>
+                          <AiProvenancePanel resource={dr} />
                         </td>
                       </tr>
                     )}
@@ -3802,22 +4688,17 @@ const PatientRecordsPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <TH>Date</TH>
+                      {['Medication', 'Status', 'Dosage', 'Reason'].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <SortHeader
-                        label="Date"
+                        label="Last Updated"
                         sortDir={sortDir}
                         onToggle={() =>
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {[
-                        'Medication',
-                        'Status',
-                        'Dosage',
-                        'Reason',
-                        'Last Updated',
-                      ].map((h) => (
-                        <TH key={h}>{h}</TH>
-                      ))}
                       <TH />
                     </tr>
                   </thead>
@@ -3979,6 +4860,7 @@ const PatientRecordsPage: React.FC = () => {
                                     .join('; ') || '—'}
                                 </div>
                               </div>
+                              <AiProvenancePanel resource={mr} />
                             </td>
                           </tr>
                         )}
@@ -4176,6 +5058,7 @@ const PatientRecordsPage: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        <AiProvenancePanel resource={mr} />
                       </div>
                     )}
                   </div>
@@ -4228,18 +5111,17 @@ const PatientRecordsPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <TH>Date</TH>
+                      {['Medication', 'Status', 'Quantity'].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <SortHeader
-                        label="Date"
+                        label="Last Updated"
                         sortDir={sortDir}
                         onToggle={() =>
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {['Medication', 'Status', 'Quantity', 'Last Updated'].map(
-                        (h) => (
-                          <TH key={h}>{h}</TH>
-                        ),
-                      )}
                       <TH />
                     </tr>
                   </thead>
@@ -4290,6 +5172,7 @@ const PatientRecordsPage: React.FC = () => {
                                     : '—'}
                                 </div>
                               </div>
+                              <AiProvenancePanel resource={md} />
                             </td>
                           </tr>
                         )}
@@ -4362,6 +5245,7 @@ const PatientRecordsPage: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        <AiProvenancePanel resource={md} />
                       </div>
                     )}
                   </div>
@@ -4414,21 +5298,17 @@ const PatientRecordsPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <TH>Date</TH>
+                      {['Medication', 'Status', 'Effective'].map((h) => (
+                        <TH key={h}>{h}</TH>
+                      ))}
                       <SortHeader
-                        label="Date"
+                        label="Last Updated"
                         sortDir={sortDir}
                         onToggle={() =>
                           setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
                         }
                       />
-                      {[
-                        'Medication',
-                        'Status',
-                        'Effective',
-                        'Last Updated',
-                      ].map((h) => (
-                        <TH key={h}>{h}</TH>
-                      ))}
                       <TH />
                     </tr>
                   </thead>
@@ -4475,6 +5355,7 @@ const PatientRecordsPage: React.FC = () => {
                                   {ms.note?.[0]?.text || '—'}
                                 </div>
                               </div>
+                              <AiProvenancePanel resource={ms} />
                             </td>
                           </tr>
                         )}
@@ -4549,6 +5430,7 @@ const PatientRecordsPage: React.FC = () => {
                             <p className="text-gray-600">{ms.note[0].text}</p>
                           </div>
                         )}
+                        <AiProvenancePanel resource={ms} />
                       </div>
                     )}
                   </div>
@@ -4834,6 +5716,7 @@ const PatientRecordsPage: React.FC = () => {
                                 '—'}
                             </div>
                           </div>
+                          <AiProvenancePanel resource={proc} />
                         </td>
                       </tr>
                     )}
@@ -4963,44 +5846,8 @@ const PatientRecordsPage: React.FC = () => {
                         />
                       </div>
                     )}
-                    {cp.goal?.length ? (
-                      <div className="mb-3">
-                        <p className="font-medium mb-1 text-sm text-gray-700">
-                          Goals:
-                        </p>
-                        <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
-                          {cp.goal.map((g: any, i: number) => (
-                            <li key={i}>
-                              {g.display || g.reference || JSON.stringify(g)}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {cp.activity?.length ? (
-                      <div>
-                        <p className="font-medium mb-1 text-sm text-gray-700">
-                          Activities:
-                        </p>
-                        <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
-                          {cp.activity.map((act: any, i: number) => {
-                            const detail =
-                              act.plannedActivityDetail || act.detail;
-                            const label =
-                              detail?.code?.coding?.[0]?.display ||
-                              detail?.code?.text ||
-                              act.reference?.display ||
-                              act.reference?.reference ||
-                              '—';
-                            return (
-                              <li key={i}>
-                                {label} — {detail?.status || '—'}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ) : null}
+                    <CarePlanDetails carePlan={cp} />
+                    <AiProvenancePanel resource={cp} />
                   </div>
                 )}
               </div>
@@ -5031,6 +5878,14 @@ const PatientRecordsPage: React.FC = () => {
               ← Back to Queue
             </Link>
           )}
+          {showBackToPatientPortal && (
+            <Link
+              to="/patient-portal"
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mb-2"
+            >
+              ← Back to Patient Portal
+            </Link>
+          )}
           <div className="flex flex-col md:flex-row items-start md:items-start justify-between gap-3">
             <div className="flex flex-col md:flex-row md:items-center md:gap-4 gap-1">
               <h1 className="text-lg md:text-xl font-bold text-gray-900">
@@ -5052,7 +5907,7 @@ const PatientRecordsPage: React.FC = () => {
             <div className="flex flex-col gap-2 w-full md:w-auto">
               {/* Mobile: Compact button row */}
               <div className="md:hidden flex items-center gap-1.5 w-full">
-                {role === 'patient' && (
+                {canUseAgent && (
                   <button
                     onClick={() => {
                       if (!showAgentModal) {
@@ -5086,8 +5941,12 @@ const PatientRecordsPage: React.FC = () => {
                         <path d="M11.14 2.223a.75.75 0 0 1 1.72 0l.665 1.928a4.5 4.5 0 0 0 2.79 2.79l1.928.666a.75.75 0 0 1 0 1.719l-1.928.666a4.5 4.5 0 0 0-2.79 2.79l-.665 1.928a.75.75 0 0 1-1.72 0l-.665-1.928a4.5 4.5 0 0 0-2.79-2.79l-1.928-.666a.75.75 0 0 1 0-1.72l1.928-.665a4.5 4.5 0 0 0 2.79-2.79l.665-1.928Zm7.028 10.646a.75.75 0 0 1 1.664 0l.267.74a2.25 2.25 0 0 0 1.343 1.343l.74.267a.75.75 0 0 1 0 1.664l-.74.267a2.25 2.25 0 0 0-1.343 1.343l-.267.74a.75.75 0 0 1-1.664 0l-.267-.74a2.25 2.25 0 0 0-1.343-1.343l-.74-.267a.75.75 0 0 1 0-1.664l.74-.267a2.25 2.25 0 0 0 1.343-1.343l.267-.74Zm-13.5 2.25a.75.75 0 0 1 1.664 0l.126.35a1.5 1.5 0 0 0 .896.896l.35.126a.75.75 0 0 1 0 1.664l-.35.126a1.5 1.5 0 0 0-.896.896l-.126.35a.75.75 0 0 1-1.664 0l-.126-.35a1.5 1.5 0 0 0-.896-.896l-.35-.126a.75.75 0 0 1 0-1.664l.35-.126a1.5 1.5 0 0 0 .896-.896l.126-.35Z" />
                       </svg>
                     </span>
-                    <span className="sm:hidden md:inline">Ask</span>
-                    <span className="hidden sm:inline md:hidden">Ask</span>
+                    <span className="sm:hidden md:inline">
+                      {isClinicianAgent ? 'AI Consult' : 'Ask'}
+                    </span>
+                    <span className="hidden sm:inline md:hidden">
+                      {isClinicianAgent ? 'AI Consult' : 'Ask'}
+                    </span>
                   </button>
                 )}
 
@@ -5119,7 +5978,7 @@ const PatientRecordsPage: React.FC = () => {
                         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
                       />
                     </svg>
-                    <span>Upload</span>
+                    <span>Upload &amp; Review</span>
                   </button>
                 )}
 
@@ -5175,7 +6034,7 @@ const PatientRecordsPage: React.FC = () => {
 
               {/* Desktop: Full button row */}
               <div className="hidden md:flex flex-row md:items-center gap-2 w-full md:w-auto">
-                {role === 'patient' && (
+                {canUseAgent && (
                   <button
                     onClick={() => {
                       if (!showAgentModal) {
@@ -5212,7 +6071,7 @@ const PatientRecordsPage: React.FC = () => {
                         <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-300 ring-1 ring-white" />
                       )}
                     </span>
-                    Ask AI
+                    {isClinicianAgent ? 'AI Consult' : 'Ask AI'}
                   </button>
                 )}
 
@@ -5244,7 +6103,7 @@ const PatientRecordsPage: React.FC = () => {
                         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3"
                       />
                     </svg>
-                    Upload Report
+                    Upload & Review
                   </button>
                 )}
 
@@ -5324,53 +6183,128 @@ const PatientRecordsPage: React.FC = () => {
                 </div>
               </div>
               {showGlobalSearch && (
-                <form
-                  onSubmit={handleSearch}
-                  className="flex gap-2 w-full md:w-[480px]"
+                <div
+                  ref={searchBoxRef}
+                  className="relative w-full md:w-[480px]"
                 >
-                  <div className="relative flex-1">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                      />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder='e.g. "medications for hypertension"'
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                      autoFocus
-                    />
-                    {searchInput && (
-                      <button
-                        type="button"
-                        onClick={clearSearch}
-                        className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                  <form onSubmit={handleSearch} className="flex gap-2 w-full">
+                    <div className="relative flex-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none"
                       >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isSearching || searchInput.trim().length < 6}
-                    className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-                  >
-                    {isSearching ? 'Searching…' : 'Search'}
-                  </button>
-                </form>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                        />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder='e.g. "medications for hypertension"'
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onFocus={() => {
+                          if (searchResults || searchError)
+                            setShowSearchResults(true);
+                        }}
+                        className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                        autoFocus
+                      />
+                      {searchInput && (
+                        <button
+                          type="button"
+                          onClick={clearSearch}
+                          className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSearching || searchInput.trim().length < 6}
+                      className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                    >
+                      {isSearching ? 'Searching…' : 'Search'}
+                    </button>
+                  </form>
+                  {showSearchResults && (
+                    <div
+                      className="absolute right-0 top-full z-40 mt-2 flex max-h-[55vh] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-xl"
+                      role="dialog"
+                      aria-label="Search results"
+                    >
+                      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
+                        <span className="truncate text-xs font-semibold text-gray-600">
+                          {isSearching
+                            ? 'Searching…'
+                            : searchResults
+                              ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for “${searchResults.query}”`
+                              : 'Search error'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowSearchResults(false)}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                          aria-label="Close search results"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto px-2 py-2">
+                        {isSearching ? (
+                          <div className="space-y-2 px-2 py-1">
+                            {[0, 1, 2].map((key) => (
+                              <div
+                                key={key}
+                                className="h-6 animate-pulse rounded bg-gray-100"
+                              />
+                            ))}
+                          </div>
+                        ) : searchError ? (
+                          <p className="mx-2 my-1 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                            {searchError}
+                          </p>
+                        ) : searchResults?.results.length === 0 ? (
+                          <p className="px-3 py-3 text-sm text-gray-500">
+                            No matching records found.
+                          </p>
+                        ) : (
+                          groupSearchResults(searchResults?.results ?? []).map(
+                            ([resourceType, items]) => (
+                              <section
+                                key={resourceType}
+                                className="mb-2 last:mb-0"
+                              >
+                                <h3 className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
+                                  {SEARCH_TYPE_LABELS[resourceType] ||
+                                    resourceType}{' '}
+                                  <span className="text-gray-400">
+                                    ({items.length})
+                                  </span>
+                                </h3>
+                                {items.map((r) => (
+                                  <SearchResultCard
+                                    key={`${r.resourceType}/${r.resourceId}`}
+                                    result={r}
+                                    onNavigate={handleNavigate}
+                                  />
+                                ))}
+                              </section>
+                            ),
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-              {agentModalError && role === 'patient' && (
+              {agentModalError && canUseAgent && (
                 <p className="text-xs text-red-600 max-w-[480px] text-right">
                   {agentModalError}
                 </p>
@@ -5379,60 +6313,6 @@ const PatientRecordsPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Search Results — shown above tab bar */}
-      {(searchResults !== null || searchError) && (
-        <div className="bg-blue-50 border-y-2 border-blue-300 px-6 py-3">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-3.5 h-3.5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                  />
-                </svg>
-                {searchResults
-                  ? `${searchResults.totalResults} result${searchResults.totalResults !== 1 ? 's' : ''} for "${searchResults.query}"`
-                  : 'Search error'}
-              </span>
-              <button
-                onClick={clearSearch}
-                className="text-xs text-blue-400 hover:text-blue-700 font-medium"
-              >
-                Clear ×
-              </button>
-            </div>
-            {searchError ? (
-              <div className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded">
-                {searchError}
-              </div>
-            ) : searchResults?.results.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">
-                No matching records found.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {searchResults?.results.map((r) => (
-                  <SearchResultCard
-                    key={`${r.resourceType}/${r.resourceId}`}
-                    result={r}
-                    onNavigate={handleNavigate}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Tab bar and Content — Responsive Split Pane Layout */}
       <div
@@ -5596,7 +6476,7 @@ const PatientRecordsPage: React.FC = () => {
         {/* Resize handle — Desktop only */}
         {(((role === 'clinician' || role === 'patient') &&
           showClinicianUpload) ||
-          (role === 'patient' && showAgentModal)) && (
+          (canUseAgent && showAgentModal)) && (
           <div
             onMouseDown={handleMouseDown}
             className={`hidden md:block w-1 bg-gray-200 hover:bg-blue-400 transition-colors cursor-col-resize shrink-0 ${
@@ -5611,12 +6491,12 @@ const PatientRecordsPage: React.FC = () => {
             <div
               className="bg-emerald-50 border-l border-emerald-200 overflow-auto shrink-0
               fixed md:static bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto
-              w-screen md:w-auto h-1/3 md:h-auto max-h-screen z-40 md:z-auto
+              w-screen md:w-auto md:h-auto max-h-screen z-40 md:z-auto
               border-t md:border-t-0 rounded-t-2xl md:rounded-none overflow-y-auto md:overflow-auto"
               style={{
-                ...(!window.matchMedia('(min-width: 768px)').matches
-                  ? {}
-                  : { width: `${uploadPanelWidth}%` }),
+                ...(window.matchMedia('(min-width: 768px)').matches
+                  ? { width: `${uploadPanelWidth}%` }
+                  : { height: `${uploadPanelHeight}vh` }),
               }}
             >
               {/* Mobile drag handle */}
@@ -5632,6 +6512,83 @@ const PatientRecordsPage: React.FC = () => {
                   <p className="text-xs text-emerald-800 mt-1">
                     Select a scanned file (PDF/image) to extract clinical data
                   </p>
+                  <div
+                    role="tablist"
+                    aria-label="Report upload sections"
+                    className="mt-3 flex border-b border-emerald-200"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={harmonizerPanelTab === 'upload'}
+                      onClick={() => {
+                        setHarmonizerPanelTab('upload');
+                        setShowPendingHarmonizerMissions(false);
+                      }}
+                      className={`-mb-px flex-1 border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
+                        harmonizerPanelTab === 'upload'
+                          ? 'border-emerald-600 text-emerald-800'
+                          : 'border-transparent text-gray-500 hover:text-emerald-700'
+                      }`}
+                    >
+                      New upload
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={harmonizerPanelTab === 'review'}
+                      onClick={() => void loadPendingHarmonizerMissions()}
+                      className={`-mb-px flex-1 border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
+                        harmonizerPanelTab === 'review'
+                          ? 'border-amber-500 text-amber-800'
+                          : 'border-transparent text-gray-500 hover:text-amber-700'
+                      }`}
+                    >
+                      Pending reviews
+                    </button>
+                  </div>
+                </div>
+                <div className="md:hidden flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleExpandUploadPanel}
+                    className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
+                    title="Expand upload panel"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      stroke="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 19V5m0 0l-7 7m7-7l7 7"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleCollapseUploadPanel}
+                    className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded p-1 transition-colors"
+                    title="Collapse upload panel"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      stroke="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 5v14m0 0l-7-7m7 7l7-7"
+                      />
+                    </svg>
+                  </button>
                 </div>
                 <button
                   onClick={() => setShowClinicianUpload(false)}
@@ -5656,117 +6613,878 @@ const PatientRecordsPage: React.FC = () => {
               </div>
 
               <div className="p-4 space-y-4">
-                <form
-                  onSubmit={handleUploadScannedNotes}
-                  className="flex flex-col gap-2"
-                >
-                  <input
-                    type="file"
-                    accept=".pdf,image/*"
-                    onChange={(e) =>
-                      setSelectedNoteFile(e.target.files?.[0] ?? null)
-                    }
-                    className="text-xs text-emerald-700 file:mr-2 file:px-2 file:py-1 file:border file:border-emerald-300 file:rounded file:bg-white file:text-emerald-700 file:cursor-pointer file:text-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!selectedNoteFile || isUploadingNotes}
-                    className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {isUploadingNotes ? 'Uploading...' : 'Upload Report'}
-                  </button>
-                </form>
-
-                {selectedNoteFile && (
-                  <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
-                    {selectedNoteFile.name}
-                  </p>
-                )}
-
-                {noteUploadMessage && (
-                  <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
-                    {noteUploadMessage}
-                  </div>
-                )}
-
-                {noteUploadJobId && noteUploadJobStatus && (
-                  <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
-                    <p className="font-medium text-emerald-800 mb-1">
-                      Job: {noteUploadJobId.substring(0, 12)}...
-                    </p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {HARMONIZER_STATUS_STEPS.map((step, index) => {
-                        const mappedStatus =
-                          mapHarmonizerStatusToStep(noteUploadJobStatus);
-                        const currentIndex = HARMONIZER_STATUS_STEPS.indexOf(
-                          mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
-                        );
-                        const reached =
-                          mappedStatus === 'FAILED'
-                            ? index <= 2
-                            : currentIndex >= index;
-                        const active = mappedStatus === step;
-                        return (
-                          <React.Fragment key={step}>
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
-                                active || reached
-                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                                  : 'bg-gray-100 text-gray-500 border-gray-300'
-                              }`}
-                            >
-                              {step}
-                            </span>
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                    {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
-                      'FAILED' && (
-                      <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
-                        FAILED
-                      </p>
-                    )}
-                    {noteUploadStepResults.length > 0 && (
-                      <div className="mt-1">
-                        <p className="text-gray-700 font-medium text-xs">
-                          Completed
+                {harmonizerPanelTab === 'review' &&
+                  showPendingHarmonizerMissions && (
+                    <div className="space-y-2 rounded-lg border border-emerald-200 bg-white p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold text-emerald-900">
+                          Pending document reviews
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowPendingHarmonizerMissions(false)
+                          }
+                          className="text-xs text-gray-500 hover:text-gray-800"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      {isLoadingPendingHarmonizerMissions ? (
+                        <p className="text-xs text-gray-600">
+                          Loading pending reviews…
                         </p>
-                        <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
-                          {noteUploadStepResults.map((step, idx) => (
-                            <li
-                              key={`${step.stepName || step.step || 'step'}-${idx}`}
+                      ) : pendingHarmonizerMissions.length === 0 ? (
+                        <p className="text-xs text-gray-600">
+                          No document imports are waiting for your review.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {pendingHarmonizerMissions.map((mission) => (
+                            <div
+                              key={mission.missionId}
+                              className="rounded-md border border-emerald-100 bg-emerald-50"
                             >
-                              • {step.stepName || step.step || step.name}
-                            </li>
+                              {/* Card Header - Always visible */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleMissionExpanded(mission.missionId)
+                                }
+                                className="w-full px-3 py-2 text-left hover:bg-emerald-100 transition-colors flex items-center justify-between gap-2"
+                              >
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-semibold text-gray-800">
+                                      Document import
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-600 font-mono mt-1">
+                                    {mission.missionId}
+                                  </div>
+                                  {mission.submittedAt || mission.createdAt ? (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      Submitted{' '}
+                                      {fmt(
+                                        mission.submittedAt ||
+                                          mission.createdAt,
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                                    Awaiting review
+                                  </span>
+                                  {/* Expand/Collapse Icon */}
+                                  {expandedMissionIds.has(mission.missionId) ? (
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth={2}
+                                      stroke="currentColor"
+                                      className="w-4 h-4 text-gray-600 shrink-0"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M19 9l-7 7-7-7"
+                                      />
+                                    </svg>
+                                  ) : (
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth={2}
+                                      stroke="currentColor"
+                                      className="w-4 h-4 text-gray-600 shrink-0"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M9 5l7 7-7 7"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                              </button>
+
+                              {/* Card Details - Only shown when expanded */}
+                              {expandedMissionIds.has(mission.missionId) && (
+                                <>
+                                  {/* Info Panel - Show when records are loaded */}
+                                  {(expandedMissionRecords.get(
+                                    mission.missionId,
+                                  )?.length ?? 0) > 0 && (
+                                    <div className="border-t border-emerald-100 px-3 py-2">
+                                      <div className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+                                          Review required
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-amber-900">
+                                          Generated resources are ready for
+                                          review.
+                                        </p>
+                                        <p className="mt-1 text-xs text-amber-800">
+                                          Nothing has been written to the
+                                          patient record yet. Review or edit
+                                          each resource, then approve to resume
+                                          the import.
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={openNewHarmonizerRecord}
+                                          className="mt-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                        >
+                                          Add missing resource
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="border-t border-emerald-100 px-3 py-2 space-y-2">
+                                    {loadingMissionIds.has(
+                                      mission.missionId,
+                                    ) ? (
+                                      <p className="text-xs text-gray-600">
+                                        Loading records…
+                                      </p>
+                                    ) : expandedMissionRecords.get(
+                                        mission.missionId,
+                                      )?.length ? (
+                                      <div className="space-y-2">
+                                        {expandedMissionRecords
+                                          .get(mission.missionId)!
+                                          .map((record) => {
+                                            const resource = (record.resource ||
+                                              record) as any;
+                                            const display =
+                                              resource.resourceType ===
+                                              'Encounter'
+                                                ? [
+                                                    resource.actualPeriod
+                                                      ?.start ||
+                                                    resource.period?.start
+                                                      ? fmt(
+                                                          resource.actualPeriod
+                                                            ?.start ||
+                                                            resource.period
+                                                              ?.start,
+                                                        )
+                                                      : null,
+                                                    resource.class?.display ||
+                                                      resource.class
+                                                        ?.coding?.[0]
+                                                        ?.display ||
+                                                      resource.class
+                                                        ?.coding?.[0]?.code,
+                                                    resource.type?.[0]?.text ||
+                                                      resource.type?.[0]
+                                                        ?.coding?.[0]
+                                                        ?.display ||
+                                                      resource.type?.[0]
+                                                        ?.coding?.[0]?.code,
+                                                  ]
+                                                    .filter(Boolean)
+                                                    .join(' · ') ||
+                                                  record.resourceId ||
+                                                  'Encounter'
+                                                : resource.code?.text ||
+                                                  resource.code?.coding?.[0]
+                                                    ?.display ||
+                                                  resource.title ||
+                                                  resource.medication?.concept
+                                                    ?.text ||
+                                                  record.resourceId ||
+                                                  'Generated resource';
+                                            return (
+                                              <button
+                                                key={record.recordId}
+                                                type="button"
+                                                onClick={() => {
+                                                  setNoteUploadJobId(
+                                                    mission.missionId,
+                                                  );
+                                                  openHarmonizerRecord(record);
+                                                }}
+                                                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50 text-xs"
+                                              >
+                                                <div className="flex items-start justify-between gap-2">
+                                                  <span className="font-semibold text-gray-900">
+                                                    {record.resourceType ||
+                                                      resource.resourceType ||
+                                                      'FHIR Resource'}
+                                                  </span>
+                                                  <span className="text-[11px] text-gray-500">
+                                                    {typeof record.confidence ===
+                                                    'number'
+                                                      ? `${Math.round(record.confidence * 100)}% confidence`
+                                                      : toDisplayText(
+                                                          record.outcome,
+                                                        ) || 'Review'}
+                                                  </span>
+                                                </div>
+                                                <div className="mt-1">
+                                                  <HarmonizerReviewMetadata
+                                                    record={record}
+                                                    compact
+                                                  />
+                                                </div>
+                                                {isHarmonizerDuplicate(
+                                                  record,
+                                                ) && (
+                                                  <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                                                    Duplicate candidate
+                                                  </p>
+                                                )}
+                                                <p className="mt-1 truncate text-sm text-gray-800">
+                                                  {toDisplayText(display)}
+                                                </p>
+                                                {record.evidence && (
+                                                  <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                                                    Evidence:{' '}
+                                                    {toDisplayText(
+                                                      record.evidence,
+                                                    )}
+                                                  </p>
+                                                )}
+                                              </button>
+                                            );
+                                          })}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-gray-600">
+                                        No records available
+                                      </p>
+                                    )}
+                                  </div>
+                                  {/* Action Buttons */}
+                                  {(expandedMissionRecords.get(
+                                    mission.missionId,
+                                  )?.length ?? 0) > 0 && (
+                                    <div className="border-t border-emerald-100 px-3 py-2">
+                                      <div className="flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void handleExpandedMissionApprove(
+                                              mission.missionId,
+                                            )
+                                          }
+                                          className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                                        >
+                                          Approve &amp; resume
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void handleExpandedMissionReject(
+                                              mission.missionId,
+                                              'REVISE',
+                                            )
+                                          }
+                                          className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                        >
+                                          Request changes
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void handleExpandedMissionReject(
+                                              mission.missionId,
+                                              'DISCARD',
+                                            )
+                                          }
+                                          className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                        >
+                                          Discard
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           ))}
-                        </ul>
-                      </div>
-                    )}
-                    {noteUploadPercent !== null && (
-                      <div className="mt-1">
-                        <progress
-                          className="mt-0.5 h-1 w-full"
-                          value={Math.max(0, Math.min(100, noteUploadPercent))}
-                          max={100}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                {harmonizerPanelTab === 'upload' && (
+                  <>
+                    <form
+                      onSubmit={handleUploadScannedNotes}
+                      className="flex flex-col gap-2"
+                    >
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        onChange={(e) =>
+                          setSelectedNoteFile(e.target.files?.[0] ?? null)
+                        }
+                        className="w-full cursor-pointer rounded-lg border-2 border-dashed border-emerald-400 bg-white p-2 text-xs text-emerald-800 hover:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white file:shadow-sm hover:file:bg-emerald-700"
+                      />
+                      <label className="md:hidden flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 focus-within:ring-2 focus-within:ring-emerald-500/40">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.8}
+                          stroke="currentColor"
+                          className="h-5 w-5"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"
+                          />
+                        </svg>
+                        Take photo of report
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) =>
+                            setSelectedNoteFile(e.target.files?.[0] ?? null)
+                          }
+                          className="sr-only"
                         />
-                        <p className="text-gray-500 text-xs mt-0.5">
-                          {Math.round(noteUploadPercent)}%
-                        </p>
-                      </div>
-                    )}
-                    {isNoteUploadPolling && (
-                      <p className="mt-1 text-gray-500 text-xs">Polling...</p>
-                    )}
-                    {isLoadingNoteUploadSummary && (
-                      <p className="mt-1 text-gray-500 text-xs">
-                        Loading summary...
+                      </label>
+                      <button
+                        type="submit"
+                        disabled={!selectedNoteFile || isUploadingNotes}
+                        className="w-full px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {isUploadingNotes ? 'Uploading...' : 'Upload & Review'}
+                      </button>
+                    </form>
+
+                    {selectedNoteFile && (
+                      <p className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2 py-1.5">
+                        {selectedNoteFile.name}
                       </p>
                     )}
+
+                    {noteUploadMessage && (
+                      <div className="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1.5">
+                        {noteUploadMessage}
+                      </div>
+                    )}
+
+                    {noteUploadJobId && noteUploadJobStatus && (
+                      <div className="text-xs text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2 py-1.5">
+                        <p className="font-medium text-emerald-800 mb-1">
+                          Job: {noteUploadJobId.substring(0, 12)}...
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {HARMONIZER_STATUS_STEPS.map((step, index) => {
+                            const mappedStatus =
+                              mapHarmonizerStatusToStep(noteUploadJobStatus);
+                            const currentIndex =
+                              HARMONIZER_STATUS_STEPS.indexOf(
+                                mappedStatus as (typeof HARMONIZER_STATUS_STEPS)[number],
+                              );
+                            const reached =
+                              mappedStatus === 'FAILED'
+                                ? index <= 2
+                                : currentIndex >= index;
+                            const active = mappedStatus === step;
+                            return (
+                              <React.Fragment key={step}>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-xs border font-medium ${
+                                    active || reached
+                                      ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                      : 'bg-gray-100 text-gray-500 border-gray-300'
+                                  }`}
+                                >
+                                  {step}
+                                </span>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                        {mapHarmonizerStatusToStep(noteUploadJobStatus) ===
+                          'FAILED' && (
+                          <p className="mt-1 inline-flex items-center gap-1 rounded text-xs bg-red-100 border border-red-300 px-1.5 py-0.5 text-red-700 font-medium">
+                            FAILED
+                          </p>
+                        )}
+                        {noteUploadStepResults.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-gray-700 font-medium text-xs">
+                              Completed
+                            </p>
+                            <ul className="mt-0.5 space-y-0.5 text-gray-600 text-xs">
+                              {noteUploadStepResults.map((step, idx) => (
+                                <li
+                                  key={`${step.stepName || step.step || 'step'}-${idx}`}
+                                >
+                                  • {step.stepName || step.step || step.name}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {noteUploadPercent !== null && (
+                          <div className="mt-1">
+                            <progress
+                              className="mt-0.5 h-1 w-full"
+                              value={Math.max(
+                                0,
+                                Math.min(100, noteUploadPercent),
+                              )}
+                              max={100}
+                            />
+                            <p className="text-gray-500 text-xs mt-0.5">
+                              {Math.round(noteUploadPercent)}%
+                            </p>
+                          </div>
+                        )}
+                        {isNoteUploadPolling && (
+                          <p className="mt-1 text-gray-500 text-xs">
+                            Polling...
+                          </p>
+                        )}
+                        {isLoadingNoteUploadSummary && (
+                          <p className="mt-1 text-gray-500 text-xs">
+                            Loading summary...
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {harmonizerPanelTab === 'review' &&
+                  noteUploadJobId &&
+                  noteUploadJobStatus === 'AWAITING_REVIEW' && (
+                    <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <div className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2">
+                        <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+                          Review required
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-amber-900">
+                          Generated resources are ready for review.
+                        </p>
+                        <p className="mt-1 text-xs text-amber-800">
+                          Nothing has been written to the patient record yet.
+                          Review or edit each resource, then approve to resume
+                          the import.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openNewHarmonizerRecord}
+                          className="mt-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                        >
+                          Add missing resource
+                        </button>
+                      </div>
+
+                      {isLoadingHarmonizerReview ? (
+                        <p className="text-xs text-amber-800">
+                          Loading generated resources…
+                        </p>
+                      ) : harmonizerReviewRecords.length > 0 ? (
+                        <div className="space-y-2">
+                          {harmonizerReviewRecords.map((record) => {
+                            const resource = (record.resource || record) as any;
+                            const display =
+                              resource.resourceType === 'Encounter'
+                                ? [
+                                    resource.actualPeriod?.start ||
+                                    resource.period?.start
+                                      ? fmt(
+                                          resource.actualPeriod?.start ||
+                                            resource.period?.start,
+                                        )
+                                      : null,
+                                    resource.class?.display ||
+                                      resource.class?.coding?.[0]?.display ||
+                                      resource.class?.coding?.[0]?.code,
+                                    resource.type?.[0]?.text ||
+                                      resource.type?.[0]?.coding?.[0]
+                                        ?.display ||
+                                      resource.type?.[0]?.coding?.[0]?.code,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') ||
+                                  record.resourceId ||
+                                  'Encounter'
+                                : resource.code?.text ||
+                                  resource.code?.coding?.[0]?.display ||
+                                  resource.title ||
+                                  resource.medication?.concept?.text ||
+                                  record.resourceId ||
+                                  'Generated resource';
+                            return (
+                              <button
+                                key={record.recordId}
+                                type="button"
+                                onClick={() => openHarmonizerRecord(record)}
+                                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-left hover:border-amber-400 hover:bg-amber-50"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-xs font-semibold text-gray-900">
+                                    {record.resourceType ||
+                                      resource.resourceType ||
+                                      'FHIR Resource'}
+                                  </span>
+                                  <span className="text-[11px] text-gray-500">
+                                    {typeof record.confidence === 'number'
+                                      ? `${Math.round(record.confidence * 100)}% confidence`
+                                      : toDisplayText(record.outcome) ||
+                                        'Review'}
+                                  </span>
+                                </div>
+                                <div className="mt-1">
+                                  <HarmonizerReviewMetadata
+                                    record={record}
+                                    compact
+                                  />
+                                </div>
+                                {isHarmonizerDuplicate(record) && (
+                                  <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                                    Duplicate candidate
+                                  </p>
+                                )}
+                                <p className="mt-1 truncate text-sm text-gray-800">
+                                  {toDisplayText(display)}
+                                </p>
+                                {record.evidence && (
+                                  <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                                    Evidence: {toDisplayText(record.evidence)}
+                                  </p>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-800">
+                          No staged resources were returned for this review.
+                        </p>
+                      )}
+
+                      {harmonizerReviewActionError && (
+                        <p className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                          {harmonizerReviewActionError}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void approveHarmonizerReview()}
+                          disabled={
+                            isLoadingHarmonizerReview ||
+                            harmonizerReviewRecords.length === 0
+                          }
+                          className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Approve &amp; resume
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void rejectHarmonizerReview('REVISE')}
+                          className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                        >
+                          Request changes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void rejectHarmonizerReview('DISCARD')}
+                          className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                {selectedHarmonizerRecord && (
+                  <div
+                    className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 p-3 sm:items-center sm:p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => setSelectedHarmonizerRecord(null)}
+                  >
+                    <div
+                      className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-y-scroll overscroll-contain rounded-t-xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-lg"
+                      style={{ scrollbarGutter: 'stable' }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3">
+                        <div className="min-w-0">
+                          <h2 className="text-base font-semibold text-gray-900">
+                            {selectedHarmonizerRecord.resourceType ||
+                              'FHIR Resource'}
+                          </h2>
+                          <p className="mt-1 break-all font-mono text-xs text-gray-500">
+                            {selectedHarmonizerRecord.resourceId ||
+                              selectedHarmonizerRecord.recordId}
+                          </p>
+                          <div className="mt-2">
+                            <HarmonizerReviewMetadata
+                              record={selectedHarmonizerRecord}
+                            />
+                          </div>
+                          {selectedHarmonizerRecord.evidence && (
+                            <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+                              <p className="text-xs font-semibold text-blue-900">
+                                Evidence from source document
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-sm text-blue-800">
+                                {toDisplayText(
+                                  selectedHarmonizerRecord.evidence,
+                                )}
+                              </p>
+                            </div>
+                          )}
+                          {isHarmonizerDuplicate(selectedHarmonizerRecord) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowHarmonizerDuplicateDetails(
+                                    (expanded) => !expanded,
+                                  )
+                                }
+                                className="mt-3 flex w-full flex-wrap items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-100"
+                                aria-expanded={showHarmonizerDuplicateDetails}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2}
+                                    stroke="currentColor"
+                                    className="h-4 w-4 shrink-0"
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+                                    />
+                                  </svg>
+                                  This resource is marked as a duplicate.
+                                </span>
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 underline-offset-2">
+                                  {showHarmonizerDuplicateDetails
+                                    ? 'Hide details'
+                                    : 'View duplicate details'}
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2.5}
+                                    stroke="currentColor"
+                                    className={`h-3.5 w-3.5 transition-transform ${showHarmonizerDuplicateDetails ? 'rotate-180' : ''}`}
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                                    />
+                                  </svg>
+                                </span>
+                              </button>
+                              {showHarmonizerDuplicateDetails && (
+                                <HarmonizerDuplicateDetails
+                                  record={selectedHarmonizerRecord}
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedHarmonizerRecord(null);
+                            setIsEditingHarmonizerRecord(false);
+                          }}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-2xl text-gray-500 hover:bg-gray-100"
+                          aria-label="Close review resource"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="flex-none overflow-visible p-4">
+                        {isEditingHarmonizerRecord ? (
+                          <>
+                            <FriendlyHarmonizerEditor
+                              resource={harmonizerRecordDraftObject}
+                              onChange={(resource) => {
+                                setHarmonizerRecordDraftObject(resource);
+                                setHarmonizerRecordDraft(
+                                  JSON.stringify(resource, null, 2),
+                                );
+                              }}
+                            />
+                          </>
+                        ) : (
+                          <ResourceSummaryContent
+                            resource={
+                              (selectedHarmonizerRecord.resource ||
+                                selectedHarmonizerRecord) as any
+                            }
+                          />
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 border-t border-gray-200 px-4 py-3">
+                        <div className="flex w-full flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {!isAddingHarmonizerRecord &&
+                              selectedHarmonizerRecord.recordId && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void resolveSelectedDuplicate(
+                                        isHarmonizerDuplicate(
+                                          selectedHarmonizerRecord,
+                                        )
+                                          ? 'CREATE_NEW'
+                                          : 'SKIP',
+                                      )
+                                    }
+                                    className="rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                  >
+                                    {isHarmonizerDuplicate(
+                                      selectedHarmonizerRecord,
+                                    )
+                                      ? 'Mark as non-duplicate'
+                                      : 'Mark as duplicate'}
+                                  </button>
+                                  {getHarmonizerDisposition(
+                                    selectedHarmonizerRecord,
+                                  ) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void setSelectedRecordDisposition(
+                                          'INCLUDE',
+                                        )
+                                      }
+                                      className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                    >
+                                      Include record
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void setSelectedRecordDisposition(
+                                            'EXCLUDE',
+                                          )
+                                        }
+                                        className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                                      >
+                                        Mark as excluded
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void setSelectedRecordDisposition(
+                                            'IGNORE',
+                                          )
+                                        }
+                                        disabled={
+                                          !harmonizerIgnoreReason.trim()
+                                        }
+                                        className="rounded-md border border-gray-400 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        Mark as ignored
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                          </div>
+                        </div>
+                        {!isAddingHarmonizerRecord &&
+                          selectedHarmonizerRecord.recordId &&
+                          !getHarmonizerDisposition(
+                            selectedHarmonizerRecord,
+                          ) && (
+                            <label className="flex w-full items-center gap-2 text-xs font-semibold text-gray-600">
+                              <span className="shrink-0">Ignore reason</span>
+                              <input
+                                type="text"
+                                value={harmonizerIgnoreReason}
+                                onChange={(event) => {
+                                  setHarmonizerIgnoreReason(event.target.value);
+                                  if (harmonizerReviewActionError) {
+                                    setHarmonizerReviewActionError(null);
+                                  }
+                                }}
+                                placeholder="Explain why this record should not have been generated"
+                                className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-xs font-normal text-gray-800 placeholder:text-gray-400 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500/20"
+                              />
+                            </label>
+                          )}
+                        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2">
+                          {!isEditingHarmonizerRecord ? (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingHarmonizerRecord(true)}
+                              className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700"
+                            >
+                              Edit resource
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setIsEditingHarmonizerRecord(false)
+                                }
+                                className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Cancel edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void saveHarmonizerRecord()}
+                                disabled={isSavingHarmonizerRecord}
+                                className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                              >
+                                {isSavingHarmonizerRecord
+                                  ? 'Saving…'
+                                  : 'Save resource'}
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedHarmonizerRecord(null);
+                              setIsEditingHarmonizerRecord(false);
+                            }}
+                            className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {noteUploadSummary && (
+                {harmonizerPanelTab === 'upload' && noteUploadSummary && (
                   <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 text-emerald-900">
                     <p className="font-medium">Summary</p>
                     <p className="mt-0.5">
@@ -5780,7 +7498,7 @@ const PatientRecordsPage: React.FC = () => {
                   </div>
                 )}
 
-                {noteUploadError && (
+                {harmonizerPanelTab === 'upload' && noteUploadError && (
                   <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
                     <div className="mb-1">{noteUploadError}</div>
                     {noteUploadJobId && (
@@ -5799,7 +7517,7 @@ const PatientRecordsPage: React.FC = () => {
           )}
 
         {/* Right side: Ask AI panel — Desktop side panel, Mobile bottom sheet */}
-        {role === 'patient' && showAgentModal && (
+        {canUseAgent && showAgentModal && (
           <div
             ref={agentPanelRef}
             className="bg-indigo-50 border-l border-indigo-200 overflow-auto shrink-0
@@ -5819,10 +7537,14 @@ const PatientRecordsPage: React.FC = () => {
             <div className="sticky top-0 md:top-0 bg-indigo-50 border-b border-indigo-200 p-4 z-10 flex items-start justify-between gap-2">
               <div className="flex-1">
                 <h2 className="text-sm font-semibold text-indigo-900">
-                  Ask About My Health Conditions
+                  {isClinicianAgent
+                    ? `${ASSISTANT_NAME} · Clinical AI Assistant`
+                    : 'Ask About My Health Conditions'}
                 </h2>
                 <p className="text-xs text-indigo-800 mt-1">
-                  Chat with AI to get health insights based on your records.
+                  {isClinicianAgent
+                    ? `Ask about ${patientName}'s health concerns, assess the presenting problem, or type SOAP notes, and AI will summarise and generate structured data`
+                    : 'Chat with AI to get health insights based on your records.'}
                 </p>
               </div>
               {/* Mobile expand/collapse buttons */}
@@ -5899,7 +7621,11 @@ const PatientRecordsPage: React.FC = () => {
                   patientId={patientId}
                   tenantId={agentTenantId}
                   accessToken={agentAccessToken}
-                  title="Ask About My Health Conditions"
+                  title={
+                    isClinicianAgent
+                      ? `${ASSISTANT_NAME} · Clinical AI Assistant`
+                      : 'Ask About My Health Conditions'
+                  }
                   mode="panel"
                 />
               )}

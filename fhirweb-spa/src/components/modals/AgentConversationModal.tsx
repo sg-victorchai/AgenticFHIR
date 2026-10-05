@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useDispatch } from 'react-redux';
 import AgentResponseFormatter from '../common/AgentResponseFormatter';
 import {
   ConversationMessage,
   AgentEndpointConfig,
   MissionExecutionResult,
+  ProposedPlanStep,
 } from '../../types/agent';
 import {
   parseAgentResponse,
@@ -13,6 +15,20 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { extractOperationOutcomeText } from '../../utils/fhirError';
 import { getAuthenticatedHeaders } from '../../services/auth/oidc';
 import { useSSESubscription } from '../../hooks/useSSESubscription';
+import { fhirApi } from '../../services/fhir/client';
+
+const PATIENT_RECORD_TAGS = [
+  'Encounter',
+  'Condition',
+  'Observation',
+  'DiagnosticReport',
+  'ServiceRequest',
+  'MedicationRequest',
+  'MedicationDispense',
+  'MedicationStatement',
+  'Procedure',
+  'CarePlan',
+] as const;
 
 interface AgentConversationModalProps {
   isOpen: boolean;
@@ -24,6 +40,64 @@ interface AgentConversationModalProps {
   title?: string;
   mode?: 'modal' | 'panel';
 }
+
+interface PendingIntervention {
+  id: string;
+  missionId: string;
+  question?: string;
+  options: string[];
+  steps: ProposedPlanStep[];
+}
+
+const DECISION_LABELS: Record<string, string> = {
+  approve: 'Approve & save',
+  'request-changes': 'Request changes',
+  reject: 'Reject',
+};
+
+const DECISIONS_REQUIRING_NOTES = new Set([
+  'request-changes',
+  'clarify',
+  'modify',
+]);
+
+const newConversationId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Web Speech API; Chrome/Edge/Safari expose it (Safari prefixed), Firefox does not.
+const getSpeechRecognition = (): any =>
+  typeof window === 'undefined'
+    ? undefined
+    : (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
+export const ASSISTANT_NAME = 'Nova';
+
+const isMobileDevice = () =>
+  typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    // iPadOS reports a desktop Safari user agent.
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+
+const joinWords = (first: string, second: string) =>
+  first && second ? `${first} ${second}` : first || second;
+
+// Trailing send command: "Nova, over to you" / "Nova, please check" or "over to Nova".
+// A bare trailing "Nova" does not send: phones split "Nova… over to you" at the pause.
+// 发送 covers Mandarin, where recognizers do not transcribe the English name reliably.
+const VOICE_SEND_LEAD_IN = '(?:over to|thanks|thank you|okay|ok|hey)';
+const VOICE_SEND_SUFFIX =
+  '(?:over to you|over|please check|please send|go ahead|go|send it|send)';
+// Common recogniser spellings of the spoken name.
+const VOICE_NAME = `(?:${ASSISTANT_NAME}|novah|noba|nava)`;
+const VOICE_SEND_PATTERN = new RegExp(
+  `[\\s,.!?，。—-]*(?:\\b${VOICE_SEND_LEAD_IN}[\\s,]+${VOICE_NAME}\\b|\\b${VOICE_NAME}[\\s,.!?—-]+${VOICE_SEND_SUFFIX}\\b|发送)[\\s,.!?，。—-]*$`,
+  'i',
+);
+// Wait for speech to settle before sending on a command seen only in interim results.
+const VOICE_SEND_SETTLE_MS = 900;
 
 export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   isOpen,
@@ -41,8 +115,28 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [hitlReason, setHitlReason] = useState<string | null>(null);
   const [currentMissionId, setCurrentMissionId] = useState<string | null>(null);
+  const [pendingIntervention, setPendingIntervention] =
+    useState<PendingIntervention | null>(null);
+  const [interventionNotes, setInterventionNotes] = useState('');
+  const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
+  const isClinician = agentConfig.audience === 'clinician';
+  // Scopes backend conversation memory to this widget session.
+  const conversationIdRef = useRef(newConversationId());
+  // Backdated to tolerate client/server clock skew when matching meta.lastUpdated.
+  const sessionStartedAtRef = useRef(
+    new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+  );
+  const speechSupported = Boolean(getSpeechRecognition());
+  const dispatch = useDispatch();
+  // Set when the clinician approves a write; updates are not listed in createdResourceIds.
+  const approvedWriteRef = useRef(false);
+  const [isListening, setIsListening] = useState(false);
+  // Hands-free mode: listening pauses while the AI works and resumes after it replies.
+  const [voiceMode, setVoiceMode] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const modalPositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -191,18 +285,39 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations]);
 
+  useLayoutEffect(() => {
+    const element = inputRef.current;
+    if (!element) return;
+    const maxHeight = Math.round(window.innerHeight * 0.4);
+    element.style.height = 'auto';
+    const overflowing = element.scrollHeight > maxHeight;
+    element.style.height = `${overflowing ? maxHeight : element.scrollHeight}px`;
+    element.style.overflowY = overflowing ? 'auto' : 'hidden';
+    // Keep the newest dictated words in view once the box stops growing.
+    if (overflowing && isListening) element.scrollTop = element.scrollHeight;
+  }, [input, isListening]);
+
   useEffect(() => {
     return () => {
       clearMissionWatchers();
+      recognitionRef.current?.abort();
     };
   }, []);
 
   useEffect(() => {
     if (!isOpen) {
+      setVoiceMode(false);
+      recognitionRef.current?.abort();
       setConversations([]);
       setError(null);
       setHitlReason(null);
       setCurrentMissionId(null);
+      setPendingIntervention(null);
+      setInterventionNotes('');
+      conversationIdRef.current = newConversationId();
+      sessionStartedAtRef.current = new Date(
+        Date.now() - 2 * 60 * 1000,
+      ).toISOString();
       setIsDragging(false);
       if (modalRef.current) {
         modalRef.current.style.left = '';
@@ -300,7 +415,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         goal,
         context: {
           patientId,
-          channel: 'patient-portal',
+          channel: isClinician ? 'ehr-widget' : 'patient-portal',
+          ...(isClinician ? { conversationId: conversationIdRef.current } : {}),
+          ...(agentConfig.missionContext || {}),
         },
       }),
       timeout: 75000, // 75 seconds for initial mission creation (with buffer for polling)
@@ -319,39 +436,42 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     return normalizeMissionPayload(parsed, response.headers);
   };
 
-  const fetchMissionStatus = async (
-    missionId: string,
-  ): Promise<MissionExecutionResult> => {
+  const agentApiUrl = (path: string): string => {
+    const endpoint = agentConfig.endpoint;
+    if (/^https?:\/\//i.test(endpoint)) {
+      try {
+        return `${new URL(endpoint).origin}${path}`;
+      } catch {
+        return path;
+      }
+    }
+    if (endpoint.startsWith('/')) {
+      // Keep a dev proxy prefix such as /api-azure.
+      const match = endpoint.match(/^(\/[^/]+)/);
+      return `${match ? match[1] : ''}${path}`;
+    }
+    return path;
+  };
+
+  const buildAgentHeaders = async (
+    extra: Record<string, string> = {},
+  ): Promise<Record<string, string>> => {
     const headers: Record<string, string> = {
       'X-Tenant-ID': tenantId,
       ...(agentConfig.headers || {}),
+      ...extra,
     };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return getAuthenticatedHeaders(headers);
+  };
 
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
-    }
-
-    const authenticatedHeaders = await getAuthenticatedHeaders(headers);
-
-    const endpoint = agentConfig.endpoint;
-    const missionStatusPath = `/api/agent/AgentMission/${encodeURIComponent(missionId)}`;
-    let statusUrl = missionStatusPath;
-
-    if (/^https?:\/\//i.test(endpoint)) {
-      // Full HTTP URL - extract origin and use it
-      try {
-        const parsed = new URL(endpoint);
-        statusUrl = `${parsed.origin}${missionStatusPath}`;
-      } catch {
-        statusUrl = missionStatusPath;
-      }
-    } else if (endpoint.startsWith('/')) {
-      // Relative path like /api-azure/api/agent/AgentPersona/...
-      // Extract proxy prefix (e.g., /api-azure) from endpoint
-      const match = endpoint.match(/^(\/[^/]+)/);
-      const proxyPrefix = match ? match[1] : '';
-      statusUrl = `${proxyPrefix}${missionStatusPath}`;
-    }
+  const fetchMissionStatus = async (
+    missionId: string,
+  ): Promise<MissionExecutionResult> => {
+    const authenticatedHeaders = await buildAgentHeaders();
+    const statusUrl = agentApiUrl(
+      `/api/agent/AgentMission/${encodeURIComponent(missionId)}`,
+    );
 
     // Use 10-second timeout for status checks
     const response = await fetchWithTimeout(statusUrl, {
@@ -389,6 +509,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         costBreakdown: parsed.costBreakdown,
         groundingEvidence: parsed.groundingEvidence,
         reasoningTrace: parsed.reasoningTrace,
+        createdResourceIds: Array.isArray(metadata?.createdResourceIds)
+          ? metadata.createdResourceIds.map(String)
+          : undefined,
       },
     };
 
@@ -413,12 +536,23 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     fallbackPollIntervalRef.current = undefined;
   };
 
+  const refreshRecordsIfWritten = (mission: MissionExecutionResult) => {
+    const wroteRecords =
+      (mission.outputs?.createdResourceIds?.length ?? 0) > 0 ||
+      approvedWriteRef.current;
+    approvedWriteRef.current = false;
+    if (wroteRecords) {
+      dispatch(fhirApi.util.invalidateTags([...PATIENT_RECORD_TAGS]));
+    }
+  };
+
   const handleMissionResolution = (mission: MissionExecutionResult) => {
     if (missionResolvedRef.current) return;
 
     if (mission.status === 'COMPLETED') {
       missionResolvedRef.current = true;
       clearMissionWatchers();
+      refreshRecordsIfWritten(mission);
       if (mission.outputs?.response) {
         addAgentMessage(mission.outputs.response, mission.outputs);
       } else {
@@ -433,6 +567,10 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       setError(mission.failureReason || 'Mission execution failed');
       setLoading(false);
     } else if (mission.status === 'AWAITING_INTERVENTION') {
+      if (isClinician) {
+        void resolveClinicianIntervention(mission);
+        return;
+      }
       missionResolvedRef.current = true;
       clearMissionWatchers();
       // HITL (Human-In-The-Loop) triggered - assessment suspended for human review
@@ -440,6 +578,56 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       setLoading(false);
     }
     // Otherwise still RUNNING/PENDING — keep waiting for the next SSE event or poll tick.
+  };
+
+  const loadPendingIntervention = async (
+    missionId: string,
+  ): Promise<PendingIntervention | null> => {
+    const headers = await buildAgentHeaders();
+    const response = await fetchWithTimeout(
+      agentApiUrl(
+        `/api/agent/AgentInterventionRequest?missionId=${encodeURIComponent(missionId)}&status=PENDING`,
+      ),
+      { headers, timeout: 10000 },
+    );
+    if (!response.ok) {
+      throw new Error(`Unable to load pending approval (${response.status})`);
+    }
+    const payload = parseJsonSafely(await response.text());
+    const first = Array.isArray(payload.entry) ? payload.entry[0] : undefined;
+    const entry = first?.resource ?? first;
+    if (!entry?.id) return null;
+    const steps = entry.context?.proposedPlan?.steps ?? entry.context?.steps;
+    return {
+      id: String(entry.id),
+      missionId,
+      question: typeof entry.question === 'string' ? entry.question : undefined,
+      options:
+        Array.isArray(entry.options) && entry.options.length
+          ? entry.options.map(String)
+          : ['approve', 'request-changes', 'reject'],
+      steps: Array.isArray(steps) ? steps : [],
+    };
+  };
+
+  const resolveClinicianIntervention = async (
+    mission: MissionExecutionResult,
+  ) => {
+    let intervention: PendingIntervention | null;
+    try {
+      intervention = await loadPendingIntervention(mission.missionId);
+    } catch {
+      return; // Transient — the next SSE event or poll tick retries.
+    }
+    // No pending row yet means a submitted decision is still resuming the mission.
+    if (!intervention || missionResolvedRef.current) return;
+    missionResolvedRef.current = true;
+    clearMissionWatchers();
+    if (!intervention.steps.length) {
+      intervention.steps = mission.outputs?.proposedPlan?.steps ?? [];
+    }
+    setPendingIntervention(intervention);
+    setLoading(false);
   };
 
   const checkMissionOnce = async (missionId: string) => {
@@ -477,12 +665,67 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
         clearMissionWatchers();
         setError('Request timed out. Please try again.');
         setLoading(false);
-      }, MISSION_FINAL_TIMEOUT_MS);
+      }, agentConfig.missionTimeoutMs ?? MISSION_FINAL_TIMEOUT_MS);
     }, MISSION_WAIT_TIMEOUT_MS);
 
     // Guard against a race where the mission already changed state before we
     // started watching.
     void checkMissionOnce(missionId);
+  };
+
+  const submitInterventionDecision = async (decision: string) => {
+    if (!pendingIntervention) return;
+    const notes = interventionNotes.trim();
+    if (DECISIONS_REQUIRING_NOTES.has(decision) && !notes) {
+      setError('Please add notes describing what the AI should change.');
+      return;
+    }
+    setIsSubmittingDecision(true);
+    setError(null);
+    try {
+      const headers = await buildAgentHeaders({
+        'Content-Type': 'application/json',
+      });
+      const response = await fetchWithTimeout(
+        agentApiUrl(
+          `/api/agent/AgentInterventionRequest/${encodeURIComponent(pendingIntervention.id)}`,
+        ),
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ decision, ...(notes ? { notes } : {}) }),
+          timeout: 15000,
+        },
+      );
+      if (!response.ok) {
+        const parsed = parseJsonSafely(await response.text());
+        throw new Error(
+          extractOperationOutcomeText(parsed) ||
+            parsed.message ||
+            `Unable to submit decision (${response.status})`,
+        );
+      }
+      setConversations((prev) => [
+        ...prev,
+        {
+          role: 'user',
+          content: `${DECISION_LABELS[decision] || decision}${notes ? `: ${notes}` : ''}`,
+          timestamp: new Date(),
+        },
+      ]);
+      const missionId = pendingIntervention.missionId;
+      if (decision === 'approve' || decision === 'retry') {
+        approvedWriteRef.current = true;
+      }
+      setPendingIntervention(null);
+      setInterventionNotes('');
+      setLoading(true);
+      watchMissionForCompletion(missionId);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to submit decision. Please try again.');
+    } finally {
+      setIsSubmittingDecision(false);
+    }
   };
 
   useSSESubscription({
@@ -499,9 +742,120 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     },
   });
 
+  const toggleVoiceInput = () => {
+    if (voiceMode) {
+      setVoiceMode(false);
+      recognitionRef.current?.stop();
+      return;
+    }
+    setVoiceMode(true);
+    startListening();
+  };
+
+  const startListening = () => {
+    if (recognitionRef.current) return;
+    const Recognition = getSpeechRecognition();
+    if (!Recognition) return;
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || 'en-US';
+    // Mobile engines repeat earlier words in continuous mode; use one utterance per session
+    // there and let hands-free mode restart listening after each pause.
+    recognition.continuous = !isMobileDevice();
+    recognition.interimResults = true;
+    let committed = input.trim() ? input.trimEnd() : '';
+    let lastFinal = '';
+    let pendingSend: string | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const sendDictation = (text: string) => {
+      clearTimeout(settleTimer);
+      pendingSend = null;
+      recognition.onresult = null;
+      const message = text.replace(VOICE_SEND_PATTERN, '').trim();
+      setInput('');
+      if (message) void sendMessage(message);
+    };
+    recognition.onresult = (event: any) => {
+      clearTimeout(settleTimer);
+      pendingSend = null;
+      let interim = '';
+      for (
+        let index = event.resultIndex;
+        index < event.results.length;
+        index++
+      ) {
+        const text = String(event.results[index][0].transcript || '').trim();
+        if (!text) continue;
+        if (event.results[index].isFinal) {
+          if (text !== lastFinal) {
+            committed = joinWords(committed, text);
+            lastFinal = text;
+          }
+        } else {
+          interim = joinWords(interim, text);
+        }
+      }
+      if (VOICE_SEND_PATTERN.test(committed)) {
+        sendDictation(committed);
+        recognition.stop();
+        return;
+      }
+      const visible = joinWords(committed, interim);
+      setInput(visible);
+      // Some engines finalize late (desktop Chrome) or only on stop (Safari).
+      if (VOICE_SEND_PATTERN.test(visible)) {
+        pendingSend = visible;
+        settleTimer = setTimeout(() => {
+          if (!pendingSend) return;
+          sendDictation(pendingSend);
+          recognition.stop();
+        }, VOICE_SEND_SETTLE_MS);
+      }
+    };
+    recognition.onerror = (event: any) => {
+      if (
+        event.error === 'not-allowed' ||
+        event.error === 'service-not-allowed'
+      ) {
+        setVoiceMode(false);
+        setError(
+          'Microphone access is blocked. Allow microphone access in your browser to use voice input.',
+        );
+      } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        setVoiceMode(false);
+        setError(`Voice input stopped (${event.error}). Please try again.`);
+      }
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      if (pendingSend) sendDictation(pendingSend);
+      setIsListening(false);
+    };
+    recognitionRef.current = recognition;
+    setError(null);
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch {
+      recognitionRef.current = null;
+      setVoiceMode(false);
+      setError('Unable to start voice input. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (!voiceMode || isListening || loading || pendingIntervention) return;
+    // Also restarts after the browser ends a session on its own (e.g. long silence).
+    startListening();
+  }, [voiceMode, isListening, loading, pendingIntervention]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    const message = input.trim();
+    recognitionRef.current?.stop();
+    await sendMessage(input);
+  };
+
+  const sendMessage = async (text: string) => {
+    const message = text.trim();
     if (!message) return;
 
     const userMessage: ConversationMessage = {
@@ -525,6 +879,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
       setCurrentMissionId(mission.missionId);
 
       if (mission.status === 'COMPLETED' && mission.outputs?.response) {
+        refreshRecordsIfWritten(mission);
         addAgentMessage(mission.outputs.response, mission.outputs);
         setLoading(false);
         return;
@@ -615,6 +970,13 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                       reasoningTrace: msg.metadata?.reasoningTrace,
                     }}
                     compact={true}
+                    resourceActions={{
+                      allowEdit: isClinician,
+                      editableResourceIds: conversations.flatMap(
+                        (message) => message.metadata?.createdResourceIds || [],
+                      ),
+                      editableSince: sessionStartedAtRef.current,
+                    }}
                   />
                 ) : (
                   <p className="text-sm">{msg.content}</p>
@@ -670,31 +1032,150 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           </p>
         )}
 
+        {isClinician && pendingIntervention && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-900">
+              Approval required before saving to the patient record
+            </p>
+            {pendingIntervention.question && (
+              <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
+                {pendingIntervention.question}
+              </p>
+            )}
+            {pendingIntervention.steps.length > 0 && (
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-800">
+                {pendingIntervention.steps.map((step, index) => (
+                  <li key={index}>
+                    {step.description || 'Proposed action'}
+                    {step.riskClass && (
+                      <span className="ml-2 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                        {step.riskClass}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+            <textarea
+              value={interventionNotes}
+              onChange={(event) => setInterventionNotes(event.target.value)}
+              rows={2}
+              placeholder="Notes for the AI (required when requesting changes)"
+              className="mt-3 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+            />
+            <div className="mt-2 flex flex-wrap gap-2">
+              {pendingIntervention.options.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  disabled={isSubmittingDecision}
+                  onClick={() => void submitInterventionDecision(option)}
+                  className={`rounded-md px-3 py-2 text-xs font-semibold disabled:opacity-50 ${
+                    option === 'approve'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : option === 'reject' || option === 'cancel'
+                        ? 'border border-red-200 bg-white text-red-700 hover:bg-red-50'
+                        : 'border border-amber-300 bg-white text-amber-900 hover:bg-amber-100'
+                  }`}
+                >
+                  {DECISION_LABELS[option] ||
+                    option.charAt(0).toUpperCase() + option.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
       <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
         <form onSubmit={handleSendMessage} className="flex gap-2">
-          <input
-            type="text"
+          <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your question..."
-            disabled={loading}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={1}
+            placeholder={
+              pendingIntervention
+                ? 'Respond to the pending approval above first'
+                : isClinician
+                  ? 'Ask about this patient, or type S/O/A/P notes (Shift+Enter for a new line)'
+                  : 'Type your question...'
+            }
+            disabled={loading || !!pendingIntervention}
+            // min-h matches the stacked mic + Send buttons (2 × h-10 + gap-2).
+            className="min-h-[5.5rem] flex-1 resize-none px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
           />
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors"
-          >
-            {loading ? 'Thinking...' : 'Send'}
-          </button>
+          <div className="flex w-24 shrink-0 flex-col justify-end gap-2 self-end">
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={toggleVoiceInput}
+                disabled={!voiceMode && (loading || !!pendingIntervention)}
+                className={`flex h-10 w-full items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
+                  isListening
+                    ? 'animate-pulse border-red-300 bg-red-600 text-white hover:bg-red-700'
+                    : voiceMode
+                      ? 'border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200'
+                      : 'border-gray-300 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600'
+                }`}
+                title={voiceMode ? 'End voice mode' : 'Start voice input'}
+                aria-label={voiceMode ? 'End voice mode' : 'Start voice input'}
+                aria-pressed={voiceMode}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.8}
+                  stroke="currentColor"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
+                  />
+                </svg>
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={loading || !input.trim() || !!pendingIntervention}
+              className="h-10 w-full bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors"
+            >
+              {loading ? 'Thinking...' : 'Send'}
+            </button>
+          </div>
         </form>
 
+        {isListening ? (
+          <p className="mt-2 text-xs font-medium text-red-600">
+            Listening… say “{ASSISTANT_NAME}, over to you” to send. Tap the
+            microphone to end voice mode and review the text first.
+          </p>
+        ) : voiceMode ? (
+          <p className="mt-2 text-xs font-medium text-amber-700">
+            Voice paused —{' '}
+            {pendingIntervention
+              ? 'listening resumes after you respond to the approval above.'
+              : 'listening resumes when the AI replies.'}{' '}
+            Tap the microphone to end voice mode.
+          </p>
+        ) : null}
+
         <p className="text-xs text-gray-500 mt-2">
-          This AI assistant can help explain your health information. Always
-          discuss important health decisions with your doctor.
+          {isClinician
+            ? 'AI-generated clinical decision support. Verify against the source record; nothing is saved without your approval.'
+            : 'This AI assistant can help explain your health information. Always discuss important health decisions with your doctor.'}
         </p>
       </div>
     </div>
