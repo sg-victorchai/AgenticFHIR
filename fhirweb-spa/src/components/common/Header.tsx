@@ -4,14 +4,16 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { logout } from '../../store/slices/authSlice';
 import { clearRole } from '../../store/slices/uiSlice';
-import { signOut } from '../../services/auth/oidc';
+import { hasRealmRole, signOut } from '../../services/auth/oidc';
 
 const Header: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useSelector(
+  const { isAuthenticated, user, token } = useSelector(
     (state: RootState) => state.auth,
   );
+  const canUseAgentBuilder =
+    isAuthenticated && hasRealmRole(token, 'agentbuilder');
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -68,14 +70,16 @@ const Header: React.FC = () => {
               </li>
               {isAuthenticated ? (
                 <>
-                  <li>
-                    <Link
-                      to="/dashboard"
-                      className="hover:text-blue-200 transition-colors"
-                    >
-                      Dashboard
-                    </Link>
-                  </li>
+                  {canUseAgentBuilder && (
+                    <li>
+                      <Link
+                        to="/agent-builder"
+                        className="hover:text-blue-200 transition-colors"
+                      >
+                        Agent Marketplace
+                      </Link>
+                    </li>
+                  )}
                   <li>
                     <button
                       onClick={handleLogout}
@@ -149,13 +153,15 @@ const Header: React.FC = () => {
                     </Link>
                     {isAuthenticated && (
                       <>
-                        <Link
-                          to="/dashboard"
-                          onClick={() => setMenuOpen(false)}
-                          className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
-                        >
-                          Dashboard
-                        </Link>
+                        {canUseAgentBuilder && (
+                          <Link
+                            to="/agent-builder"
+                            onClick={() => setMenuOpen(false)}
+                            className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
+                          >
+                            Agent Marketplace
+                          </Link>
+                        )}
                         <button
                           onClick={() => {
                             setMenuOpen(false);
