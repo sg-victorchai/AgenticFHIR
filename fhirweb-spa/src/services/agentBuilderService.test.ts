@@ -27,6 +27,29 @@ const mockStream = (chunks: string[]) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('persisted evaluation data endpoints', () => {
+  it('requests resource-type pages with encoded IDs and pagination defaults', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string) =>
+        new Response(
+          JSON.stringify({
+            resourceType: 'Bundle',
+            type: 'collection',
+            total: 0,
+            entry: [],
+            _meta: { page: 0, pageSize: 50, totalPages: 0, hasNextPage: false },
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.getSeededResources('job/id', 'Observation');
+    await agentBuilderService.getSeededResources('job/id', 'Patient', 2, 100);
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      '/eval/seed/job%2Fid/resources/Observation?page=0&size=50',
+    );
+    expect(fetchMock.mock.calls[1][0]).toContain(
+      '/eval/seed/job%2Fid/resources/Patient?page=2&size=100',
+    );
+  });
   it.each([
     { Patient: 41, Condition: 20, Observation: 82 },
     '{"Patient":41,"Condition":20,"Observation":82}',

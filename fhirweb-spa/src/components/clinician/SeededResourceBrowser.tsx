@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { agentBuilderService } from '../../services/agentBuilderService';
+import {
+  agentBuilderService,
+  SeededResourceBundle,
+} from '../../services/agentBuilderService';
 
 const SeededResourceBrowser: React.FC<{
   seedJobId: string;
@@ -8,7 +11,8 @@ const SeededResourceBrowser: React.FC<{
 }> = ({ seedJobId, resourceType, onClose }) => {
   const [resources, setResources] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState({ loaded: 0, total: 0 });
+  const [page, setPage] = useState(0);
+  const [bundle, setBundle] = useState<SeededResourceBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
 
@@ -17,40 +21,22 @@ const SeededResourceBrowser: React.FC<{
     setResources([]);
     setLoading(true);
     setError(null);
-    setProgress({ loaded: 0, total: 0 });
+    setBundle(null);
     void (async () => {
       try {
-        const patients = await agentBuilderService.getSeededPatients(seedJobId);
+        const result = await agentBuilderService.getSeededResources(
+          seedJobId,
+          resourceType,
+          page,
+          50,
+        );
         if (!active) return;
-        const collected = new Map<string, Record<string, unknown>>();
-        setProgress({ loaded: 0, total: patients.patientIds.length });
-        for (let offset = 0; offset < patients.patientIds.length; offset += 4) {
-          if (!active) return;
-          const bundles = await Promise.all(
-            patients.patientIds
-              .slice(offset, offset + 4)
-              .map((id) =>
-                agentBuilderService.getSeededPatientBundle(seedJobId, id),
-              ),
-          );
-          if (!active) return;
-          for (const bundle of bundles) {
-            for (const entry of bundle.entry || []) {
-              const resource = entry.resource;
-              if (resource?.resourceType !== resourceType) continue;
-              const key =
-                typeof resource.id === 'string'
-                  ? resource.id
-                  : JSON.stringify(resource);
-              collected.set(key, resource);
-            }
-          }
-          setProgress({
-            loaded: Math.min(offset + 4, patients.patientIds.length),
-            total: patients.patientIds.length,
-          });
-        }
-        setResources([...collected.values()]);
+        setBundle(result);
+        setResources(
+          (result.entry || []).flatMap((entry) =>
+            entry.resource ? [entry.resource] : [],
+          ),
+        );
       } catch (failure) {
         if (active)
           setError(
@@ -65,7 +51,7 @@ const SeededResourceBrowser: React.FC<{
     return () => {
       active = false;
     };
-  }, [seedJobId, resourceType, retry]);
+  }, [seedJobId, resourceType, page, retry]);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-3 sm:p-6">
@@ -95,8 +81,7 @@ const SeededResourceBrowser: React.FC<{
         <div className="min-h-0 overflow-y-auto p-4">
           {loading && (
             <p role="status" className="text-sm text-slate-600">
-              Loading resources... {progress.loaded}/{progress.total} patient
-              bundles
+              Loading resources...
             </p>
           )}
           {error && (
@@ -114,7 +99,7 @@ const SeededResourceBrowser: React.FC<{
           {!loading && !error && (
             <>
               <p className="mb-3 text-sm text-slate-600">
-                {resources.length} {resourceType} resources
+                {bundle?.total ?? resources.length} {resourceType} resources
               </p>
               {!resources.length && (
                 <p className="text-sm text-slate-500">
@@ -123,7 +108,10 @@ const SeededResourceBrowser: React.FC<{
               )}
               <div className="divide-y divide-slate-200">
                 {resources.map((resource, index) => (
-                  <details key={String(resource.id || index)} className="py-3">
+                  <details
+                    key={`${page}:${String(resource.id || index)}`}
+                    className="py-3"
+                  >
                     <summary className="cursor-pointer break-all text-sm font-medium text-slate-800">
                       {resourceType}/{String(resource.id || index + 1)}
                     </summary>
@@ -136,6 +124,31 @@ const SeededResourceBrowser: React.FC<{
             </>
           )}
         </div>
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
+          <span className="text-xs text-slate-600">
+            {bundle
+              ? `Page ${bundle._meta.page + 1} of ${Math.max(1, bundle._meta.totalPages)} · ${resources.length} shown`
+              : `Page ${page + 1}`}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={loading || page === 0}
+              onClick={() => setPage((current) => current - 1)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={loading || Boolean(error) || !bundle?._meta.hasNextPage}
+              onClick={() => setPage((current) => current + 1)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </footer>
       </section>
     </div>
   );

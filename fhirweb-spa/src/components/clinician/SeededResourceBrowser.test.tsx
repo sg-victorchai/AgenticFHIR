@@ -5,25 +5,25 @@ import { agentBuilderService } from '../../services/agentBuilderService';
 
 vi.mock('../../services/agentBuilderService', () => ({
   agentBuilderService: {
-    getSeededPatients: vi.fn(),
-    getSeededPatientBundle: vi.fn(),
+    getSeededResources: vi.fn(),
   },
 }));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(agentBuilderService.getSeededPatients).mockResolvedValue({
-    seedJobId: 'job-1',
-    evalTenantId: 'tenant-1',
-    seedStatus: 'COMPLETED',
-    patientCount: 2,
-    patientIds: ['patient-1', 'patient-2'],
-  });
-  vi.mocked(agentBuilderService.getSeededPatientBundle).mockResolvedValue({
+  vi.mocked(agentBuilderService.getSeededResources).mockResolvedValue({
     resourceType: 'Bundle',
     type: 'collection',
+    total: 1,
+    _meta: {
+      evalTenantId: 'tenant-1',
+      resourceType: 'Observation',
+      page: 0,
+      pageSize: 50,
+      totalPages: 1,
+      hasNextPage: false,
+    },
     entry: [
-      { resource: { resourceType: 'Patient', id: 'patient-1' } },
       {
         resource: {
           resourceType: 'Observation',
@@ -37,7 +37,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('SeededResourceBrowser', () => {
-  it('loads the selected job and shows only unique resources of the selected type', async () => {
+  it('loads the selected resource type directly for the first page', async () => {
     render(
       <SeededResourceBrowser
         seedJobId="job-1"
@@ -46,21 +46,19 @@ describe('SeededResourceBrowser', () => {
       />,
     );
     expect(await screen.findByText('1 Observation resources')).toBeTruthy();
-    expect(agentBuilderService.getSeededPatients).toHaveBeenCalledWith('job-1');
-    expect(agentBuilderService.getSeededPatientBundle).toHaveBeenCalledWith(
-      'job-1',
-      'patient-1',
-    );
-    expect(agentBuilderService.getSeededPatientBundle).toHaveBeenCalledWith(
-      'job-1',
-      'patient-2',
-    );
+    expect(
+      agentBuilderService.getSeededResources,
+    ).toHaveBeenCalledExactlyOnceWith('job-1', 'Observation', 0, 50);
     expect(screen.getAllByText('Observation/observation-1')).toHaveLength(1);
     expect(screen.queryByText('Patient/patient-1')).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it('allows retry after a bundle request fails', async () => {
-    vi.mocked(agentBuilderService.getSeededPatientBundle).mockRejectedValueOnce(
+    vi.mocked(agentBuilderService.getSeededResources).mockRejectedValueOnce(
       new Error('Bundle unavailable'),
     );
     render(
@@ -73,6 +71,59 @@ describe('SeededResourceBrowser', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('1 Observation resources')).toBeTruthy();
+  });
+
+  it('uses metadata to navigate pages and displays the overall resource total', async () => {
+    vi.mocked(agentBuilderService.getSeededResources).mockImplementation(
+      async (_job, _type, page = 0) => ({
+        resourceType: 'Bundle',
+        type: 'collection',
+        total: 100,
+        _meta: {
+          evalTenantId: 'tenant-1',
+          resourceType: 'Observation',
+          page,
+          pageSize: 50,
+          totalPages: 2,
+          hasNextPage: page === 0,
+        },
+        entry: [
+          {
+            resource: {
+              resourceType: 'Observation',
+              id: `observation-page-${page}`,
+            },
+          },
+        ],
+      }),
+    );
+    render(
+      <SeededResourceBrowser
+        seedJobId="job-1"
+        resourceType="Observation"
+        onClose={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText('100 Observation resources')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(
+      await screen.findByText('Observation/observation-page-1'),
+    ).toBeTruthy();
+    expect(agentBuilderService.getSeededResources).toHaveBeenLastCalledWith(
+      'job-1',
+      'Observation',
+      1,
+      50,
+    );
+    expect(screen.queryByText('Observation/observation-page-0')).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(
+      await screen.findByText('Observation/observation-page-0'),
+    ).toBeTruthy();
   });
 
   it('closes the resource inspector', () => {

@@ -220,6 +220,17 @@ export interface SeededPatientBundle {
   entry?: Array<{ resource?: Record<string, unknown> }>;
 }
 
+export interface SeededResourceBundle extends SeededPatientBundle {
+  _meta: {
+    evalTenantId: string;
+    resourceType: string;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    hasNextPage: boolean;
+  };
+}
+
 export interface ScenarioSummary {
   scenarioId: string;
   personaId?: string;
@@ -235,6 +246,11 @@ export interface ScenarioDetail extends ScenarioSummary {
   missionParams?: Record<string, unknown> | null;
   conversationScript?: AuthoringTurn[] | null;
   responseCriteria?: unknown;
+  expectedQueryPatterns?: Array<{
+    resourceType: string;
+    expectedParams: Record<string, string>;
+  }>;
+  generateRubric?: boolean;
 }
 
 const apiUrl = (path: string) => `${API_BASE}${path}`;
@@ -422,6 +438,15 @@ export const agentBuilderService = {
   getSeededPatientBundle: (seedJobId: string, patientId: string) =>
     request<SeededPatientBundle>(
       `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}/patients/${encodeURIComponent(patientId)}`,
+    ),
+  getSeededResources: (
+    seedJobId: string,
+    resourceType: string,
+    page = 0,
+    size = 50,
+  ) =>
+    request<SeededResourceBundle>(
+      `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}/resources/${encodeURIComponent(resourceType)}?${new URLSearchParams({ page: String(page), size: String(size) })}`,
     ),
   submitEval: (params: {
     personaId: string;

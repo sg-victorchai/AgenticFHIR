@@ -144,6 +144,8 @@ export const ScenarioBlueprint: React.FC<{ scenario: ScenarioDetail }> = ({
         ['Agent test settings', scenario.missionParams],
         ['Test conversation', scenario.conversationScript],
         ['Evaluation rubric', scenario.responseCriteria],
+        ['Expected data queries', scenario.expectedQueryPatterns],
+        ['Automatic rubric generation', scenario.generateRubric],
       ].map(([label, value]) => (
         <details key={String(label)}>
           <summary className="cursor-pointer text-xs font-medium text-slate-700">

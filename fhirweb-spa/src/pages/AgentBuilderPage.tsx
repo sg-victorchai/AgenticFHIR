@@ -7,6 +7,10 @@ import Phase0Authoring, {
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
 import PreviousEvalData from '../components/clinician/PreviousEvalData';
 import SeededResourceBrowser from '../components/clinician/SeededResourceBrowser';
+import ScenarioScoringEditor, {
+  buildScenarioScoring,
+  newScenarioScoring,
+} from '../components/clinician/ScenarioScoringEditor';
 import SavedScenarioPicker, {
   ScenarioBlueprint,
 } from '../components/clinician/SavedScenarioPicker';
@@ -167,6 +171,7 @@ const Icon: React.FC<{ name: string; className?: string }> = ({
       </>
     ),
     check: <path d="m5 12 4 4L19 6" />,
+    chevron: <path d="m9 5 7 7-7 7" />,
     play: <path d="m8 5 12 7-12 7V5Z" />,
   };
   return (
@@ -314,6 +319,7 @@ const AgentBuilderPage: React.FC = () => {
   const [testSettings, setTestSettings] = useState<Record<string, any>>({});
   const [scenarioName, setScenarioName] = useState('');
   const [scenarioQuestion, setScenarioQuestion] = useState('');
+  const [scenarioScoring, setScenarioScoring] = useState(newScenarioScoring);
   const [scenarioParams, setScenarioParams] = useState('{}');
   const [seedDescription, setSeedDescription] = useState('');
   const [seedGroups, setSeedGroups] = useState<CohortGroupDraft[]>([
@@ -327,6 +333,9 @@ const AgentBuilderPage: React.FC = () => {
   const [showScenarioDraft, setShowScenarioDraft] = useState(false);
   const [evalRun, setEvalRun] = useState<EvalRun | null>(null);
   const [evalRuns, setEvalRuns] = useState<EvalRun[]>([]);
+  const [expandedEvalRunId, setExpandedEvalRunId] = useState<string | null>(
+    null,
+  );
   const [scenarioId, setScenarioId] = useState<string | null>(null);
   const [savedScenario, setSavedScenario] = useState<ScenarioDetail | null>(
     null,
@@ -368,6 +377,8 @@ const AgentBuilderPage: React.FC = () => {
   useEffect(() => {
     let active = true;
     setEvaluationDetail(null);
+    setExpandedEvalRunId(null);
+    setScenarioScoring(newScenarioScoring());
     setEvaluationDetailError(null);
     setSavedScenario(null);
     setScenarioError(null);
@@ -792,7 +803,9 @@ const AgentBuilderPage: React.FC = () => {
               ],
             }
           : { missionParams }),
-        generateRubric: true,
+        ...(evaluationTarget.personaType === 'AGENT'
+          ? buildScenarioScoring(scenarioScoring)
+          : { generateRubric: true }),
       });
       setScenarioId(scenario.scenarioId);
       const blueprint = await agentBuilderService.getScenario(
@@ -922,6 +935,7 @@ const AgentBuilderPage: React.FC = () => {
         personaVersion: evaluationTarget.version,
         evalTenantId: targetSeedJob.evalTenantId,
         runStatus: 'PENDING',
+        createdAt: new Date().toISOString(),
       });
     } catch (error) {
       notify(
@@ -1118,6 +1132,22 @@ const AgentBuilderPage: React.FC = () => {
     { id: 'admin', label: 'Platform assets', icon: 'settings' },
   ];
   const isFocusedAuthoring = view === 'authoring' && Boolean(sessionId);
+  const recentEvalRuns = [
+    ...new Map(
+      [...evalRuns, ...(evalRun ? [evalRun] : [])].map((run) => [
+        run.runId,
+        run,
+      ]),
+    ).values(),
+  ].sort((first, second) => {
+    const timestamp = (run: EvalRun) => {
+      const value = Date.parse(
+        run.createdAt || run.startedAt || run.completedAt || '',
+      );
+      return Number.isNaN(value) ? 0 : value;
+    };
+    return timestamp(second) - timestamp(first);
+  });
   const returnToEvaluationList = () => {
     setEvaluationTarget(null);
     setSeedJob(null);
@@ -2329,6 +2359,12 @@ const AgentBuilderPage: React.FC = () => {
                         />
                       </label>
                     )}
+                    {evaluationTarget.personaType === 'AGENT' && (
+                      <ScenarioScoringEditor
+                        value={scenarioScoring}
+                        onChange={setScenarioScoring}
+                      />
+                    )}
                     <div className="flex items-end justify-end gap-2 xl:col-span-2">
                       <Button
                         type="button"
@@ -2395,7 +2431,7 @@ const AgentBuilderPage: React.FC = () => {
                     )}
                   </div>
                 ) : null}
-                {evaluationTarget && (seedJob || evalRun) && (
+                {evaluationTarget && seedJob && (
                   <div className="grid gap-4 xl:grid-cols-2">
                     {seedJob && (
                       <article className="rounded-xl border border-slate-200 bg-white p-5">
@@ -2514,132 +2550,201 @@ const AgentBuilderPage: React.FC = () => {
                         )}
                       </article>
                     )}
-                    {evalRun && (
-                      <div className="space-y-3">
-                        <EvalRunCard run={evalRun} />
-                        {['COMPLETED', 'FAILED'].includes(evalRun.runStatus) &&
-                          evaluationTarget && (
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                disabled={busy}
-                                onClick={async () => {
-                                  try {
-                                    const result =
-                                      await agentBuilderService.compare(
-                                        evaluationTarget.personaId,
-                                        TENANT_ID,
-                                      );
-                                    notify(
-                                      'success',
-                                      result.betterVersion === 'none'
-                                        ? 'No completed evaluations to compare.'
-                                        : `Highest-scoring version: ${result.betterVersion}`,
-                                    );
-                                  } catch (error) {
-                                    setLifecycleError(
-                                      error instanceof Error
-                                        ? error.message
-                                        : 'Unable to compare versions.',
-                                    );
-                                  }
-                                }}
-                              >
-                                Compare versions
-                              </Button>
-                              {seedJob &&
-                                seedJob.seedStatus !== 'TORN_DOWN' && (
-                                  <Button
-                                    disabled={busy}
-                                    onClick={async () => {
-                                      setConfirmation({
-                                        title: 'Clean up sandbox data?',
-                                        message: `This permanently removes test data from sandbox tenant ${seedJob.evalTenantId}.`,
-                                        confirmLabel: 'Delete sandbox data',
-                                        tone: 'danger',
-                                        onConfirm: async () => {
-                                          setBusy(true);
-                                          try {
-                                            await agentBuilderService.teardown(
-                                              seedJob.evalTenantId,
-                                            );
-                                            setSeedJob({
-                                              ...seedJob,
-                                              seedStatus: 'TORN_DOWN',
-                                            });
-                                          } catch (error) {
-                                            setLifecycleError(
-                                              error instanceof Error
-                                                ? error.message
-                                                : 'Unable to clean up sandbox.',
-                                            );
-                                          } finally {
-                                            setBusy(false);
-                                          }
-                                        },
-                                      });
-                                    }}
-                                  >
-                                    Clean up sandbox
-                                  </Button>
-                                )}
-                            </div>
-                          )}
-                        {evalRun.runStatus === 'COMPLETED' &&
-                          evaluationTarget?.lifecycleState === 'UAT_TRAINING' &&
-                          evalRun.personaId === evaluationTarget.personaId &&
-                          evalRun.personaVersion ===
-                            evaluationTarget.version && (
-                            <Button
-                              tone="accent"
-                              disabled={busy}
-                              onClick={() => {
-                                setConfirmation({
-                                  title: 'Approve for production?',
-                                  message: `Approve ${evaluationTarget.name} ${evaluationTarget.version} for production after reviewing this evaluation?`,
-                                  confirmLabel: 'Approve for production',
-                                  tone: 'primary',
-                                  onConfirm: () =>
-                                    runLifecycle('approve', evaluationTarget),
-                                });
-                              }}
-                            >
-                              Approve for production
-                            </Button>
-                          )}
-                      </div>
-                    )}
                   </div>
                 )}
-                {evaluationTarget && evalRuns.length > 0 && (
+                {evaluationTarget && recentEvalRuns.length > 0 && (
                   <section className="rounded-xl border border-slate-200 bg-white p-4">
                     <h2 className="text-sm font-semibold">Recent runs</h2>
                     <div className="mt-3 divide-y divide-slate-100">
-                      {evalRuns.map((run) => (
-                        <button
-                          key={run.runId}
-                          onClick={() =>
-                            void agentBuilderService
-                              .getEval(run.runId)
-                              .then(setEvalRun)
-                              .catch((e) => notify('error', String(e)))
-                          }
-                          className="flex w-full items-center justify-between gap-3 py-3 text-left"
-                        >
-                          <span>
-                            <span className="block text-xs font-semibold text-slate-800">
-                              {run.personaVersion} · {run.runId.slice(0, 8)}
+                      {recentEvalRuns.map((run) => (
+                        <div key={run.runId}>
+                          <button
+                            type="button"
+                            aria-expanded={expandedEvalRunId === run.runId}
+                            aria-controls={`evaluation-result-${run.runId}`}
+                            onClick={() => {
+                              if (expandedEvalRunId === run.runId) {
+                                setExpandedEvalRunId(null);
+                                return;
+                              }
+                              setExpandedEvalRunId(run.runId);
+                              if (evalRun) {
+                                setEvalRuns((previous) => [
+                                  ...previous.filter(
+                                    (item) => item.runId !== evalRun.runId,
+                                  ),
+                                  evalRun,
+                                ]);
+                              }
+                              setEvalRun(run);
+                              void agentBuilderService
+                                .getEval(run.runId)
+                                .then((updated) => {
+                                  setEvalRuns((previous) => [
+                                    ...previous.filter(
+                                      (item) => item.runId !== updated.runId,
+                                    ),
+                                    updated,
+                                  ]);
+                                  setEvalRun((current) =>
+                                    current?.runId === updated.runId
+                                      ? updated
+                                      : current,
+                                  );
+                                })
+                                .catch((error) =>
+                                  notify('error', String(error)),
+                                );
+                            }}
+                            title={
+                              expandedEvalRunId === run.runId
+                                ? 'Collapse evaluation result'
+                                : 'Expand evaluation result'
+                            }
+                            className="group flex w-full items-center justify-between gap-3 rounded-lg py-3 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span
+                                aria-hidden="true"
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${expandedEvalRunId === run.runId ? 'border-cyan-700 bg-cyan-700 text-white' : 'border-slate-300 bg-slate-100 text-slate-700 group-hover:border-cyan-500 group-hover:bg-cyan-50 group-hover:text-cyan-800'}`}
+                              >
+                                <Icon
+                                  name="chevron"
+                                  className={`h-5 w-5 transition-transform ${expandedEvalRunId === run.runId ? 'rotate-90' : ''}`}
+                                />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-xs font-semibold text-slate-800">
+                                  {run.personaVersion} · {run.runId.slice(0, 8)}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {dateTime(
+                                    run.createdAt ||
+                                      run.startedAt ||
+                                      run.completedAt,
+                                  )}
+                                </span>
+                              </span>
                             </span>
-                            <span className="text-[10px] text-slate-400">
-                              {dateTime(run.createdAt)}
+                            <span className="flex items-center gap-3">
+                              <StatusBadge value={run.runStatus} />
+                              <span className="text-sm font-semibold">
+                                {run.qualityScore ?? '—'}
+                              </span>
                             </span>
-                          </span>
-                          <span className="flex items-center gap-3">
-                            <StatusBadge value={run.runStatus} />
-                            <span className="text-sm font-semibold">
-                              {run.qualityScore ?? '—'}
-                            </span>
-                          </span>
-                        </button>
+                          </button>
+                          {expandedEvalRunId === run.runId &&
+                            evalRun?.runId === run.runId && (
+                              <div
+                                id={`evaluation-result-${run.runId}`}
+                                className="w-full pb-4"
+                              >
+                                <div className="space-y-3">
+                                  <EvalRunCard run={evalRun} />
+                                  {['COMPLETED', 'FAILED'].includes(
+                                    evalRun.runStatus,
+                                  ) &&
+                                    evaluationTarget && (
+                                      <div className="flex flex-wrap gap-2">
+                                        <Button
+                                          disabled={busy}
+                                          onClick={async () => {
+                                            try {
+                                              const result =
+                                                await agentBuilderService.compare(
+                                                  evaluationTarget.personaId,
+                                                  TENANT_ID,
+                                                );
+                                              notify(
+                                                'success',
+                                                result.betterVersion === 'none'
+                                                  ? 'No completed evaluations to compare.'
+                                                  : `Highest-scoring version: ${result.betterVersion}`,
+                                              );
+                                            } catch (error) {
+                                              setLifecycleError(
+                                                error instanceof Error
+                                                  ? error.message
+                                                  : 'Unable to compare versions.',
+                                              );
+                                            }
+                                          }}
+                                        >
+                                          Compare versions
+                                        </Button>
+                                        {seedJob &&
+                                          seedJob.seedStatus !==
+                                            'TORN_DOWN' && (
+                                            <Button
+                                              disabled={busy}
+                                              onClick={async () => {
+                                                setConfirmation({
+                                                  title:
+                                                    'Clean up sandbox data?',
+                                                  message: `This permanently removes test data from sandbox tenant ${seedJob.evalTenantId}.`,
+                                                  confirmLabel:
+                                                    'Delete sandbox data',
+                                                  tone: 'danger',
+                                                  onConfirm: async () => {
+                                                    setBusy(true);
+                                                    try {
+                                                      await agentBuilderService.teardown(
+                                                        seedJob.evalTenantId,
+                                                      );
+                                                      setSeedJob({
+                                                        ...seedJob,
+                                                        seedStatus: 'TORN_DOWN',
+                                                      });
+                                                    } catch (error) {
+                                                      setLifecycleError(
+                                                        error instanceof Error
+                                                          ? error.message
+                                                          : 'Unable to clean up sandbox.',
+                                                      );
+                                                    } finally {
+                                                      setBusy(false);
+                                                    }
+                                                  },
+                                                });
+                                              }}
+                                            >
+                                              Clean up sandbox
+                                            </Button>
+                                          )}
+                                      </div>
+                                    )}
+                                  {evalRun.runStatus === 'COMPLETED' &&
+                                    evaluationTarget?.lifecycleState ===
+                                      'UAT_TRAINING' &&
+                                    evalRun.personaId ===
+                                      evaluationTarget.personaId &&
+                                    evalRun.personaVersion ===
+                                      evaluationTarget.version && (
+                                      <Button
+                                        tone="accent"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          setConfirmation({
+                                            title: 'Approve for production?',
+                                            message: `Approve ${evaluationTarget.name} ${evaluationTarget.version} for production after reviewing this evaluation?`,
+                                            confirmLabel:
+                                              'Approve for production',
+                                            tone: 'primary',
+                                            onConfirm: () =>
+                                              runLifecycle(
+                                                'approve',
+                                                evaluationTarget,
+                                              ),
+                                          });
+                                        }}
+                                      >
+                                        Approve for production
+                                      </Button>
+                                    )}
+                                </div>
+                              </div>
+                            )}
+                        </div>
                       ))}
                     </div>
                   </section>
@@ -3590,7 +3695,7 @@ const EvalRunCard: React.FC<{ run: EvalRun }> = ({ run }) => {
       ? readJson<any>(run.replayTrace)
       : run.replayTrace;
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-5">
+    <article className="w-full border-t border-slate-100 py-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-mono text-slate-400">
