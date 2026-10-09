@@ -1,6 +1,6 @@
 # AgentBuilder Portal — Frontend Integration Guide
 
-**Date:** 2026-10-04  
+**Date:** 2026-10-07 (updated 2026-10-07: Phase 0 step-through portal implementation — §6.3)  
 **Scope:** Complete REST API reference for the Agent Builder and Lifecycle Management portal
 
 ---
@@ -13,12 +13,19 @@
 4. [Activity 2 — Browse User-Created Personas](#4-activity-2--browse-user-created-personas)
 5. [Activity 3 — Authoring Sessions (Stop & Resume)](#5-activity-3--authoring-sessions-stop--resume)
 6. [Activity 4 — Author a New Persona](#6-activity-4--author-a-new-persona)
-7. [Activity 5 — Experiment, Evaluate & Promote](#7-activity-5--experiment-evaluate--promote)
-8. [Admin Operations](#8-admin-operations)
-9. [Data Models](#9-data-models)
-10. [Error Handling](#10-error-handling)
-11. [Recommended UX Flows](#11-recommended-ux-flows)
-12. [Annex: Database Tables](#12-annex-database-tables)
+   - [6.1 Create an Authoring Session](#61-create-an-authoring-session)
+   - [6.2 Send Message (SSE Stream)](#62-send-message-sse-stream)
+   - [6.3 Phase 0 — Guided Authoring (FROM_SCRATCH sessions only)](#63-phase-0--guided-authoring-from_scratch-sessions-only)
+7. [Activity 5 — Lifecycle Management, Experiment, Evaluate & Promote](#7-activity-5--lifecycle-management-experiment-evaluate--promote)
+   - [7.1 Persona Lifecycle State Machine](#71-persona-lifecycle-state-machine)
+   - [7.1.1 Session Review Endpoints ($approve / $quality-approve / $complete / $reject)](#711-session-review-endpoints)
+   - [7.8–7.14 Experiment Controller Lifecycle Transitions](#78-promote-draft--quality_gate_pending)
+8. [Reference Endpoints — Formatters, Skills & Models](#8-reference-endpoints--formatters-and-skills)
+9. [Admin Operations](#9-admin-operations)
+10. [Data Models](#10-data-models)
+11. [Error Handling](#11-error-handling)
+12. [Recommended UX Flows](#12-recommended-ux-flows)
+13. [Annex: Database Tables](#13-annex-database-tables)
 
 ---
 
@@ -26,12 +33,13 @@
 
 The AgentBuilder subsystem exposes four groups of REST endpoints:
 
-| Group                   | Base Path                       | Purpose                                                           |
-| ----------------------- | ------------------------------- | ----------------------------------------------------------------- |
-| Persona Browse          | `/api/agentbuilder/personas`    | List platform personas and user-owned personas                    |
-| Authoring Sessions      | `/api/agentbuilder/sessions`    | Create, list, resume, and stop authoring sessions (SSE streaming) |
-| Lifecycle & Experiments | `/api/agentbuilder/experiments` | Fork, evaluate, compare, and promote persona versions             |
-| Admin                   | `/api/agentbuilder/admin`       | Skill sync, platform persona system-prompt update                 |
+| Group                   | Base Path                                      | Purpose                                                           |
+| ----------------------- | ---------------------------------------------- | ----------------------------------------------------------------- |
+| Persona Browse          | `/api/agentbuilder/personas`                   | List platform personas and user-owned personas                    |
+| Authoring Sessions      | `/api/agentbuilder/sessions`                   | Create, list, resume, and stop authoring sessions (SSE streaming) |
+| Lifecycle & Experiments | `/api/agentbuilder/experiments`                | Fork, evaluate, compare, and promote persona versions             |
+| Reference               | `/api/agentbuilder/{formatters,skills,models}` | Formatter definitions, skill library, active LLM model info       |
+| Admin                   | `/api/agentbuilder/admin`                      | Skill sync, platform persona system-prompt update                 |
 
 **Persona read/search** (for full YAML, version history, etc.) is also available via the standard FHIR API at `/fhir/r5/AgentPersonaDefinition` — see `AGENTCORE-API-REFERENCE.md`.
 
@@ -51,13 +59,18 @@ Requests without a valid token receive `401 Unauthorized`.
 
 ### Required Role: `agentbuilder`
 
-The JWT must contain `agentbuilder` in `realm_access.roles` (Keycloak format):
+Access to all `/api/agentbuilder/**` endpoints is controlled by a **database-managed role**, not by the JWT itself. The server checks the `fhir.rbac_user_role` table for the calling user's `user_id` and a row with `role_code = 'agentbuilder'`.
 
-```json
-{ "realm_access": { "roles": ["agentbuilder"] } }
-```
+Authenticated users who lack this DB row receive `403 Forbidden`, even if the JWT contains an `agentbuilder` Keycloak realm role.
 
-Authenticated users who lack this role receive `403 Forbidden` on any `/api/agentbuilder/**` endpoint.
+> **Admin provisioning:** To grant a user access, insert a row:
+>
+> ```sql
+> INSERT INTO fhir.rbac_user_role (tenant_id, user_id, role_code, granted_by)
+> VALUES ('<tenant>', '<preferred_username_or_sub>', 'agentbuilder', 'admin');
+> ```
+>
+> The `user_id` value must match what the server resolves from the JWT — `preferred_username` claim first, then `sub` as fallback (see User Identity below).
 
 ### User Identity
 
@@ -651,26 +664,32 @@ X-Tenant-ID: <tenant-guid>
     "source_persona_id": null,
     "persona_type": "AGENT",
     "persona_name": "My New Agent",
+    "description": "Care coordinator agent for identifying diabetic patients with care gaps",
     "status": "IN_PROGRESS",
     "current_phase": 2,
+    "selected_model_id": "global.anthropic.claude-opus-4-8",
     "created_at": "2026-10-01T09:00:00Z",
     "updated_at": "2026-10-01T14:30:00Z"
   }
 ]
 ```
 
-Shows all non-ABANDONED sessions owned by the calling user, ordered by last updated. Use this for the "Resume Work" screen.
+Shows all non-ABANDONED sessions owned by the calling user, ordered by last updated. Use this for the "Resume Work" screen. `selected_model_id` is the model the session was created with — `null` means the session uses the server default. Look up `displayName` from `GET /api/agentbuilder/models` to show a model badge on each session card.
 
 **Session `status` values:**
 
-| Value             | Meaning                                      |
-| ----------------- | -------------------------------------------- |
-| `IN_PROGRESS`     | Active authoring; can resume                 |
-| `AWAITING_REVIEW` | Submitted for review; can view but not edit  |
-| `COMPLETE`        | Persona successfully authored and saved      |
-| `ABANDONED`       | Stopped by the user; excluded from this list |
+| Value                | Meaning                                                   |
+| -------------------- | --------------------------------------------------------- |
+| `IN_PROGRESS`        | Active authoring; can resume                              |
+| `AWAITING_REVIEW`    | AI finished authoring; author needs to review the content |
+| `QUALITY_REVIEW`     | Author approved; waiting for quality reviewer sign-off    |
+| `SANDBOX_EXPERIMENT` | Quality gate passed; sandbox evaluation in progress       |
+| `COMPLETE`           | Best version promoted to production; session closed       |
+| `ABANDONED`          | Stopped by the user; excluded from this list              |
 
-### Get Session Detail (for Resume)
+### Get Session Metadata
+
+Returns session state without conversation history. Use for displaying a session summary card. To resume and load conversation history, use `POST /$resume` instead.
 
 ```
 GET /api/agentbuilder/sessions/{sessionId}
@@ -678,7 +697,7 @@ Authorization: Bearer <jwt>
 X-Tenant-ID: <tenant-guid>
 ```
 
-**Response — 200 OK:** Session metadata object (no conversation history blob).
+**Response — 200 OK:** Session metadata object (no conversation history — use `$resume` or `GET /messages` for that).
 
 **Response — 403 Forbidden:** If the calling user is not the session owner.
 
@@ -689,7 +708,6 @@ X-Tenant-ID: <tenant-guid>
 ```
 POST /api/agentbuilder/sessions/{sessionId}/$abandon
 Authorization: Bearer <jwt>
-X-User-Id: <user-id>
 ```
 
 No request body required.
@@ -702,33 +720,83 @@ No request body required.
 
 ### Resume a Session
 
-Call `$resume` first to reload conversation history and re-activate the session, then send messages as normal.
+Call `$resume` to reload conversation history and re-activate the session. The response includes the full visible conversation history — render it in the chat window before the user sends the next message.
 
 **Step 1 — Resume the session:**
 
 ```
 POST /api/agentbuilder/sessions/{sessionId}/$resume
 Authorization: Bearer <jwt>
-X-User-Id: <user-id>
 ```
 
 **Response — 200 OK:**
 
 ```json
 {
-  "session_id": "a1b2c3d4-...",
+  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "status": "IN_PROGRESS",
   "current_phase": 2,
   "persona_name": "My New Agent",
-  "conversation_turn_count": 12
+  "selected_model_id": "global.anthropic.claude-opus-4-8",
+  "conversation_turn_count": 4,
+  "conversation": [
+    {
+      "role": "user",
+      "content": "I want to build an agent that identifies diabetic patients..."
+    },
+    {
+      "role": "assistant",
+      "content": "Great! Let me ask a few questions to define the scope..."
+    },
+    {
+      "role": "user",
+      "content": "The users are care coordinators at a hospital..."
+    },
+    {
+      "role": "assistant",
+      "content": "Understood. Based on what you've told me, here is the persona so far..."
+    }
+  ]
 }
 ```
+
+**Field descriptions:**
+
+| Field                     | Description                                                                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conversation`            | Visible chat turns only — `user` and `assistant` messages. Tool calls and internal AI loop messages are stripped. Render these in order in the chat window. |
+| `conversation_turn_count` | Number of visible turns (length of `conversation` array)                                                                                                    |
+| `selected_model_id`       | Model ID active for this session; look up `displayName` from `GET /api/agentbuilder/models`                                                                 |
 
 **Response — 403 Forbidden:** Caller is not the session owner.
 
 **Response — 404 Not Found:** Session does not exist.
 
-**Step 2 — Continue sending messages:**
+**Step 2 — Load conversation on demand (alternative):**
+
+To fetch conversation history independently (e.g. for pagination or refresh):
+
+```
+GET /api/agentbuilder/sessions/{sessionId}/messages
+Authorization: Bearer <jwt>
+```
+
+**Response — 200 OK:**
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "count": 4,
+  "messages": [
+    { "role": "user", "content": "I want to build an agent..." },
+    { "role": "assistant", "content": "Great! Let me ask..." },
+    { "role": "user", "content": "The users are care coordinators..." },
+    { "role": "assistant", "content": "Understood. Here is the persona..." }
+  ]
+}
+```
+
+**Step 3 — Continue sending messages:**
 
 ```
 POST /api/agentbuilder/sessions/{sessionId}/messages
@@ -739,6 +807,8 @@ Content-Type: application/json
 ```
 
 The agent picks up exactly where the session left off. See §6.2 for the full SSE streaming protocol.
+
+> **UX guidance:** On resume, render the `conversation` array from the `$resume` response into the chat window before the user types. Do NOT display the `$resume` response JSON itself — it is session metadata, not a chat message. Use `selected_model_id` to look up the model `displayName` from `GET /api/agentbuilder/models` and show it in the chat header.
 
 ---
 
@@ -756,7 +826,8 @@ X-Tenant-ID: <tenant-guid>
 
 {
   "personaType": "AGENT",
-  "authoringMode": "FROM_SCRATCH"
+  "authoringMode": "FROM_SCRATCH",
+  "description": "Care coordinator agent for identifying diabetic patients with care gaps"
 }
 ```
 
@@ -772,7 +843,8 @@ X-Tenant-ID: <tenant-guid>
   "personaType": "AGENT",
   "authoringMode": "ADAPT_FROM",
   "sourcePersonaId": "care-gap-manager",
-  "sourcePersonaVersion": "v1"
+  "sourcePersonaVersion": "v1",
+  "description": "Adapted care-gap manager with stricter HbA1c thresholds for pediatric patients"
 }
 ```
 
@@ -780,18 +852,44 @@ In `ADAPT_FROM` mode, the AI agent automatically loads the source persona's YAML
 
 **Request fields:**
 
-| Field                  | Type   | Required    | Values                                   |
-| ---------------------- | ------ | ----------- | ---------------------------------------- |
-| `personaType`          | string | No          | `AGENT` (default), `DATA_PIPELINE`       |
-| `authoringMode`        | string | No          | `FROM_SCRATCH` (default), `ADAPT_FROM`   |
-| `sourcePersonaId`      | string | Conditional | Required when `authoringMode=ADAPT_FROM` |
-| `sourcePersonaVersion` | string | Conditional | Required when `authoringMode=ADAPT_FROM` |
+| Field                  | Type   | Required    | Values                                                                                                                        |
+| ---------------------- | ------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `personaType`          | string | No          | `AGENT` (default), `DATA_PIPELINE`                                                                                            |
+| `authoringMode`        | string | No          | `FROM_SCRATCH` (default), `ADAPT_FROM`                                                                                        |
+| `sourcePersonaId`      | string | Conditional | Required when `authoringMode=ADAPT_FROM`                                                                                      |
+| `sourcePersonaVersion` | string | Conditional | Required when `authoringMode=ADAPT_FROM`                                                                                      |
+| `modelId`              | string | No          | Model ID from `GET /api/agentbuilder/models`; omit to use the server default                                                  |
+| `description`          | string | No          | User-friendly description of what this persona is meant to do; displayed on session cards and preserved in the session record |
 
 **Response — 200 OK:**
 
 ```json
 { "sessionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
 ```
+
+If `modelId` and/or `description` were supplied, they are echoed back:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "selectedModelId": "global.anthropic.claude-opus-4-8",
+  "description": "Care coordinator agent for identifying diabetic patients with care gaps"
+}
+```
+
+**`FROM_SCRATCH` sessions also return `authoring_step`:**
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "description": "Care coordinator agent for identifying diabetic patients with care gaps",
+  "authoring_step": "P0_OUTCOME_INTAKE"
+}
+```
+
+`authoring_step` is non-null only for `FROM_SCRATCH` sessions; it is absent (or `null`) for `ADAPT_FROM` sessions which skip Phase 0. Read this field immediately after session creation to initialise the Phase 0 guided-authoring UI (see §6.3).
+
+Passing an unrecognised `modelId` returns **400 Bad Request**. Call `GET /api/agentbuilder/models` first to obtain the list of valid IDs.
 
 Store `sessionId` — it is needed for all subsequent calls in this session.
 
@@ -811,20 +909,41 @@ Content-Type: application/json
 
 The response is a Server-Sent Events stream:
 
-| Event type | Data                 | Meaning                                        |
-| ---------- | -------------------- | ---------------------------------------------- |
-| `token`    | Partial text string  | Incremental response token — append to display |
-| `done`     | (empty)              | End of AI turn — ready for next user message   |
-| `error`    | Error message string | Processing error                               |
+| Event type | Data                                         | Meaning                                                                                                                                                                                                       |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `token`    | Partial text string                          | Incremental response token — append to display                                                                                                                                                                |
+| `step`     | Next `authoring_step` value, or empty string | Emitted after the last `token` and before `done`; tells the portal which Phase 0 step is now active. Empty string means Phase 0 is complete (switch to normal chat input). Omitted for `ADAPT_FROM` sessions. |
+| `done`     | (empty)                                      | End of AI turn — ready for next user message                                                                                                                                                                  |
+| `error`    | Error message string                         | Processing error                                                                                                                                                                                              |
 
-**Example stream:**
+**Example stream — Phase 0 in progress:**
 
 ```
 event: token
-data: I'll help you author a care-gap identification agent.
+data: ══════════════════════════════════════════════════════
+event: token
+data:  Step 2 of 6 — Proxy Questions
+event: token
+data: ══════════════════════════════════════════════════════
 
 event: token
-data: First, let me understand your patient population.
+data: Please answer these 7 questions ...
+
+event: step
+data: P0_PROXY_QUESTIONS
+
+event: done
+data:
+```
+
+**Example stream — Phase 0 complete (entering Phase 1):**
+
+```
+event: token
+data: Great! All set. Now let's begin the formal authoring process.
+
+event: step
+data:
 
 event: done
 data:
@@ -834,11 +953,12 @@ data:
 
 - Use Fetch API with `ReadableStream` (not `EventSource` — POST is required)
 - Buffer `token` events and render incrementally
+- On `step`: call `setAuthoringStep(e.data || null)` to switch the input widget (see §6.3)
 - On `done`, enable input for the next turn
 - On `error`, display the message and allow retry
 - Session supports up to **200 turns** maximum
 
-**TypeScript example:**
+**TypeScript example (Phase 0-aware):**
 
 ```typescript
 const response = await fetch(
@@ -857,6 +977,7 @@ const response = await fetch(
 const reader = response.body!.getReader();
 const decoder = new TextDecoder();
 let buffer = '';
+let eventType = 'message';
 
 while (true) {
   const { done, value } = await reader.read();
@@ -865,31 +986,462 @@ while (true) {
   const lines = buffer.split('\n');
   buffer = lines.pop() ?? '';
   for (const line of lines) {
-    if (line.startsWith('data: ')) appendToDisplay(line.slice(6));
+    if (line.startsWith('event: ')) {
+      eventType = line.slice(7).trim();
+    } else if (line.startsWith('data: ')) {
+      const data = line.slice(6);
+      if (eventType === 'token') {
+        appendToDisplay(data);
+      } else if (eventType === 'step') {
+        setAuthoringStep(data || null); // null → Phase 0 done, switch to normal chat
+      }
+      // 'done' and 'error' handled below
+    } else if (line === '') {
+      if (eventType === 'done') onTurnComplete();
+      if (eventType === 'error') onStreamError(buffer);
+      eventType = 'message';
+    }
   }
 }
 ```
 
 ---
 
-## 7. Activity 5 — Experiment, Evaluate & Promote
+### 6.3 Phase 0 — Guided Authoring (FROM_SCRATCH sessions only)
+
+`FROM_SCRATCH` sessions begin in Phase 0 — a six-step guided intake that collects the information needed to author a persona without wasting an LLM turn on scripted questions. The backend (`Phase0Orchestrator`) drives the state machine; the portal renders the appropriate input widget for each step.
+
+#### Overview
+
+| Step | `authoring_step` value | What happens                                                                |
+| ---- | ---------------------- | --------------------------------------------------------------------------- |
+| 1    | `P0_OUTCOME_INTAKE`    | Collect the outcome statement                                               |
+| 2    | `P0_PROXY_QUESTIONS`   | Present 7 proxy questions, collect answers                                  |
+| 3    | `P0_TYPE_DECISION`     | Show type recommendation (AGENT / DATA_PIPELINE); user accepts or overrides |
+| 4    | `P0_COHORT_CHECK`      | Ask whether the persona targets a patient cohort                            |
+| 5    | `P0_COHORT_RECIPE`     | Collect plain-English cohort description (only if step 4 = Yes)             |
+| 6    | `P0_AUTHORING_MODE`    | User picks authoring mode: fixed-workflow / parameterized / dynamic-agent   |
+| done | `null` / `""`          | Phase 0 complete — switch to normal chat input for Phases 1-5               |
+
+Phase 0 completes in **under 2 minutes** — steps 1, 2, 4, 5, and 6 return pre-scripted text instantly. Step 3 makes a single focused LLM call (~2-5 s) to infer the persona type from the proxy answers.
+
+---
+
+#### TypeScript State Model
+
+```typescript
+type AuthoringStep =
+  | 'P0_OUTCOME_INTAKE'
+  | 'P0_PROXY_QUESTIONS'
+  | 'P0_TYPE_DECISION'
+  | 'P0_COHORT_CHECK'
+  | 'P0_COHORT_RECIPE'
+  | 'P0_AUTHORING_MODE'
+  | null; // null = Phases 1-5 (normal chat)
+
+const STEP_INDEX: Record<NonNullable<AuthoringStep>, number> = {
+  P0_OUTCOME_INTAKE: 1,
+  P0_PROXY_QUESTIONS: 2,
+  P0_TYPE_DECISION: 3,
+  P0_COHORT_CHECK: 4,
+  P0_COHORT_RECIPE: 5,
+  P0_AUTHORING_MODE: 6,
+};
+
+const [authoringStep, setAuthoringStep] = useState<AuthoringStep>(
+  initialAuthoringStep, // read from POST /sessions response
+);
+```
+
+Initialize `authoringStep` from the `authoring_step` field in the session creation response (§6.1). On resume (`POST /$resume`), read `authoring_step` from `GET /api/agentbuilder/sessions/{sessionId}` and restore the state.
+
+---
+
+#### Progress Stepper
+
+Show a horizontal step indicator at the top of the authoring panel whenever `authoringStep !== null`:
+
+```
+● Step 1   ○ Step 2   ○ Step 3   ○ Step 4   ○ Step 5   ○ Step 6
+Outcome     Proxy Q    Type       Cohort?    Cohort     Mode
+```
+
+- Filled circle = completed or current step; empty circle = future step.
+- Compute current index from `STEP_INDEX[authoringStep]`.
+- Hide the stepper completely once `authoringStep` becomes `null` (Phase 1+ chat).
+
+---
+
+#### Per-Step Input Widgets
+
+Replace the normal chat textarea with a step-specific widget while `authoringStep` is non-null.
+
+**Step 1 — `P0_OUTCOME_INTAKE`**
+
+Render a large textarea pre-filled with the session description (if provided at creation):
+
+```tsx
+<label>Describe what this persona should accomplish</label>
+<textarea
+  rows={5}
+  defaultValue={sessionDescription}
+  placeholder="e.g. Identify diabetic patients missing an HbA1c test in the last 6 months
+  and draft a care-gap note for each."
+/>
+<button onClick={submitOutcome}>Next →</button>
+```
+
+On submit, send the textarea content as the `message` body.
+
+---
+
+**Step 2 — `P0_PROXY_QUESTIONS`**
+
+The AI response contains 7 numbered questions (e.g. "1. Who are the primary users?"). Render seven labelled text inputs. The backend parses numbered answers, so format the submitted message automatically:
+
+```tsx
+// Extract questions from last assistant message using regex /^(\d+)\./m
+const questions = parseQuestionsFromLastMessage(lastAssistantMessage);
+
+return (
+  <form onSubmit={submitProxyAnswers}>
+    {questions.map((q, i) => (
+      <div key={i}>
+        <label>{q}</label>
+        <input type="text" value={answers[i]} onChange={...} />
+      </div>
+    ))}
+    <button type="submit">Submit Answers →</button>
+  </form>
+);
+
+function submitProxyAnswers() {
+  // Format as numbered list — backend's parseNumberedAnswers() parses this
+  const message = answers.map((a, i) => `${i + 1}. ${a}`).join('\n');
+  sendMessage(message);
+}
+```
+
+---
+
+**Step 3 — `P0_TYPE_DECISION`**
+
+The AI response shows a type recommendation with scores (e.g. "Recommended: **AGENT** (agent score: 0.85)"). Render two action buttons:
+
+```tsx
+<div className="type-decision">
+  <p>{lastAssistantMessage}</p>
+  <button variant="primary" onClick={() => sendMessage('accept')}>
+    ✓ Accept recommendation
+  </button>
+  <button variant="outline" onClick={() => setShowOverride(true)}>
+    Override
+  </button>
+  {showOverride && (
+    <div>
+      <select value={altType} onChange={(e) => setAltType(e.target.value)}>
+        <option value="AGENT">AGENT</option>
+        <option value="DATA_PIPELINE">DATA_PIPELINE</option>
+      </select>
+      <button onClick={() => sendMessage(`override:${altType}`)}>
+        Confirm Override
+      </button>
+    </div>
+  )}
+</div>
+```
+
+---
+
+**Step 4 — `P0_COHORT_CHECK`**
+
+Yes / No toggle buttons:
+
+```tsx
+<p>Does this persona target a specific patient cohort?</p>
+<button variant="primary" onClick={() => sendMessage('yes')}>Yes</button>
+<button variant="outline" onClick={() => sendMessage('no')}>No</button>
+```
+
+---
+
+**Step 5 — `P0_COHORT_RECIPE`**
+
+Only reached if step 4 was "Yes". Textarea to describe the cohort in plain English:
+
+```tsx
+<label>Describe the patient cohort in plain English</label>
+<textarea
+  rows={4}
+  placeholder="e.g. Diabetic patients (type 1 or 2) aged 45 or older who have not had
+  an HbA1c test in the past 6 months."
+/>
+<button onClick={submitCohort}>Continue →</button>
+```
+
+---
+
+**Step 6 — `P0_AUTHORING_MODE`**
+
+Three option cards (one selection required):
+
+```tsx
+const modes = [
+  {
+    value: 'fixed-workflow',
+    label: 'Fixed Workflow',
+    description:
+      'Step-by-step pipeline; same execution path every time. Best for ETL or document processing.',
+  },
+  {
+    value: 'parameterized',
+    label: 'Parameterized',
+    description:
+      'Fixed workflow with configurable parameters (age thresholds, lookback windows, etc.).',
+  },
+  {
+    value: 'dynamic-agent',
+    label: 'Dynamic Agent',
+    description:
+      'AI reasons at runtime to plan and execute steps. Best for open-ended clinical queries.',
+  },
+];
+
+return (
+  <div className="mode-cards">
+    {modes.map((m) => (
+      <button
+        key={m.value}
+        className={selected === m.value ? 'selected' : ''}
+        onClick={() => setSelected(m.value)}
+      >
+        <strong>{m.label}</strong>
+        <p>{m.description}</p>
+      </button>
+    ))}
+    <button disabled={!selected} onClick={() => sendMessage(selected!)}>
+      Start Authoring →
+    </button>
+  </div>
+);
+```
+
+---
+
+#### Resuming a Phase 0 Session
+
+When the user resumes a `FROM_SCRATCH` session that is still in Phase 0:
+
+1. Call `GET /api/agentbuilder/sessions/{sessionId}` — the response includes `authoring_step`.
+2. Set `authoringStep` to that value.
+3. Call `POST /$resume` to load conversation history and render prior messages.
+4. The last assistant message tells the user what to do next; the portal renders the widget for the current step.
+
+```typescript
+const meta = await fetch(`/api/agentbuilder/sessions/${sessionId}`, {
+  headers,
+}).then((r) => r.json());
+setAuthoringStep(meta.authoring_step ?? null);
+
+const resume = await fetch(`/api/agentbuilder/sessions/${sessionId}/$resume`, {
+  method: 'POST',
+  headers,
+}).then((r) => r.json());
+setChatMessages(resume.conversation);
+```
+
+---
+
+## 7. Activity 5 — Lifecycle Management, Experiment, Evaluate & Promote
 
 ### 7.1 Persona Lifecycle State Machine
 
+Two parallel state machines track every portal-authored persona:
+
+- **Session status** (`workflow.platform_agent_onboarding.status`) — tracks the authoring session lifecycle, managed by `ConversationSessionController`.
+- **Persona lifecycle state** (`workflow.agent_persona_definition.lifecycle_state`) — tracks the persona artifact lifecycle, managed by `PersonaLifecycleService`.
+
+They advance together through correlated transitions. A session drives a persona to production; the persona can then continue advancing (MONITORING, IMPROVEMENT_CANDIDATE) independently of any session.
+
+#### Persona Lifecycle State
+
 ```
-DRAFT ──► REVIEW ──► PRODUCTION_APPROVED
-  │          │               │
-  └──────────┴───────────────┴──► (retired: active=false)
+DRAFT
+  │ promote()
+  ▼
+QUALITY_GATE_PENDING
+  │ approveQualityGate()
+  ▼
+QUALITY_GATE_APPROVED
+  │ enterSandbox()
+  ▼
+UAT_TRAINING  ◄── (eval runs: seed → submit → compare)
+  │ approve()
+  ▼
+PRODUCTION_APPROVED
+  │ activateIfApproved()  [auto]
+  ▼
+MONITORING
+  │ flagForImprovement()
+  ▼
+IMPROVEMENT_CANDIDATE
+  │ fork() → new DRAFT version
+  ▼
+(new authoring cycle)
+
+Any pre-production state ──rollbackToDraft()──► DRAFT
+Any state               ──retire()──────────► is_active = false
 ```
 
-| State                 | Meaning                                        | Allowed transitions                   |
-| --------------------- | ---------------------------------------------- | ------------------------------------- |
-| `DRAFT`               | Editable, not yet reviewed                     | Promote → REVIEW, Retire              |
-| `REVIEW`              | Submitted for quality review                   | Approve → PRODUCTION_APPROVED, Retire |
-| `PRODUCTION_APPROVED` | Live in production, loaded into agent registry | Retire                                |
-| _(retired)_           | `active=false`, excluded from browse results   | None                                  |
+| Persona State           | Meaning                                                  | Valid next transitions                                                    |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `DRAFT`                 | Author authoring in progress                             | `promote` → QUALITY_GATE_PENDING, `retire`                                |
+| `QUALITY_GATE_PENDING`  | Author approved; awaiting quality reviewer sign-off      | `approveQualityGate` → QUALITY_GATE_APPROVED, `rollbackToDraft`, `retire` |
+| `QUALITY_GATE_APPROVED` | Quality gate passed; ready for sandbox                   | `enterSandbox` → UAT_TRAINING, `rollbackToDraft`, `retire`                |
+| `UAT_TRAINING`          | Sandbox evaluation in progress                           | `approve` → PRODUCTION_APPROVED, `rollbackToDraft`, `retire`              |
+| `PRODUCTION_APPROVED`   | Promoted from sandbox; activating in runtime registry    | auto-advances to MONITORING, `retire`                                     |
+| `MONITORING`            | Live in production; telemetry being collected            | `flagForImprovement` → IMPROVEMENT_CANDIDATE, `retire`                    |
+| `IMPROVEMENT_CANDIDATE` | Flagged; fork a new DRAFT to start a new authoring cycle | `fork` → new DRAFT version, `retire`                                      |
+| _(retired)_             | `is_active = false`, excluded from browse results        | None                                                                      |
 
-Only `PRODUCTION_APPROVED` + `active=true` versions are loaded into the live agent registry and can serve real missions.
+Only `MONITORING` (which was `PRODUCTION_APPROVED` + activated) versions are loaded into the live agent registry and serve real missions.
+
+#### Correlated Session Status ↔ Persona Lifecycle State
+
+| Step                              | Actor     | Session status       | Persona lifecycle_state | API call                                 |
+| --------------------------------- | --------- | -------------------- | ----------------------- | ---------------------------------------- |
+| AI finishes authoring             | Agent     | `AWAITING_REVIEW`    | `DRAFT`                 | _(auto — `write_persona_config` tool)_   |
+| Author approves content           | Author    | `QUALITY_REVIEW`     | `QUALITY_GATE_PENDING`  | `POST /{sessionId}/$approve`             |
+| Quality reviewer approves         | QA        | `SANDBOX_EXPERIMENT` | `UAT_TRAINING`          | `POST /{sessionId}/$quality-approve`     |
+| Eval runs complete; best promoted | Author/QA | `COMPLETE`           | `MONITORING`            | `POST /experiments/$approve?sessionId=…` |
+| Any reviewer rejects              | Author/QA | `IN_PROGRESS`        | `DRAFT`                 | `POST /{sessionId}/$reject`              |
+
+---
+
+### 7.1.1 Session Review Endpoints
+
+These four endpoints control the session side of the lifecycle. All are on `ConversationSessionController` at `/api/agentbuilder/sessions/{sessionId}`. Only the session owner can call them.
+
+#### `$approve` — Author approves persona content
+
+Advances session `AWAITING_REVIEW → QUALITY_REVIEW` and persona `DRAFT → QUALITY_GATE_PENDING`.
+
+```
+POST /api/agentbuilder/sessions/{sessionId}/$approve
+Authorization: Bearer <jwt>
+```
+
+No request body required.
+
+**Response — 200 OK:**
+
+```json
+{
+  "sessionId": "a1b2c3d4-...",
+  "status": "QUALITY_REVIEW",
+  "personaId": "diabetic-care-manager",
+  "version": "v0.1.0",
+  "lifecycleState": "QUALITY_GATE_PENDING",
+  "message": "Persona content approved. Awaiting quality gate sign-off."
+}
+```
+
+**Error — 409 Conflict:** Session is not in `AWAITING_REVIEW` state, or persona is not in `DRAFT` state.
+
+---
+
+#### `$quality-approve` — Quality reviewer approves the persona
+
+Advances session `QUALITY_REVIEW → SANDBOX_EXPERIMENT` and persona `QUALITY_GATE_PENDING → QUALITY_GATE_APPROVED → UAT_TRAINING` (two persona transitions in one call).
+
+```
+POST /api/agentbuilder/sessions/{sessionId}/$quality-approve
+Authorization: Bearer <jwt>
+```
+
+No request body required.
+
+**Response — 200 OK:**
+
+```json
+{
+  "sessionId": "a1b2c3d4-...",
+  "status": "SANDBOX_EXPERIMENT",
+  "personaId": "diabetic-care-manager",
+  "version": "v0.1.0",
+  "lifecycleState": "UAT_TRAINING",
+  "message": "Quality gate passed. Persona is in sandbox — run evaluation via /experiments/eval/$seed then /eval/$submit.",
+  "nextSteps": [
+    "POST /api/agentbuilder/experiments/eval/$seed?scenarioId=<id>&tenantId=my-tenant",
+    "POST /api/agentbuilder/experiments/eval/$submit?personaId=diabetic-care-manager&version=v0.1.0&tenantId=my-tenant&evalTenantId=<evalTenantId>",
+    "GET  /api/agentbuilder/experiments/$compare?personaId=diabetic-care-manager&tenantId=my-tenant",
+    "POST /api/agentbuilder/experiments/$approve?personaId=diabetic-care-manager&version=<bestVersion>&tenantId=my-tenant&sessionId=a1b2c3d4-..."
+  ]
+}
+```
+
+The `nextSteps` array provides ready-to-use URLs for the eval workflow. The portal should render these as action buttons in the sandbox panel.
+
+**Error — 409 Conflict:** Session is not in `QUALITY_REVIEW`, or persona is not in `QUALITY_GATE_PENDING`.
+
+---
+
+#### `$complete` — Mark session complete after promotion
+
+Advances session `SANDBOX_EXPERIMENT → COMPLETE`. Call this after `POST /experiments/$approve` succeeds (or pass `?sessionId=` to that endpoint to close them atomically — see §7.9).
+
+```
+POST /api/agentbuilder/sessions/{sessionId}/$complete
+Authorization: Bearer <jwt>
+```
+
+No request body required.
+
+**Response — 200 OK:**
+
+```json
+{
+  "sessionId": "a1b2c3d4-...",
+  "status": "COMPLETE",
+  "message": "Authoring session closed. Persona is live and under monitoring."
+}
+```
+
+**Error — 409 Conflict:** Session is not in `SANDBOX_EXPERIMENT` state.
+
+---
+
+#### `$reject` — Reject persona and return to authoring
+
+Rolls back session to `IN_PROGRESS` and persona lifecycle to `DRAFT`. Callable from `AWAITING_REVIEW`, `QUALITY_REVIEW`, or `SANDBOX_EXPERIMENT`.
+
+```
+POST /api/agentbuilder/sessions/{sessionId}/$reject
+Authorization: Bearer <jwt>
+Content-Type: application/json
+
+{ "reason": "System prompt scope is too broad — please narrow to HbA1c only." }
+```
+
+The request body is **optional** — omit it or send an empty body to reject without a reason.
+
+**Response — 200 OK:**
+
+```json
+{
+  "sessionId": "a1b2c3d4-...",
+  "status": "IN_PROGRESS",
+  "lifecycleState": "DRAFT",
+  "message": "Persona returned to authoring. Resume the session to make revisions.",
+  "reason": "System prompt scope is too broad — please narrow to HbA1c only."
+}
+```
+
+The `reason` field is only present if a reason was supplied.
+
+**Error — 409 Conflict:** Session is not in a rejectable state (`AWAITING_REVIEW`, `QUALITY_REVIEW`, or `SANDBOX_EXPERIMENT`).
+
+> **UX guidance:** Show a reason text area in the reject dialog. After rejection, the session reappears in the "My Work" list with `IN_PROGRESS` status. The author can resume and continue editing from where they left off. The persona YAML is preserved — rejection does not delete it, only rolls the lifecycle state back to DRAFT.
 
 ---
 
@@ -925,7 +1477,7 @@ The forked version has:
 
 ---
 
-### 7.3 Author an Evaluation Scenario
+### 7.3 Create an Evaluation Scenario
 
 Before running an evaluation you must create a scenario that specifies the test data cohort and the mission input (parameters or conversation). Seeding happens in a separate step so the portal can show progress before the long-running eval begins.
 
@@ -990,6 +1542,9 @@ Content-Type: application/json
   "scenarioId": "b3c4d5e6-...",
   "scenarioName": "Diabetic Care Gap — HbA1c Screening",
   "scenarioType": "AGENT",
+  "personaId": "diabetic-care-assessment",
+  "tenantId": "my-tenant",
+  "rubricGenerated": true,
   "createdAt": "2026-10-04T10:00:00Z"
 }
 ```
@@ -1015,6 +1570,34 @@ GET /api/agentbuilder/scenarios?personaId=diabetic-care-assessment
 Authorization: Bearer <jwt>
 X-Tenant-ID: <tenant-guid>
 ```
+
+**Response — 200 OK:**
+
+```json
+[
+  {
+    "scenarioId": "b3c4d5e6-...",
+    "scenarioName": "Diabetic Care Gap — HbA1c Screening",
+    "scenarioType": "AGENT",
+    "personaId": "diabetic-care-assessment",
+    "hasSeedSpec": true,
+    "hasMissionParams": true,
+    "hasConversation": false,
+    "rubricGenerated": true,
+    "createdAt": "2026-10-04T10:00:00Z",
+    "updatedAt": "2026-10-04T10:00:00Z"
+  }
+]
+```
+
+**Get a single scenario (full detail):**
+
+```
+GET /api/agentbuilder/scenarios/{scenarioId}
+Authorization: Bearer <jwt>
+```
+
+Returns the full scenario including `seedSpec`, `missionParams`, `conversationScript`, and `responseCriteria` (the generated rubric) as parsed objects.
 
 ---
 
@@ -1178,7 +1761,7 @@ GET /api/agentbuilder/experiments/eval?personaId=care-gap-manager&tenantId=my-te
 Returns which version has the highest quality score across completed evaluation runs.
 
 ```
-GET /api/agentbuilder/experiments/compare?personaId=care-gap-manager&tenantId=my-tenant
+GET /api/agentbuilder/experiments/$compare?personaId=care-gap-manager&tenantId=my-tenant
 Authorization: Bearer <jwt>
 ```
 
@@ -1192,10 +1775,12 @@ Returns `{ "betterVersion": "none" }` if no completed runs exist.
 
 ---
 
-### 7.8 Promote (DRAFT → REVIEW)
+### 7.8 Promote (DRAFT → QUALITY_GATE_PENDING)
+
+Submits the persona for quality review. Use this when working outside an authoring session (e.g., after `fork`). For session-based authoring, use `POST /{sessionId}/$approve` (§7.1.1) which also advances the session status.
 
 ```
-POST /api/agentbuilder/experiments/promote
+POST /api/agentbuilder/experiments/$promote
   ?personaId=care-gap-manager
   &version=v1-exp-1728032401234
   &tenantId=my-tenant
@@ -1204,14 +1789,16 @@ Authorization: Bearer <jwt>
 
 **Response:** `204 No Content`
 
-**Error:** `400 Bad Request` if not in `DRAFT` state.
+**Error — 409 Conflict:** Persona is not in `DRAFT` state.
 
 ---
 
-### 7.9 Approve (REVIEW → PRODUCTION_APPROVED)
+### 7.9 Quality Approve (QUALITY_GATE_PENDING → QUALITY_GATE_APPROVED)
+
+Quality reviewer sign-off. Records `qualityApprovedBy` and `qualityApprovedAt`. For session-based workflows, use `POST /{sessionId}/$quality-approve` instead — it chains this with `enterSandbox` in one call.
 
 ```
-POST /api/agentbuilder/experiments/approve
+POST /api/agentbuilder/experiments/$quality-approve
   ?personaId=care-gap-manager
   &version=v1-exp-1728032401234
   &tenantId=my-tenant
@@ -1220,16 +1807,84 @@ Authorization: Bearer <jwt>
 
 **Response:** `204 No Content`
 
-Records `qualityApprovedBy` (from JWT `preferred_username`) and `qualityApprovedAt` on the persona. The approved version is immediately registered into the live agent registry.
-
-**Error:** `400 Bad Request` if not in `REVIEW` state.
+**Error — 409 Conflict:** Persona is not in `QUALITY_GATE_PENDING` state.
 
 ---
 
-### 7.10 Retire (Any State → Inactive)
+### 7.10 Enter Sandbox (QUALITY_GATE_APPROVED → UAT_TRAINING)
+
+Moves the persona into the sandbox environment. Once here, evaluation runs can be submitted via `/eval/$seed` and `/eval/$submit`. For session-based workflows, `POST /{sessionId}/$quality-approve` performs both quality-approve and enter-sandbox in one call.
 
 ```
-POST /api/agentbuilder/experiments/retire
+POST /api/agentbuilder/experiments/$enter-sandbox
+  ?personaId=care-gap-manager
+  &version=v1-exp-1728032401234
+  &tenantId=my-tenant
+Authorization: Bearer <jwt>
+```
+
+**Response:** `204 No Content`
+
+**Error — 409 Conflict:** Persona is not in `QUALITY_GATE_APPROVED` state.
+
+---
+
+### 7.11 Approve (UAT_TRAINING → PRODUCTION_APPROVED → MONITORING)
+
+Promotes the best-evaluated version to production, loads it into the live agent registry, and advances to `MONITORING`. Optionally closes the authoring session in the same call via `?sessionId=`.
+
+```
+POST /api/agentbuilder/experiments/$approve
+  ?personaId=care-gap-manager
+  &version=v1-exp-1728032401234
+  &tenantId=my-tenant
+  &sessionId=a1b2c3d4-...          # optional — closes the authoring session
+Authorization: Bearer <jwt>
+```
+
+**Response — 200 OK (fully activated):**
+
+```json
+{
+  "personaId": "care-gap-manager",
+  "version": "v1-exp-1728032401234",
+  "lifecycleState": "MONITORING",
+  "message": "Persona care-gap-manager vv1-exp-1728032401234 is now live.",
+  "sessionStatus": "COMPLETE"
+}
+```
+
+**Response — 200 OK (approved but registry load pending):**
+
+When the stored persona YAML does not use the runtime `persona:` root-key format, the lifecycle state advances to `PRODUCTION_APPROVED` but the in-memory registry load is skipped. The persona will not serve missions until the YAML is corrected and the server is restarted or a re-activation is triggered.
+
+```json
+{
+  "personaId": "care-gap-manager",
+  "version": "v1-exp-1728032401234",
+  "lifecycleState": "PRODUCTION_APPROVED",
+  "message": "Persona approved but registry activation pending: YAML content is missing the required root 'persona' key",
+  "warning": "YAML content is missing the required root 'persona' key",
+  "sessionStatus": "COMPLETE"
+}
+```
+
+**Frontend guidance:** Check for the `warning` field. If present, show an inline warning banner: _"Persona approved but not yet live — YAML format needs review before it can serve missions."_
+
+`sessionStatus` is only present when `?sessionId=` was supplied and was in `SANDBOX_EXPERIMENT` state.
+
+Records `qualityApprovedBy` and `qualityApprovedAt` for the production approval. When `lifecycleState` is `MONITORING`, the version is loaded into `AgentPersonaRegistry` and immediately available to serve missions.
+
+**Error — 409 Conflict:** Persona is not in `UAT_TRAINING` state.
+
+---
+
+### 7.12 Flag for Improvement (MONITORING → IMPROVEMENT_CANDIDATE)
+
+Flags a live persona for improvement. After this, fork a new `DRAFT` version via `/fork` to start a new authoring cycle.
+
+```
+POST /api/agentbuilder/experiments/$flag-for-improvement
   ?personaId=care-gap-manager
   &version=v1
   &tenantId=my-tenant
@@ -1238,7 +1893,32 @@ Authorization: Bearer <jwt>
 
 **Response:** `204 No Content`
 
-Sets `active=false`. The version is soft-deleted and excluded from browse results.
+**Error — 409 Conflict:** Persona is not in `MONITORING` state.
+
+> **Typical follow-up:**
+>
+> ```
+> POST /api/agentbuilder/experiments/fork?personaId=care-gap-manager&baseVersion=v1&tenantId=my-tenant
+> → { "newVersion": "v1-exp-1728032401234" }
+> ```
+>
+> Then start a new authoring session (`POST /api/agentbuilder/sessions`) with `authoringMode: ADAPT_FROM` pointing to the new forked version.
+
+---
+
+### 7.14 Retire (Any State → Inactive)
+
+```
+POST /api/agentbuilder/experiments/$retire
+  ?personaId=care-gap-manager
+  &version=v1
+  &tenantId=my-tenant
+Authorization: Bearer <jwt>
+```
+
+**Response:** `204 No Content`
+
+Sets `is_active = false`. The version is soft-deleted and excluded from browse results. The `lifecycle_state` column is not changed — use it to see the state at retirement time if needed.
 
 ---
 
@@ -1442,6 +2122,59 @@ Authorization: Bearer <jwt>
 
 ---
 
+### 8.5 Get Available Conversation Models
+
+Returns the LLM models available for selection in the AgentBuilder portal. Call once on portal load to populate the model picker in the "New Session" dialog and to display the active model in the chat window header.
+
+```
+GET /api/agentbuilder/models
+Authorization: Bearer <jwt>
+```
+
+**Response — 200 OK:**
+
+```json
+{
+  "provider": "bedrock",
+  "defaultModelId": "global.anthropic.claude-sonnet-5",
+  "models": [
+    {
+      "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "displayName": "Claude Haiku 4.5",
+      "description": "Fast responses — ideal for quick iterations and exploration",
+      "default": false
+    },
+    {
+      "id": "global.anthropic.claude-sonnet-5",
+      "displayName": "Claude Sonnet 5",
+      "description": "Balanced performance — recommended for most persona designs",
+      "default": true
+    },
+    {
+      "id": "global.anthropic.claude-opus-4-8",
+      "displayName": "Claude Opus 4.8",
+      "description": "Most capable — best for complex multi-step persona logic",
+      "default": false
+    }
+  ]
+}
+```
+
+**Field descriptions:**
+
+| Field                  | Description                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `provider`             | LLM provider: `bedrock`, `ollama`, `openai`, `azure`                                           |
+| `defaultModelId`       | The server-configured default model ID used when no `modelId` is specified at session creation |
+| `models[].id`          | Model ID — pass as `modelId` in `POST /api/agentbuilder/sessions` to select this model         |
+| `models[].displayName` | Human-readable name for display in the portal (e.g. `Claude Sonnet 5`)                         |
+| `models[].description` | Short description of the model's characteristics and recommended use                           |
+| `models[].default`     | `true` for the server-configured default model; at most one entry will have `true`             |
+
+> **UX guidance:** Show a model selector dropdown in the "New Session" dialog pre-selected to the entry where `default: true`. After the session is created, show the selected model's `displayName` in the chat window header (e.g. _"Powered by Claude Opus 4.8"_). If `models` has only one entry, omit the selector and show the model name directly.
+
+---
+
 ## 9. Admin Operations
 
 ### Sync Skills
@@ -1469,11 +2202,24 @@ Other responses:
 
 ---
 
-## 9. Data Models
+## 10. Data Models
 
-### 9.1 Persona Summary (Browse response)
+### 10.1 Persona Summary (Browse response)
 
 ```typescript
+type PersonaLifecycleState =
+  | 'DRAFT'
+  | 'QUALITY_GATE_PENDING'
+  | 'QUALITY_GATE_APPROVED'
+  | 'UAT_TRAINING'
+  | 'PRODUCTION_APPROVED'
+  | 'MONITORING'
+  | 'IMPROVEMENT_CANDIDATE'
+  | 'SUSPENDED'
+  | 'SNAPSHOT_UNDER_REVIEW'
+  | 'UAT_REVALIDATION'
+  | 'NEW_BASELINE_PUBLISHED';
+
 interface PersonaSummary {
   personaId: string; // e.g. "care-gap-manager"
   version: string; // e.g. "v1", "v1-exp-1728032401234"
@@ -1481,15 +2227,23 @@ interface PersonaSummary {
   description: string;
   personaType: 'AGENT' | 'DATA_PIPELINE';
   authoringSource: 'platform' | 'portal' | 'cli';
-  lifecycleState: 'DRAFT' | 'REVIEW' | 'PRODUCTION_APPROVED';
+  lifecycleState: PersonaLifecycleState;
   ownerUserId: string; // empty for platform personas
   updatedAt: string; // ISO-8601
 }
 ```
 
-### 9.2 Authoring Session
+### 10.2 Authoring Session
 
 ```typescript
+type SessionStatus =
+  | 'IN_PROGRESS'
+  | 'AWAITING_REVIEW'
+  | 'QUALITY_REVIEW'
+  | 'SANDBOX_EXPERIMENT'
+  | 'COMPLETE'
+  | 'ABANDONED';
+
 interface AuthoringSession {
   session_id: string; // UUID
   tenant_id: string;
@@ -1499,14 +2253,39 @@ interface AuthoringSession {
   source_persona_version?: string;
   persona_type: 'AGENT' | 'DATA_PIPELINE';
   persona_name?: string; // set once Phase 0 collects it
-  status: 'IN_PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETE' | 'ABANDONED';
+  description?: string; // user-supplied description from session creation
+  authoring_step?: string | null; // non-null = Phase 0 in progress; null/absent = Phases 1-5
+  finalized_persona_id?: string; // set after write_persona_config runs
+  finalized_persona_version?: string;
+  status: SessionStatus;
   current_phase: number; // 0–6
+  selected_model_id?: string; // model chosen at session creation; null = server default
   created_at: string;
   updated_at: string;
 }
+
+// Returned by POST /$resume (includes conversation history)
+interface ResumeResponse extends Pick<
+  AuthoringSession,
+  | 'session_id'
+  | 'status'
+  | 'current_phase'
+  | 'persona_name'
+  | 'selected_model_id'
+> {
+  conversation_turn_count: number;
+  conversation: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+// Returned by GET /{sessionId}/messages
+interface ConversationHistory {
+  sessionId: string;
+  count: number;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
 ```
 
-### 9.3 Evaluation Run
+### 10.3 Evaluation Run
 
 ```typescript
 interface EvalRun {
@@ -1532,7 +2311,7 @@ interface EvalRun {
 }
 ```
 
-### 9.4 Replay Trace Structure
+### 10.4 Replay Trace Structure
 
 ```typescript
 interface ReplayTrace {
@@ -1559,29 +2338,41 @@ interface ReplayTrace {
 
 ---
 
-## 10. Error Handling
+## 11. Error Handling
 
 ### HTTP Status Codes
 
-| Status                      | Cause                                             | Frontend action                   |
-| --------------------------- | ------------------------------------------------- | --------------------------------- |
-| `200 OK`                    | Success with body                                 | Render response                   |
-| `202 Accepted`              | Async job submitted                               | Store `runId`, begin polling      |
-| `204 No Content`            | Mutation succeeded                                | Update UI state                   |
-| `400 Bad Request`           | Invalid state transition, missing params          | Show `message` from response body |
-| `403 Forbidden`             | Not session owner, or missing `agentbuilder` role | Show access-denied message        |
-| `404 Not Found`             | Resource not found                                | Show not-found state              |
-| `500 Internal Server Error` | Unexpected error                                  | Show generic error, offer retry   |
+| Status                      | Cause                                                           | Frontend action                                            |
+| --------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- |
+| `200 OK`                    | Success with body                                               | Render response                                            |
+| `202 Accepted`              | Async job submitted                                             | Store `runId`/`seedJobId`, begin polling                   |
+| `204 No Content`            | Mutation succeeded                                              | Update UI state                                            |
+| `400 Bad Request`           | Invalid params, unknown modelId, seed cohort over limit         | Show `message` from response body                          |
+| `403 Forbidden`             | Not session owner, or missing `agentbuilder` role               | Show access-denied message                                 |
+| `404 Not Found`             | Resource not found                                              | Show not-found state                                       |
+| `409 Conflict`              | Lifecycle state violation — wrong source state for transition   | Show `error` from response body; display the current state |
+| `422 Unprocessable Entity`  | Session has no `finalized_persona_id` (persona not yet written) | Inform user the session is incomplete                      |
+| `500 Internal Server Error` | Unexpected error                                                | Show generic error, offer retry                            |
 
-### Lifecycle Violation Response
+### Lifecycle State Violation Response (409)
+
+Returned when a lifecycle transition is attempted from the wrong state:
 
 ```json
 {
-  "status": 400,
-  "error": "Bad Request",
-  "message": "Cannot approve persona care-gap-manager/v1: expected REVIEW state but found DRAFT"
+  "error": "Cannot transition persona care-gap-manager/v0.1.0: expected QUALITY_GATE_PENDING but found DRAFT"
 }
 ```
+
+Session-level state violations use the same shape:
+
+```json
+{
+  "error": "Session must be AWAITING_REVIEW. Current: IN_PROGRESS"
+}
+```
+
+> **Frontend pattern:** On `409`, read `error` and show it in the action button's error state. Refresh the persona/session data to show the current state — another actor may have already advanced it.
 
 ### SSE Error Event
 
@@ -1592,7 +2383,7 @@ data: Session reached max turns (200).
 
 ---
 
-## 11. Recommended UX Flows
+## 12. Recommended UX Flows
 
 ### Flow 1: Browse Platform Personas → Author a New Persona From One
 
@@ -1600,11 +2391,13 @@ data: Session reached max turns (200).
 1. Load platform personas:
    GET /api/agentbuilder/personas?source=platform
 
-2. User selects "Adapt care-gap-manager v1"
+2. User selects "Adapt care-gap-manager v1", optionally types a description, and picks a model
 3. POST /api/agentbuilder/sessions
    Body: { personaType:"AGENT", authoringMode:"ADAPT_FROM",
-           sourcePersonaId:"care-gap-manager", sourcePersonaVersion:"v1" }
-   → { sessionId }
+           sourcePersonaId:"care-gap-manager", sourcePersonaVersion:"v1",
+           modelId:"global.anthropic.claude-opus-4-8",        // optional; omit for server default
+           description:"Adapted care-gap manager for pediatric diabetic patients" }  // optional
+   → { sessionId, selectedModelId?, description? }
 
 4. Open chat interface (SSE streaming)
 5. Agent presents source persona and asks what to change
@@ -1619,12 +2412,43 @@ data: Session reached max turns (200).
    GET /api/agentbuilder/sessions  →  list of IN_PROGRESS sessions
 
 2. User clicks "Resume" on a session
-3. GET /api/agentbuilder/sessions/{sessionId}  →  session metadata
-4. POST /api/agentbuilder/sessions/{sessionId}/$resume  →  { session_id, status, current_phase, conversation_turn_count }
-5. Open chat interface; continue sending messages:
+3. POST /api/agentbuilder/sessions/{sessionId}/$resume
+   →  { session_id, status, current_phase, persona_name,
+        selected_model_id, conversation_turn_count, conversation[] }
+
+4. Render conversation[] in the chat window (do NOT display the $resume
+   JSON itself — it is session metadata, not a chat message)
+
+5. Display selected model name in chat header:
+   Look up selected_model_id in GET /api/agentbuilder/models → displayName
+
+6. Open chat interface; user continues sending messages:
    POST /api/agentbuilder/sessions/{sessionId}/messages
-   Body: { "message": "Continue from where we left off" }
-5. Agent reloads conversation history and continues
+   Body: { "message": "..." }
+```
+
+**TypeScript example (step 3–5):**
+
+```typescript
+// After user clicks Resume
+const resume = await fetch(`/api/agentbuilder/sessions/${sessionId}/$resume`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
+});
+const data = await resume.json();
+
+// Render prior conversation into chat window
+setChatMessages(data.conversation); // [{ role, content }, ...]
+
+// Show active model in chat header
+const modelsRes = await fetch('/api/agentbuilder/models', {
+  headers: { Authorization: `Bearer ${token}` },
+});
+const { models } = await modelsRes.json();
+const model =
+  models.find((m) => m.id === data.selected_model_id) ??
+  models.find((m) => m.default);
+setChatHeader(`Powered by ${model?.displayName ?? 'AI'}`);
 ```
 
 ### Flow 3: Stop Work
@@ -1633,77 +2457,144 @@ data: Session reached max turns (200).
 1. User clicks "Stop" on an active session
 2. Confirmation: "This session will be abandoned."
 3. POST /api/agentbuilder/sessions/{sessionId}/$abandon
-   Body: { "status": "ABANDONED" }
+   (no request body)
 4. Session disappears from the "My Work" list
 ```
 
-### Flow 4: Experiment and Evaluate
+### Flow 4: Full Lifecycle — Author → Review → Sandbox → Production
+
+The end-to-end flow when using the authoring session (AI-assisted path):
 
 ```
-1. User views their persona (lifecycleState = DRAFT, version = v1)
-2. Clicks "Fork for Experiment"
-3. Portal shows YAML diff editor
-4. POST /api/agentbuilder/experiments/fork
-   → { newVersion: "v1-exp-1728032401234" }
+─── AUTHORING PHASE ──────────────────────────────────────────────────────────
 
-5. On new version: click "Run Evaluation"
+1. Create session:
+   POST /api/agentbuilder/sessions
+     Body: { personaType:"AGENT", authoringMode:"FROM_SCRATCH",
+             description:"<optional user-supplied description shown on session cards>" }
+   → { sessionId, description? }
 
-5a. Create an eval scenario (if not already created):
-    POST /api/agentbuilder/scenarios
-      Body: {
-        personaId, version, scenarioName, scenarioType,
-        seedSpec: {                              // cohort-based test data
-          description: "20 diabetic patients: 10 with recent HbA1c, 10 without",
-          cohortGroups: [
-            { label: "diabetic, controlled", count: 8,
-              conditionCodes: ["73211009"],
-              observationConstraints: [{loincCode:"4548-4", daysBack:180, comparator:"le", value:8.0}] },
-            { label: "diabetic, poor control", count: 2,
-              conditionCodes: ["73211009"],
-              observationConstraints: [{loincCode:"4548-4", daysBack:180, comparator:"gt", value:8.0}] },
-            { label: "diabetic, no recent HbA1c", count: 10,
-              conditionCodes: ["73211009"], noObservations: true }
-          ]
-        },
-        // For parameter-driven personas (e.g. diabetic-care-assessment):
-        missionParams: { patientCohortFilter: "missing-hba1c-6mo", maxResults: 50 }
-        // OR for chat personas (e.g. clinician-digital-twin) instead:
-        // conversationScript: [{ role: "user", content: "Which of my diabetic patients need a care plan?" }]
-      }
-    → 201 { scenarioId }
+2. Author via AI chat (SSE):
+   POST /api/agentbuilder/sessions/{sessionId}/messages
+   ... (multi-turn conversation until AI calls write_persona_config)
+   ← session status transitions to AWAITING_REVIEW automatically
+   ← persona created with lifecycleState = DRAFT
 
-5b. Seed the eval tenant (Step 1):
-    POST /api/agentbuilder/experiments/eval/$seed?scenarioId=<uuid>
-    Header: X-Tenant-ID: <owner-tenant-id>
-    → 202 { seedJobId, evalTenantId: "eval-<uuid>" }
+─── AUTHOR REVIEW PHASE ──────────────────────────────────────────────────────
 
-5c. Poll seed status until COMPLETED:
-    GET /api/agentbuilder/experiments/eval/seed/{seedJobId}  (every 2s)
-    → { seedStatus: "SEEDING", evalTenantId, seededCounts: null }
-    ...
-    → { seedStatus: "COMPLETED", evalTenantId: "eval-abc", seededCounts: { patients: 20, conditions: 20, observations: 10 } }
+3. Author reviews the generated persona YAML:
+   GET /api/agentbuilder/personas/{personaId}?version=v0.1.0
+   ← inspect systemPrompt, tools, toolConfig, formatters, skills, params
 
-6. Submit eval run (Step 2):
+4a. Author approves:
+    POST /api/agentbuilder/sessions/{sessionId}/$approve
+    → { status:"QUALITY_REVIEW", lifecycleState:"QUALITY_GATE_PENDING", ... }
+
+4b. Author rejects (needs revision):
+    POST /api/agentbuilder/sessions/{sessionId}/$reject
+      Body: { "reason": "Tool scope too broad" }
+    → { status:"IN_PROGRESS", lifecycleState:"DRAFT" }
+    → Resume chat and iterate: POST /{sessionId}/messages
+
+─── QUALITY REVIEW PHASE ─────────────────────────────────────────────────────
+
+5. Quality reviewer inspects the persona (same GET as step 3)
+   Verifies guardrails, tool scope, system prompt, risk level
+
+5a. QA approves:
+    POST /api/agentbuilder/sessions/{sessionId}/$quality-approve
+    → { status:"SANDBOX_EXPERIMENT", lifecycleState:"UAT_TRAINING",
+        nextSteps: [...eval API URLs...] }
+
+5b. QA rejects:
+    POST /api/agentbuilder/sessions/{sessionId}/$reject
+      Body: { "reason": "riskLevel should be HIGH for this use case" }
+    → { status:"IN_PROGRESS", lifecycleState:"DRAFT" }
+
+─── SANDBOX EXPERIMENT PHASE ─────────────────────────────────────────────────
+
+6. Create eval scenario (if not yet done):
+   POST /api/agentbuilder/scenarios
+     Body: { personaId, scenarioName, scenarioType:"AGENT",
+             seedSpec: {
+               cohortGroups: [
+                 { label:"diabetic, controlled", count:8, conditionCodes:["73211009"],
+                   observationConstraints:[{loincCode:"4548-4",daysBack:180,comparator:"le",value:8.0}] },
+                 { label:"diabetic, poor control", count:2, conditionCodes:["73211009"],
+                   observationConstraints:[{loincCode:"4548-4",daysBack:180,comparator:"gt",value:8.0}] },
+                 { label:"diabetic, no recent HbA1c", count:10,
+                   conditionCodes:["73211009"], noObservations:true }
+               ]
+             },
+             missionParams:{ patientCohortFilter:"missing-hba1c-6mo", maxResults:50 } }
+   → 201 { scenarioId }
+
+7. Seed eval tenant (Step 1):
+   POST /api/agentbuilder/experiments/eval/$seed?scenarioId=<uuid>
+   Header: X-Tenant-ID: <owner-tenant-id>
+   → 202 { seedJobId, evalTenantId:"eval-<uuid>" }
+
+8. Poll until seeded:
+   GET /api/agentbuilder/experiments/eval/seed/{seedJobId}  (every 2s)
+   → { seedStatus:"COMPLETED", seededCounts:{ patients:20, conditions:20, observations:10 } }
+
+9. Submit eval run (Step 2):
    POST /api/agentbuilder/experiments/eval/$submit
-     Params: personaId=..., version=..., scenarioId=<uuid>,
-             tenantId=<owner>, evalTenantId=eval-abc
+     Params: personaId, version, scenarioId, tenantId, evalTenantId=eval-abc
    → 202 { runId }
 
-7. Poll eval run status until COMPLETED:
-   GET /api/agentbuilder/experiments/eval/{runId}  (every 5s)
+10. Poll eval run:
+    GET /api/agentbuilder/experiments/eval/{runId}  (every 5s)
+    → { runStatus:"COMPLETED", qualityScore:87.5, qualityDimensions:{...} }
 
-8. On COMPLETED: display quality score gauge + Q&A replay + trace viewer
+11. (Optional) Fork and compare alternate version:
+    POST /api/agentbuilder/experiments/fork?personaId=...&baseVersion=v0.1.0&tenantId=...
+    → { newVersion:"v0.1.0-exp-1728032401234" }
+    # Then seed + submit + poll for the new version
+    GET /api/agentbuilder/experiments/$compare?personaId=...&tenantId=...
+    → { betterVersion:"v0.1.0-exp-1728032401234" }
 
-8b. (Optional) Tear down eval tenant once review is done:
-    POST /api/agentbuilder/experiments/eval/$teardown?evalTenantId=eval-a1b2c3d4-...  →  204
+12. (Optional) Tear down eval tenant:
+    POST /api/agentbuilder/experiments/eval/$teardown?evalTenantId=eval-abc  →  204
 
-9. Compare versions:
-   GET /api/agentbuilder/experiments/compare  →  { betterVersion: "v1-exp-..." }
+─── PROMOTION TO PRODUCTION ──────────────────────────────────────────────────
 
-10. Promote winner:
-    POST /api/agentbuilder/experiments/promote  →  204
-    POST /api/agentbuilder/experiments/approve  →  204
-    ← version now PRODUCTION_APPROVED, live in registry
+13. Promote best version (closes session atomically via ?sessionId=):
+    POST /api/agentbuilder/experiments/$approve
+      Params: personaId, version=<bestVersion>, tenantId, sessionId=<session-uuid>
+    → { lifecycleState:"MONITORING", sessionStatus:"COMPLETE", message:"... is now live." }
+    ← persona is loaded into AgentPersonaRegistry and serves real missions
+
+─── POST-PRODUCTION ──────────────────────────────────────────────────────────
+
+14. (Later) Flag for improvement after monitoring reveals issues:
+    POST /api/agentbuilder/experiments/$flag-for-improvement?personaId=...&version=...&tenantId=...
+    → 204
+
+15. Fork new DRAFT and start a new authoring cycle:
+    POST /api/agentbuilder/experiments/fork?personaId=...&baseVersion=v0.1.0&tenantId=...
+    → { newVersion:"v0.1.0-exp-<ts>" }
+    # Then POST /api/agentbuilder/sessions with authoringMode:ADAPT_FROM
+```
+
+### Flow 4b: Experiment and Evaluate Only (Post-Fork, No Session)
+
+When working with a forked version outside of a session:
+
+```
+1. POST /api/agentbuilder/experiments/$promote?personaId=...&version=v0.1.0-exp-...&tenantId=...
+   → 204  (DRAFT → QUALITY_GATE_PENDING)
+
+2. POST /api/agentbuilder/experiments/$quality-approve?...
+   → 204  (QUALITY_GATE_PENDING → QUALITY_GATE_APPROVED)
+
+3. POST /api/agentbuilder/experiments/$enter-sandbox?...
+   → 204  (QUALITY_GATE_APPROVED → UAT_TRAINING)
+
+4. [seed → submit → poll → compare]
+
+5. POST /api/agentbuilder/experiments/$approve?personaId=...&version=...&tenantId=...
+   → 200 { lifecycleState:"MONITORING" }
 ```
 
 ### Flow 5: View My Personas
@@ -1712,28 +2603,49 @@ data: Session reached max turns (200).
 1. GET /api/agentbuilder/personas/mine  →  list of user's portal personas
 2. User sees each persona with lifecycleState badge
 3. Actions available per state:
-   - DRAFT: "Fork", "Submit for Review" (promote), "Retire"
-   - REVIEW: "Approve", "Retire"
-   - PRODUCTION_APPROVED: "Fork", "Retire"
+   - DRAFT:                  "Fork", "Submit for Review" (promote), "Retire"
+   - QUALITY_GATE_PENDING:   "Rollback to Draft" ($reject), "Quality Approve", "Retire"
+   - QUALITY_GATE_APPROVED:  "Enter Sandbox", "Rollback to Draft", "Retire"
+   - UAT_TRAINING:           "Run Eval", "Compare Versions", "Approve for Production", "Rollback to Draft", "Retire"
+   - PRODUCTION_APPROVED:    (transient — auto-advances to MONITORING)
+   - MONITORING:             "Fork", "Flag for Improvement", "Retire"
+   - IMPROVEMENT_CANDIDATE:  "Fork New Version", "Retire"
+```
+
+### Flow 6: Portal Load Sequence (on app startup)
+
+Call these three endpoints in parallel on portal load so the UI is ready before the user takes any action:
+
+```typescript
+const [personas, sessions, models] = await Promise.all([
+  fetch('/api/agentbuilder/personas?source=platform', { headers }).then((r) =>
+    r.json(),
+  ), // platform persona list for Browse tab
+  fetch('/api/agentbuilder/sessions', { headers }).then((r) => r.json()), // in-progress sessions for "My Work" badge
+  fetch('/api/agentbuilder/models', { headers }).then((r) => r.json()), // model picker for "New Session" dialog
+]);
+
+// Pre-select default model
+const defaultModel = models.models.find((m) => m.default) ?? models.models[0];
 ```
 
 ---
 
-## 12. Annex: Database Tables
+## 13. Annex: Database Tables
 
 All tables live in the `workflow` schema of the PostgreSQL database.
 
-| Table                                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workflow.agent_persona_definition`        | **Central persona store.** One row per `(persona_id, version, tenant_id)`. Holds `definition_yaml` (raw YAML), `system_prompt` (resolved system prompt text), `lifecycle_state`, `authoring_source` (`platform` / `portal`), `owner_user_id`, and `is_active`. **Platform personas are seeded at server startup** by `PlatformPersonaSeedService` which reads classpath YAML files and upserts them with `authoring_source='platform'` and `lifecycle_state='PRODUCTION_APPROVED'`. Portal personas are written by the `write_persona_config` MCP tool with `authoring_source='portal'`. Only `PRODUCTION_APPROVED + active=true` versions are loaded into `AgentPersonaRegistry` for live mission execution. |
-| `workflow.platform_agent_onboarding`       | **Authoring session state.** One row per authoring session. Stores `session_id`, `owner_user_id`, `authoring_mode` (`FROM_SCRATCH` or `ADAPT_FROM`), `source_persona_id/version` for adapt mode, `status` (`IN_PROGRESS`, `AWAITING_REVIEW`, `COMPLETE`, `ABANDONED`), `current_phase`, `phase_status` JSONB (per-phase progress summary), the full `conversation` JSONB (turn history for resume), and `spec_markdown` (the accumulated persona specification document). This is the portal-side equivalent of the CLI's `docs/personas/<Persona>.md` file.                                                                                                                                                  |
-| `workflow.platform_agent_onboarding_phase` | **Per-phase artifacts** (child of `platform_agent_onboarding`). One row per `(session_id, phase_number)`. Stores phase-specific content (YAML, Markdown, JSON) produced by each authoring skill phase. Decoupled so the schema supports any number of phases without DDL changes.                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `workflow.platform_authoring_memory`       | **Per-user authoring memory.** Analogous to Claude Code's file-based memory system. One row per `(tenant_id, user_id, memory_key)`. Types: `user` (role/preferences), `feedback` (what to avoid/repeat), `project` (ongoing work), `reference` (external pointers). Injected into the system prompt at session start so the AI agent has continuity across sessions.                                                                                                                                                                                                                                                                                                                                          |
-| `workflow.platform_persona_artifact`       | **Intermediate skill artifacts** scoped to a session. Keyed by `(session_id, path)`. Stores files generated during authoring: `system.md`, companion skill YAMLs, formatters, confirmed terminology codes, and generated BDD feature files. `write_artifact` / `read_artifact` MCP tools read and write this table. Materialized to the server's `fhir-config/` directory when a persona is promoted to `PRODUCTION_APPROVED`.                                                                                                                                                                                                                                                                                |
-| `workflow.persona_evaluation_run`          | **Evaluation run records.** One row per async eval run. Stores `run_status` (`PENDING` → `RUNNING` → `COMPLETED` / `FAILED`), `quality_score` (0–100), `quality_dimensions` JSONB (per-dimension breakdown), `simulated_question` + `persona_response` (for the portal's Q&A replay view), `replay_trace` JSONB (full step-by-step execution trace), and `human_rating` (1–5 optional reviewer score). Each run targets an isolated `eval_tenant_id` sandbox.                                                                                                                                                                                                                                                 |
-| `workflow.eval_scenario`                   | **Evaluation scenario definitions.** Scenarios are reusable — the same scenario can be run against multiple persona versions. Contains `seed_spec` (cohort descriptor for auto-generated FHIR test data; seeded in Step 1 before eval submit), `mission_params` (typed params for parameter-driven personas), `conversation_script` (free-text turns for chat personas), `hitl_script` (canned HITL responses), `response_criteria` (rubric for LLM Judge scoring), and `score_weights`. Referenced by `persona_evaluation_run.scenario_id`.                                                                                                                                                                  |
-| `workflow.eval_seed_job`                   | **Seeding job tracker.** One row per `POST /experiments/eval/$seed` call. Tracks `seed_status` (`PENDING` → `SEEDING` → `COMPLETED` / `FAILED` / `TORN_DOWN`), the isolated `eval_tenant_id` created for the job, `seeded_counts` JSONB (number of Patient / Condition / Observation resources generated), and `error_message` on failure. The portal polls until `COMPLETED` before submitting; `$teardown` transitions status to `TORN_DOWN`.                                                                                                                                                                                                                                                               |
-| `workflow.persona_plugin_skill`            | **SKILL.md version store** (renamed from `plugin_skill`). Indexed by `(plugin_id, skill_id, version)`. Stores the full SKILL.md content of each authoring skill. Synced from the filesystem via `POST /api/agentbuilder/admin/plugins/sync`. The view `workflow.persona_plugin_skill_latest` returns the active version per skill. `SkillLoader` reads from this view and pins a snapshot to each authoring session at session start.                                                                                                                                                                                                                                                                         |
+| Table                                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflow.agent_persona_definition`        | **Central persona store.** One row per `(persona_id, version, tenant_id)`. Holds `definition_yaml` (raw YAML), `system_prompt` (resolved system prompt text), `lifecycle_state`, `authoring_source` (`platform` / `portal`), `owner_user_id`, and `is_active`. **Platform personas are seeded at server startup** by `PlatformPersonaSeedService` which reads classpath YAML files and upserts them with `authoring_source='platform'` and `lifecycle_state='PRODUCTION_APPROVED'`. Portal personas are written by the `write_persona_config` MCP tool with `authoring_source='portal'`. Only `PRODUCTION_APPROVED + active=true` versions are loaded into `AgentPersonaRegistry` for live mission execution.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `workflow.platform_agent_onboarding`       | **Authoring session state.** One row per authoring session. Stores `session_id`, `owner_user_id`, `authoring_mode` (`FROM_SCRATCH` or `ADAPT_FROM`), `source_persona_id/version` for adapt mode, `status` (`IN_PROGRESS`, `AWAITING_REVIEW`, `COMPLETE`, `ABANDONED`), `current_phase`, `phase_status` JSONB (per-phase progress summary), `selected_model_id` (LLM chosen at session creation — null means server default), `description` (user-supplied human-readable description of what the persona should do — collected by the portal before authoring begins and displayed on session cards), `authoring_step` VARCHAR(50) (non-null = Phase 0 in progress; null = Phase 0 complete or session is ADAPT_FROM; possible values: `P0_OUTCOME_INTAKE`, `P0_PROXY_QUESTIONS`, `P0_TYPE_DECISION`, `P0_COHORT_CHECK`, `P0_COHORT_RECIPE`, `P0_AUTHORING_MODE`), `collected_data` JSONB (Phase 0 answers accumulated as keys: `outcome`, `q1`–`q7`, `typeRecommendation`, `typeDecision`, `hasCohort`, `cohortDescription`, `authoringMode`), the full `conversation` JSONB (turn history for resume; returned by `$resume` and `GET /messages` with tool internals stripped), and `spec_markdown` (the accumulated persona specification document). This is the portal-side equivalent of the CLI's `docs/personas/<Persona>.md` file. |
+| `workflow.platform_agent_onboarding_phase` | **Per-phase artifacts** (child of `platform_agent_onboarding`). One row per `(session_id, phase_number)`. Stores phase-specific content (YAML, Markdown, JSON) produced by each authoring skill phase. Decoupled so the schema supports any number of phases without DDL changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `workflow.platform_authoring_memory`       | **Per-user authoring memory.** Analogous to Claude Code's file-based memory system. One row per `(tenant_id, user_id, memory_key)`. Types: `user` (role/preferences), `feedback` (what to avoid/repeat), `project` (ongoing work), `reference` (external pointers). Injected into the system prompt at session start so the AI agent has continuity across sessions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `workflow.platform_persona_artifact`       | **Intermediate skill artifacts** scoped to a session. Keyed by `(session_id, path)`. Stores files generated during authoring: `system.md`, companion skill YAMLs, formatters, confirmed terminology codes, and generated BDD feature files. `write_artifact` / `read_artifact` MCP tools read and write this table. Materialized to the server's `fhir-config/` directory when a persona is promoted to `PRODUCTION_APPROVED`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `workflow.persona_evaluation_run`          | **Evaluation run records.** One row per async eval run. Stores `run_status` (`PENDING` → `RUNNING` → `COMPLETED` / `FAILED`), `quality_score` (0–100), `quality_dimensions` JSONB (per-dimension breakdown), `simulated_question` + `persona_response` (for the portal's Q&A replay view), `replay_trace` JSONB (full step-by-step execution trace), and `human_rating` (1–5 optional reviewer score). Each run targets an isolated `eval_tenant_id` sandbox.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `workflow.persona_eval_scenario`           | **Evaluation scenario definitions.** Scenarios are reusable — the same scenario can be run against multiple persona versions. Created via `POST /api/agentbuilder/scenarios`. Contains `seed_spec` (cohort descriptor for auto-generated FHIR test data; seeded in Step 1 before eval submit), `mission_params` (typed params for parameter-driven personas), `conversation_script` (free-text turns for chat personas), `hitl_script` (canned HITL responses), `response_criteria` (auto-generated rubric from `RubricGenerator` when `generateRubric=true`), and `score_weights`. Referenced by `persona_evaluation_run.scenario_id`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `workflow.eval_seed_job`                   | **Seeding job tracker.** One row per `POST /experiments/eval/$seed` call. Tracks `seed_status` (`PENDING` → `SEEDING` → `COMPLETED` / `FAILED` / `TORN_DOWN`), the isolated `eval_tenant_id` created for the job, `seeded_counts` JSONB (number of Patient / Condition / Observation resources generated), and `error_message` on failure. The portal polls until `COMPLETED` before submitting; `$teardown` transitions status to `TORN_DOWN`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `workflow.persona_plugin_skill`            | **SKILL.md version store** (renamed from `plugin_skill`). Indexed by `(plugin_id, skill_id, version)`. Stores the full SKILL.md content of each authoring skill. Synced from the filesystem via `POST /api/agentbuilder/admin/plugins/sync`. The view `workflow.persona_plugin_skill_latest` returns the active version per skill. `SkillLoader` reads from this view and pins a snapshot to each authoring session at session start.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Table Relationships
 
@@ -1760,6 +2672,7 @@ GET    /api/agentbuilder/personas?source=platform|portal|all   List personas by 
 GET    /api/agentbuilder/personas/mine                         List caller's own (portal-authored) personas
 GET    /api/agentbuilder/personas/{personaId}                  Get full persona detail (AGENT or DATA_PIPELINE)
 GET    /api/agentbuilder/skills                                List all available skills for persona authoring
+GET    /api/agentbuilder/models                                Available LLM models for user selection; includes default flag (call on portal load)
 GET    /api/agentbuilder/formatters                            List all formatter definitions across all personas
 GET    /api/agentbuilder/formatters/{personaId}                Formatter coverage for a specific persona
 GET    /api/agentbuilder/formatters/{personaId}/{resourceType} Single formatter definition (YAML)
@@ -1767,12 +2680,24 @@ GET    /api/agentbuilder/formatters/{personaId}/{resourceType} Single formatter 
 # Authoring Sessions
 POST   /api/agentbuilder/sessions                              Create session (FROM_SCRATCH or ADAPT_FROM)
 GET    /api/agentbuilder/sessions                              List caller's non-abandoned sessions
-GET    /api/agentbuilder/sessions/{sessionId}                  Get session detail (for resume)
+GET    /api/agentbuilder/sessions/{sessionId}                  Get session metadata
+GET    /api/agentbuilder/sessions/{sessionId}/messages         Get visible conversation history (user+assistant turns)
 POST   /api/agentbuilder/sessions/{sessionId}/$abandon         Abandon (soft-delete) a session
-POST   /api/agentbuilder/sessions/{sessionId}/$resume          Resume a session (returns turn count)
+POST   /api/agentbuilder/sessions/{sessionId}/$resume          Resume a session (returns metadata + conversation history)
 POST   /api/agentbuilder/sessions/{sessionId}/messages         Send message, stream response (SSE)
 
-# Experiments & Lifecycle
+# Session Lifecycle Review (ConversationSessionController)
+POST   /api/agentbuilder/sessions/{sessionId}/$approve         AWAITING_REVIEW→QUALITY_REVIEW + persona DRAFT→QUALITY_GATE_PENDING
+POST   /api/agentbuilder/sessions/{sessionId}/$quality-approve QUALITY_REVIEW→SANDBOX_EXPERIMENT + persona →UAT_TRAINING (two persona hops)
+POST   /api/agentbuilder/sessions/{sessionId}/$complete        SANDBOX_EXPERIMENT→COMPLETE (call after /experiments/$approve)
+POST   /api/agentbuilder/sessions/{sessionId}/$reject          Any review/sandbox state → IN_PROGRESS; persona → DRAFT
+
+# Eval Scenarios (EvalScenarioController)
+POST   /api/agentbuilder/scenarios                             Create a reusable eval scenario (cohort + mission input)
+GET    /api/agentbuilder/scenarios?personaId=...               List scenarios for a persona
+GET    /api/agentbuilder/scenarios/{scenarioId}                Get full scenario detail (seedSpec, missionParams, rubric)
+
+# Experiments & Lifecycle (PersonaExperimentController)
 POST   /api/agentbuilder/experiments/fork                      Fork version as new DRAFT experiment
 POST   /api/agentbuilder/experiments/eval/$seed                Step 1: seed eval tenant with test data
 GET    /api/agentbuilder/experiments/eval/seed/{seedJobId}     Poll seed job status (PENDING→COMPLETED)
@@ -1780,10 +2705,13 @@ POST   /api/agentbuilder/experiments/eval/$submit              Step 2: submit as
 POST   /api/agentbuilder/experiments/eval/$teardown            Step 3: delete eval tenant resources
 GET    /api/agentbuilder/experiments/eval                      List eval runs for persona/version
 GET    /api/agentbuilder/experiments/eval/{runId}              Get eval run detail + quality score + trace
-GET    /api/agentbuilder/experiments/compare                   Compare versions by quality score
-POST   /api/agentbuilder/experiments/promote                   DRAFT → REVIEW
-POST   /api/agentbuilder/experiments/approve                   REVIEW → PRODUCTION_APPROVED
-POST   /api/agentbuilder/experiments/retire                    Any → retired (active=false)
+GET    /api/agentbuilder/experiments/$compare                   Compare versions by quality score
+POST   /api/agentbuilder/experiments/$promote                   DRAFT → QUALITY_GATE_PENDING
+POST   /api/agentbuilder/experiments/$quality-approve           QUALITY_GATE_PENDING → QUALITY_GATE_APPROVED
+POST   /api/agentbuilder/experiments/$enter-sandbox             QUALITY_GATE_APPROVED → UAT_TRAINING
+POST   /api/agentbuilder/experiments/$approve                   UAT_TRAINING → PRODUCTION_APPROVED → MONITORING; optional ?sessionId= closes session
+POST   /api/agentbuilder/experiments/$flag-for-improvement      MONITORING → IMPROVEMENT_CANDIDATE
+POST   /api/agentbuilder/experiments/$retire                    Any → retired (is_active=false)
 
 # Admin
 POST   /api/agentbuilder/admin/plugins/sync                    Sync SKILL.md files into DB

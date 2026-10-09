@@ -1804,6 +1804,8 @@ const PatientRecordsPage: React.FC = () => {
   const [harmonizerIgnoreReason, setHarmonizerIgnoreReason] = useState('');
   const [harmonizerReviewActionError, setHarmonizerReviewActionError] =
     useState<string | null>(null);
+  const [showRevisionFeedback, setShowRevisionFeedback] = useState(false);
+  const [revisionFeedback, setRevisionFeedback] = useState('');
   const [pendingHarmonizerMissions, setPendingHarmonizerMissions] = useState<
     HarmonizerPendingMission[]
   >([]);
@@ -2425,13 +2427,11 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
-  const rejectHarmonizerReview = async (mode: 'REVISE' | 'DISCARD') => {
+  const submitHarmonizerRejection = async (
+    mode: 'REVISE' | 'DISCARD',
+    instructions: string,
+  ) => {
     if (!noteUploadJobId) return;
-    const instructions =
-      mode === 'REVISE'
-        ? window.prompt('Describe the changes required:', '')?.trim()
-        : 'Discard this document import.';
-    if (mode === 'REVISE' && !instructions) return;
     setHarmonizerReviewActionError(null);
     try {
       await harmonizerReviewService.reject(
@@ -2454,6 +2454,15 @@ const PatientRecordsPage: React.FC = () => {
         error?.message || 'Unable to submit the review decision.',
       );
     }
+  };
+
+  const rejectHarmonizerReview = async (mode: 'REVISE' | 'DISCARD') => {
+    if (mode === 'REVISE') {
+      setRevisionFeedback('');
+      setShowRevisionFeedback(true);
+      return;
+    }
+    await submitHarmonizerRejection(mode, 'Discard this document import.');
   };
 
   const pollHarmonizerJobStatus = async (
@@ -5867,6 +5876,64 @@ const PatientRecordsPage: React.FC = () => {
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
+      {showRevisionFeedback && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget)
+              setShowRevisionFeedback(false);
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="revision-feedback-title"
+            className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const instructions = revisionFeedback.trim();
+              if (!instructions) return;
+              setShowRevisionFeedback(false);
+              void submitHarmonizerRejection('REVISE', instructions);
+            }}
+          >
+            <h2
+              id="revision-feedback-title"
+              className="text-base font-semibold text-slate-900"
+            >
+              Request changes
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Describe what should be changed in the generated resources.
+            </p>
+            <textarea
+              autoFocus
+              required
+              rows={5}
+              value={revisionFeedback}
+              onChange={(event) => setRevisionFeedback(event.target.value)}
+              className="mt-4 w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRevisionFeedback(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!revisionFeedback.trim() || isNoteUploadPolling}
+                className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50"
+              >
+                Submit changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">

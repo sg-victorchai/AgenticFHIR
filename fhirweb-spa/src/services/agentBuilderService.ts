@@ -14,7 +14,15 @@ export interface PersonaSummary {
   scope?: string;
   personaType: 'AGENT' | 'DATA_PIPELINE' | string;
   authoringSource: 'platform' | 'portal' | 'cli' | string;
-  lifecycleState: 'DRAFT' | 'REVIEW' | 'PRODUCTION_APPROVED' | string;
+  lifecycleState:
+    | 'DRAFT'
+    | 'QUALITY_GATE_PENDING'
+    | 'QUALITY_GATE_APPROVED'
+    | 'UAT_TRAINING'
+    | 'PRODUCTION_APPROVED'
+    | 'MONITORING'
+    | 'IMPROVEMENT_CANDIDATE'
+    | string;
   ownerUserId?: string;
   updatedAt?: string;
   [key: string]: unknown;
@@ -47,6 +55,13 @@ export interface PersonaDetail extends PersonaSummary {
 
 export interface AuthoringSession {
   session_id: string;
+  authoring_step?: AuthoringStep;
+  finalized_persona_id?: string;
+  finalized_persona_version?: string;
+  selectedModelId?: string;
+  selected_model_id?: string;
+  modelId?: string;
+  model_id?: string;
   tenant_id?: string;
   owner_user_id?: string;
   authoring_mode: 'FROM_SCRATCH' | 'ADAPT_FROM' | string;
@@ -54,11 +69,78 @@ export interface AuthoringSession {
   source_persona_version?: string;
   persona_type: 'AGENT' | 'DATA_PIPELINE' | string;
   persona_name?: string;
-  status: 'IN_PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETE' | 'ABANDONED' | string;
+  description?: string;
+  status:
+    | 'IN_PROGRESS'
+    | 'AWAITING_REVIEW'
+    | 'QUALITY_REVIEW'
+    | 'SANDBOX_EXPERIMENT'
+    | 'COMPLETE'
+    | 'ABANDONED'
+    | string;
   current_phase: number;
   created_at: string;
   updated_at: string;
   [key: string]: unknown;
+}
+
+export interface AuthoringTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export type AuthoringStep =
+  | 'P0_OUTCOME_INTAKE'
+  | 'P0_PROXY_QUESTIONS'
+  | 'P0_TYPE_DECISION'
+  | 'P0_COHORT_CHECK'
+  | 'P0_COHORT_RECIPE'
+  | 'P0_AUTHORING_MODE'
+  | null;
+
+export type LifecycleAction =
+  | 'promote'
+  | 'quality-approve'
+  | 'enter-sandbox'
+  | 'approve'
+  | 'flag-for-improvement'
+  | 'retire';
+export type SessionReviewAction =
+  | 'approve'
+  | 'quality-approve'
+  | 'complete'
+  | 'reject';
+export interface LifecycleResult {
+  sessionId?: string;
+  status?: string;
+  personaId?: string;
+  version?: string;
+  lifecycleState?: string;
+  sessionStatus?: string;
+  message?: string;
+  warning?: string;
+  nextSteps?: string[];
+}
+
+export interface ResumedAuthoringSession {
+  session_id: string;
+  status: AuthoringSession['status'];
+  current_phase: number;
+  persona_name?: string;
+  selected_model_id?: string;
+  conversation_turn_count: number;
+  conversation: AuthoringTurn[];
+}
+
+export interface ConversationModels {
+  provider: string;
+  defaultModelId: string;
+  models: Array<{
+    id: string;
+    displayName: string;
+    description?: string;
+    default?: boolean;
+  }>;
 }
 
 export interface EvalRun {
@@ -92,7 +174,67 @@ export interface SeedStatus {
     | 'TORN_DOWN'
     | string;
   seededCounts?: Record<string, number>;
-  errorMessage?: string;
+  patientCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  errorMessage?: string | null;
+}
+
+export interface SeededPatients {
+  seedJobId: string;
+  evalTenantId: string;
+  seedStatus: string;
+  patientIds: string[];
+  patientCount: number;
+}
+
+export const normalizeSeedStatus = (
+  status: Omit<SeedStatus, 'seededCounts'> & { seededCounts?: unknown },
+): SeedStatus => {
+  let counts = status.seededCounts;
+  if (typeof counts === 'string') {
+    try {
+      counts = JSON.parse(counts);
+    } catch {
+      counts = undefined;
+    }
+  }
+  const seededCounts =
+    counts && typeof counts === 'object' && !Array.isArray(counts)
+      ? (Object.fromEntries(
+          Object.entries(counts).filter(
+            ([, count]) =>
+              typeof count === 'number' &&
+              Number.isInteger(count) &&
+              count >= 0,
+          ),
+        ) as Record<string, number>)
+      : undefined;
+  return { ...status, seededCounts };
+};
+
+export interface SeededPatientBundle {
+  resourceType: 'Bundle';
+  type: 'collection';
+  total?: number;
+  entry?: Array<{ resource?: Record<string, unknown> }>;
+}
+
+export interface ScenarioSummary {
+  scenarioId: string;
+  personaId?: string;
+  scenarioName: string;
+  scenarioType: string;
+  hasSeedSpec?: boolean;
+  hasMissionParams?: boolean;
+  createdAt?: string;
+}
+
+export interface ScenarioDetail extends ScenarioSummary {
+  seedSpec?: Record<string, unknown> | null;
+  missionParams?: Record<string, unknown> | null;
+  conversationScript?: AuthoringTurn[] | null;
+  responseCriteria?: unknown;
 }
 
 const apiUrl = (path: string) => `${API_BASE}${path}`;
@@ -128,6 +270,7 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
 };
 
 export const agentBuilderService = {
+  getModels: () => request<ConversationModels>('/api/agentbuilder/models'),
   listPersonas: (source: 'platform' | 'portal' | 'all' = 'all') =>
     request<PersonaSummary[]>(`/api/agentbuilder/personas?source=${source}`),
   listMine: () => request<PersonaSummary[]>('/api/agentbuilder/personas/mine'),
@@ -147,15 +290,26 @@ export const agentBuilderService = {
     authoringMode: 'FROM_SCRATCH' | 'ADAPT_FROM';
     sourcePersonaId?: string;
     sourcePersonaVersion?: string;
+    modelId?: string;
+    description?: string;
   }) =>
-    request<{ sessionId: string }>('/api/agentbuilder/sessions', {
+    request<{
+      sessionId: string;
+      selectedModelId?: string;
+      description?: string;
+      authoring_step?: AuthoringStep;
+    }>('/api/agentbuilder/sessions', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   resumeSession: (id: string) =>
-    request<Record<string, any>>(
+    request<ResumedAuthoringSession>(
       `/api/agentbuilder/sessions/${encodeURIComponent(id)}/$resume`,
       { method: 'POST' },
+    ),
+  getSessionMessages: (id: string) =>
+    request<{ sessionId: string; count: number; messages: AuthoringTurn[] }>(
+      `/api/agentbuilder/sessions/${encodeURIComponent(id)}/messages`,
     ),
   abandonSession: (id: string) =>
     request<void>(
@@ -164,10 +318,21 @@ export const agentBuilderService = {
         method: 'POST',
       },
     ),
+  reviewSession: (id: string, action: SessionReviewAction, reason?: string) =>
+    request<LifecycleResult>(
+      `/api/agentbuilder/sessions/${encodeURIComponent(id)}/$${action}`,
+      {
+        method: 'POST',
+        ...(action === 'reject' && reason
+          ? { body: JSON.stringify({ reason }) }
+          : {}),
+      },
+    ),
   streamMessage: async (
     id: string,
     message: string,
     onToken: (token: string) => void,
+    onStep?: (step: AuthoringStep) => void,
   ) => {
     const headers = await getAuthenticatedHeaders({
       'X-Tenant-ID': TENANT_ID,
@@ -191,6 +356,8 @@ export const agentBuilderService = {
     const dispatchEvent = () => {
       const data = dataLines.join('\n');
       if (eventName === 'token' || eventName === 'message') onToken(data);
+      if (eventName === 'step')
+        onStep?.((data.trim() || null) as AuthoringStep);
       if (eventName === 'error')
         throw new Error(data || 'Authoring session failed.');
       if (eventName === 'done') completed = true;
@@ -228,8 +395,12 @@ export const agentBuilderService = {
       { method: 'POST', body: JSON.stringify(body) },
     ),
   listScenarios: (personaId: string) =>
-    request<any[]>(
+    request<ScenarioSummary[]>(
       `/api/agentbuilder/scenarios?personaId=${encodeURIComponent(personaId)}`,
+    ),
+  getScenario: (scenarioId: string) =>
+    request<ScenarioDetail>(
+      `/api/agentbuilder/scenarios/${encodeURIComponent(scenarioId)}`,
     ),
   seedScenario: (scenarioId: string) =>
     request<{ seedJobId: string; evalTenantId: string }>(
@@ -239,6 +410,18 @@ export const agentBuilderService = {
   getSeedStatus: (seedJobId: string) =>
     request<SeedStatus>(
       `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}`,
+    ).then(normalizeSeedStatus),
+  listSeedJobs: (scenarioId: string) =>
+    request<SeedStatus[]>(
+      `/api/agentbuilder/experiments/eval/seed?scenarioId=${encodeURIComponent(scenarioId)}`,
+    ).then((jobs) => jobs.map(normalizeSeedStatus)),
+  getSeededPatients: (seedJobId: string) =>
+    request<SeededPatients>(
+      `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}/patients`,
+    ),
+  getSeededPatientBundle: (seedJobId: string, patientId: string) =>
+    request<SeededPatientBundle>(
+      `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}/patients/${encodeURIComponent(patientId)}`,
     ),
   submitEval: (params: {
     personaId: string;
@@ -262,7 +445,7 @@ export const agentBuilderService = {
   },
   compare: (personaId: string, tenantId: string) =>
     request<{ betterVersion: string }>(
-      `/api/agentbuilder/experiments/compare?${new URLSearchParams({ personaId, tenantId })}`,
+      `/api/agentbuilder/experiments/$compare?${new URLSearchParams({ personaId, tenantId })}`,
     ),
   fork: (
     personaId: string,
@@ -275,13 +458,14 @@ export const agentBuilderService = {
       { method: 'POST', body: JSON.stringify({ patchYaml }) },
     ),
   lifecycle: (
-    action: 'promote' | 'approve' | 'retire',
+    action: LifecycleAction,
     personaId: string,
     version: string,
     tenantId: string,
+    sessionId?: string,
   ) =>
-    request<void>(
-      `/api/agentbuilder/experiments/${action}?${new URLSearchParams({ personaId, version, tenantId })}`,
+    request<LifecycleResult | undefined>(
+      `/api/agentbuilder/experiments/$${action}?${new URLSearchParams({ personaId, version, tenantId, ...(sessionId ? { sessionId } : {}) })}`,
       { method: 'POST' },
     ),
   teardown: (evalTenantId: string) =>
