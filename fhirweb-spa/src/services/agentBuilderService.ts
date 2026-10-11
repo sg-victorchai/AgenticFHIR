@@ -188,6 +188,24 @@ export interface SeededPatients {
   patientCount: number;
 }
 
+export interface TerminologySearchCode {
+  system: string;
+  code: string;
+  display?: string;
+}
+
+export interface TerminologySearchResult {
+  name?: string;
+  displayName?: string;
+  chineseDisplayName?: string;
+  resourceType?: string;
+  synonyms?: string[];
+  codes?: TerminologySearchCode[];
+  primaryCode?: string;
+  primarySystem?: string;
+  primaryDisplay?: string;
+}
+
 export const normalizeSeedStatus = (
   status: Omit<SeedStatus, 'seededCounts'> & { seededCounts?: unknown },
 ): SeedStatus => {
@@ -286,6 +304,21 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
 };
 
 export const agentBuilderService = {
+  searchTerminology: async (query: string, resourceType: string) => {
+    const params = new URLSearchParams({ q: query, resourceType });
+    const result = await request<unknown>(`/api/terminology/search?${params}`);
+    if (Array.isArray(result)) return result as TerminologySearchResult[];
+    if (result && typeof result === 'object') {
+      const payload = result as {
+        results?: unknown;
+        entries?: unknown;
+        items?: unknown;
+      };
+      const rows = payload.results ?? payload.entries ?? payload.items;
+      if (Array.isArray(rows)) return rows as TerminologySearchResult[];
+    }
+    return [];
+  },
   getModels: () => request<ConversationModels>('/api/agentbuilder/models'),
   listPersonas: (source: 'platform' | 'portal' | 'all' = 'all') =>
     request<PersonaSummary[]>(`/api/agentbuilder/personas?source=${source}`),

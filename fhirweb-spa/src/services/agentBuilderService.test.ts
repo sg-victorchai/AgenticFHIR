@@ -27,6 +27,29 @@ const mockStream = (chunks: string[]) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('persisted evaluation data endpoints', () => {
+  it('searches terminology using encoded query and resource type', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string) =>
+        new Response(
+          JSON.stringify([
+            {
+              displayName: 'Metoprolol',
+              primaryCode: '866427',
+              primarySystem: 'http://www.nlm.nih.gov/research/umls/rxnorm',
+            },
+          ]),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await agentBuilderService.searchTerminology(
+      'metoprolol tartrate',
+      'Medication',
+    );
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/api/terminology/search?q=metoprolol+tartrate&resourceType=Medication',
+    );
+    expect(result[0].primaryCode).toBe('866427');
+  });
   it('requests resource-type pages with encoded IDs and pagination defaults', async () => {
     const fetchMock = vi.fn(
       async (_url: string) =>

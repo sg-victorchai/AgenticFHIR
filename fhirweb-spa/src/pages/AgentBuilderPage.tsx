@@ -2150,7 +2150,7 @@ const AgentBuilderPage: React.FC = () => {
                 !scenarioId ? (
                   <form
                     onSubmit={beginEvaluation}
-                    className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:grid-cols-2"
+                    className="grid gap-4 rounded-2xl border-2 border-slate-300 bg-white p-5 shadow-md shadow-slate-900/[0.04] xl:grid-cols-2"
                   >
                     <div className="xl:col-span-2 flex items-start justify-between">
                       <div>
@@ -2182,12 +2182,13 @@ const AgentBuilderPage: React.FC = () => {
                     </label>
                     <label className="text-xs font-medium text-slate-600">
                       Test patient population
-                      <input
+                      <textarea
                         required
+                        rows={3}
                         value={seedDescription}
                         placeholder="e.g. 20 diabetic patients: 10 with recent HbA1c, 10 without"
                         onChange={(e) => setSeedDescription(e.target.value)}
-                        className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        className="mt-1.5 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm"
                       />
                     </label>
                     <EvaluationCohortEditor

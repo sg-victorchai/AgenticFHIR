@@ -89,6 +89,40 @@ describe('scenario scoring', () => {
     ).toThrow('repeated');
   });
 
+  it('warns inline when a data source repeats code and explains how to fix it', () => {
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add expected data source' }),
+    );
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'Observation' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
+    const parameterFields = screen.getAllByRole('textbox', {
+      name: 'Search parameter',
+    });
+    fireEvent.change(parameterFields[0], { target: { value: 'code' } });
+    fireEvent.change(
+      screen.getAllByRole('textbox', { name: 'Expected value' })[0],
+      { target: { value: '4548-4' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
+    fireEvent.change(
+      screen.getAllByRole('textbox', { name: 'Search parameter' })[1],
+      { target: { value: 'code' } },
+    );
+    fireEvent.change(
+      screen.getAllByRole('textbox', { name: 'Expected value' })[1],
+      { target: { value: '85354-9' } },
+    );
+    expect(screen.getByRole('alert').textContent).toContain(
+      'code is repeated in this data source',
+    );
+    expect(screen.getByRole('alert').textContent).toContain(
+      'add another expected data source',
+    );
+  });
+
   it('preserves manual criteria when switching rubric mode and shows scoring guidance', () => {
     render(<Harness />);
     const checkbox = screen.getByRole('checkbox');
@@ -100,7 +134,12 @@ describe('scenario scoring', () => {
       { target: { value: 'Does not invent lab values' } },
     );
     fireEvent.click(checkbox);
-    expect(screen.queryByRole('textbox')).toBeNull();
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      'Does not invent lab values',
+    );
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).required).toBe(
+      false,
+    );
     fireEvent.click(checkbox);
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
       'Does not invent lab values',
@@ -111,6 +150,49 @@ describe('scenario scoring', () => {
     expect(
       screen.getByLabelText('Automatic criteria guidance').textContent,
     ).toContain('800 characters');
+  });
+
+  it('submits entered response criteria even with automatic generation enabled', () => {
+    expect(
+      buildScenarioScoring({
+        ...newScenarioScoring(),
+        criteria: 'Does not fabricate lab values',
+      }),
+    ).toEqual({
+      generateRubric: true,
+      responseCriteria: ['Does not fabricate lab values'],
+      expectedQueryPatterns: [],
+    });
+  });
+
+  it('separates the three inputs and reveals info boxes only when opened', () => {
+    render(<Harness />);
+    expect(
+      screen.getByRole('heading', { name: '1. Auto-generated baseline' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: '2. What makes a good response?' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('heading', {
+        name: '3. Did the agent query the right data?',
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText('generateRubric')).toBeNull();
+    expect(screen.queryByText('responseCriteria')).toBeNull();
+    expect(screen.queryByText('expectedQueryPatterns')).toBeNull();
+    for (const title of [
+      'About automatic criteria',
+      'About response quality scoring',
+      'About expected data queries',
+    ]) {
+      const summary = screen.getByText(title);
+      const disclosure = summary.parentElement as HTMLDetailsElement;
+      expect(disclosure.open).toBe(false);
+      fireEvent.click(summary);
+      expect(disclosure.open).toBe(true);
+    }
+    expect(screen.getByRole('textbox').className).toContain('font-normal');
   });
 
   it('lets users add and remove data sources and filters without JSON', () => {
@@ -130,7 +212,12 @@ describe('scenario scoring', () => {
       target: { value: '85354-9' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Remove filter' }));
-    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(
+      screen.queryByRole('textbox', { name: 'Search parameter' }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('textbox', { name: 'Expected value' }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Remove data source' }));
     expect(screen.queryByRole('combobox')).toBeNull();
   });

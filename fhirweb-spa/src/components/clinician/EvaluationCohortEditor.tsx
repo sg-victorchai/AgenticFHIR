@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import {
+  agentBuilderService,
+  TerminologySearchResult,
+} from '../../services/agentBuilderService';
 
 export interface CohortGroupDraft {
   label: string;
@@ -11,6 +15,11 @@ export interface CohortGroupDraft {
     comparator: string;
     value: number;
   }>;
+  medicationRequests: Array<{
+    medicationCode: string;
+    status: string;
+    daysBack: number;
+  }>;
 }
 
 export const newCohortGroup = (): CohortGroupDraft => ({
@@ -19,6 +28,7 @@ export const newCohortGroup = (): CohortGroupDraft => ({
   conditionCodes: '',
   noObservations: false,
   observationConstraints: [],
+  medicationRequests: [],
 });
 
 export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
@@ -48,6 +58,17 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
       throw new Error(
         'Each lab criterion needs a LOINC code, a positive lookback in days, and a numeric value.',
       );
+    if (
+      group.medicationRequests.some(
+        (medication) =>
+          !medication.medicationCode.trim() ||
+          !Number.isInteger(medication.daysBack) ||
+          medication.daysBack < 1,
+      )
+    )
+      throw new Error(
+        'Each medication needs a code and a positive lookback in days.',
+      );
     const conditionCodes = group.conditionCodes
       .split(',')
       .map((code) => code.trim())
@@ -65,12 +86,222 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
               ),
             }
           : {}),
+      ...(group.medicationRequests.length
+        ? {
+            medicationRequests: group.medicationRequests.map((medication) => ({
+              ...medication,
+              medicationCode: medication.medicationCode.trim(),
+            })),
+          }
+        : {}),
     };
   });
 };
 
 const inputClass =
   'mt-1 w-full min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm';
+
+const TerminologyCodeSearch: React.FC<{
+  resourceType: 'Condition' | 'Observation' | 'MedicationRequest';
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  multiple?: boolean;
+}> = ({
+  resourceType,
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  multiple = false,
+}) => {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<TerminologySearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const selectedCodes = multiple
+    ? value
+        .split(',')
+        .map((code) => code.trim())
+        .filter(Boolean)
+    : [];
+
+  useEffect(() => {
+    const term = query.trim();
+    if (!searchOpen || term.length < 2) {
+      setResults([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    const timer = window.setTimeout(() => {
+      void agentBuilderService
+        .searchTerminology(term, resourceType)
+        .then(
+          (items) => {
+            if (active) {
+              setResults(items);
+              setError(null);
+            }
+          },
+          (failure: unknown) => {
+            if (active) {
+              setResults([]);
+              setError(
+                failure instanceof Error
+                  ? failure.message
+                  : 'Terminology search failed.',
+              );
+            }
+          },
+        )
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, resourceType, searchOpen]);
+
+  const addCode = (code: string) => {
+    const normalized = code.trim();
+    if (!normalized) return;
+    onChange(
+      multiple
+        ? [...new Set([...selectedCodes, normalized])].join(', ')
+        : normalized,
+    );
+    setQuery('');
+    setResults([]);
+    setError(null);
+    setSearchOpen(false);
+  };
+  const options = results
+    .flatMap((result) => {
+      const codes = result.codes?.length
+        ? result.codes
+        : result.primaryCode
+          ? [
+              {
+                system: result.primarySystem || '',
+                code: result.primaryCode,
+                display: result.primaryDisplay,
+              },
+            ]
+          : [];
+      return codes.map((code) => ({
+        code: code.code,
+        label: code.display || result.displayName || result.name || code.code,
+        source: result.displayName || result.name || '',
+      }));
+    })
+    .filter((option) => option.code);
+
+  const showManualCode =
+    searchOpen &&
+    query.trim().length >= 2 &&
+    !loading &&
+    !options.some((option) => option.code === query.trim());
+  const showSearchPanel =
+    searchOpen && (loading || error || options.length > 0 || showManualCode);
+  return (
+    <div className="relative min-w-0">
+      <input
+        aria-label={ariaLabel}
+        value={searchOpen ? query : value}
+        onFocus={() => {
+          setSearchOpen(true);
+          setQuery('');
+        }}
+        onChange={(event) => {
+          setSearchOpen(true);
+          setQuery(event.target.value);
+          if (!multiple) onChange(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            setSearchOpen(false);
+            setQuery('');
+            setResults([]);
+          }
+          if (event.key === 'Enter' && showManualCode) {
+            event.preventDefault();
+            addCode(query);
+          }
+        }}
+        onBlur={(event) => {
+          if (
+            !event.currentTarget.parentElement?.contains(
+              event.relatedTarget as Node | null,
+            )
+          ) {
+            setSearchOpen(false);
+            setQuery('');
+            setResults([]);
+          }
+        }}
+        placeholder={placeholder}
+        className={inputClass}
+      />
+      {showSearchPanel && (
+        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+          {loading && (
+            <p role="status" className="px-3 py-2 text-xs text-slate-500">
+              Searching terminology...
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="px-3 py-2 text-xs text-rose-700">
+              {error} You can still enter a code manually.
+            </p>
+          )}
+          {showManualCode && (
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-xs font-medium text-cyan-800 hover:bg-cyan-50"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => addCode(query)}
+            >
+              Use entered code “{query.trim()}”
+            </button>
+          )}
+          {options.length > 0 && (
+            <ul role="listbox" aria-label={`${ariaLabel} search results`}>
+              {options.map((option, index) => (
+                <li key={`${option.code}:${index}`}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected="false"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => addCode(option.code)}
+                    className="w-full px-3 py-2 text-left text-xs hover:bg-cyan-50"
+                  >
+                    <span className="font-semibold">{option.label}</span>
+                    <span className="ml-2 font-mono text-slate-500">
+                      {option.code}
+                    </span>
+                    {option.source && (
+                      <span className="ml-2 text-slate-400">
+                        {option.source}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const EvaluationCohortEditor: React.FC<{
   groups: CohortGroupDraft[];
@@ -136,14 +367,14 @@ const EvaluationCohortEditor: React.FC<{
               />
             </label>
             <label className="text-xs font-medium text-slate-600">
-              Condition codes (optional)
-              <input
+              Conditions (optional)
+              <TerminologyCodeSearch
+                resourceType="Condition"
                 value={group.conditionCodes}
-                onChange={(event) =>
-                  update(index, { conditionCodes: event.target.value })
-                }
-                placeholder="e.g. 73211009 (comma-separated codes)"
-                className={inputClass}
+                onChange={(conditionCodes) => update(index, { conditionCodes })}
+                placeholder="Search condition or SNOMED code"
+                ariaLabel={`Condition codes for group ${index + 1}`}
+                multiple
               />
             </label>
           </div>
@@ -174,14 +405,12 @@ const EvaluationCohortEditor: React.FC<{
                   >
                     <label className="text-xs text-slate-600">
                       Lab test LOINC code
-                      <input
-                        required
+                      <TerminologyCodeSearch
+                        resourceType="Observation"
                         value={rule.loincCode}
-                        onChange={(event) =>
-                          updateRule({ loincCode: event.target.value })
-                        }
-                        placeholder="e.g. 4548-4 (HbA1c)"
-                        className={inputClass}
+                        onChange={(loincCode) => updateRule({ loincCode })}
+                        placeholder="Search lab test or enter LOINC code"
+                        ariaLabel={`Lab test code for group ${index + 1}, criterion ${ruleIndex + 1}`}
                       />
                     </label>
                     <label className="text-xs text-slate-600">
@@ -265,6 +494,95 @@ const EvaluationCohortEditor: React.FC<{
               </button>
             </div>
           )}
+          <div className="space-y-3">
+            {group.medicationRequests.map((medication, medicationIndex) => {
+              const updateMedication = (patch: Partial<typeof medication>) =>
+                update(index, {
+                  medicationRequests: group.medicationRequests.map(
+                    (item, position) =>
+                      position === medicationIndex
+                        ? { ...item, ...patch }
+                        : item,
+                  ),
+                });
+              return (
+                <div
+                  key={medicationIndex}
+                  className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[2fr,1fr,1fr,auto]"
+                >
+                  <label className="text-xs text-slate-600">
+                    Medication
+                    <TerminologyCodeSearch
+                      resourceType="MedicationRequest"
+                      value={medication.medicationCode}
+                      onChange={(medicationCode) =>
+                        updateMedication({ medicationCode })
+                      }
+                      placeholder="Search medication or enter RxNorm code"
+                      ariaLabel={`Medication code for group ${index + 1}, medication ${medicationIndex + 1}`}
+                    />
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    Order status
+                    <select
+                      value={medication.status}
+                      onChange={(event) =>
+                        updateMedication({ status: event.target.value })
+                      }
+                      className={inputClass}
+                    >
+                      <option value="active">Active</option>
+                      <option value="completed">Completed</option>
+                      <option value="on-hold">On hold</option>
+                      <option value="stopped">Stopped</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    Within the last (days)
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={medication.daysBack}
+                      onChange={(event) =>
+                        updateMedication({
+                          daysBack: Number(event.target.value),
+                        })
+                      }
+                      className={inputClass}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="py-2 text-xs text-rose-700"
+                    onClick={() =>
+                      update(index, {
+                        medicationRequests: group.medicationRequests.filter(
+                          (_, position) => position !== medicationIndex,
+                        ),
+                      })
+                    }
+                  >
+                    Remove criterion
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() =>
+                update(index, {
+                  medicationRequests: [
+                    ...group.medicationRequests,
+                    { medicationCode: '', status: 'active', daysBack: 180 },
+                  ],
+                })
+              }
+              className="text-xs font-medium text-cyan-700"
+            >
+              + Add medication criteria
+            </button>
+          </div>
         </div>
       ))}
       <div className="flex items-center justify-between gap-2">
