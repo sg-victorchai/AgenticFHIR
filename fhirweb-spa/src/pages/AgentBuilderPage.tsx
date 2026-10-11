@@ -45,6 +45,13 @@ type ConfirmationRequest = {
   onConfirm: () => void | Promise<void>;
 };
 
+export const qualityScoreToPercent = (score?: number): number | undefined => {
+  if (score === undefined || score === null || !Number.isFinite(score))
+    return undefined;
+  const percent = score >= 0 && score <= 1 ? score * 100 : score;
+  return Math.round(percent * 10) / 10;
+};
+
 const normalizeConfirmationName = (name: string) =>
   name
     .normalize('NFKC')
@@ -240,14 +247,6 @@ const StatusBadge: React.FC<{ value?: string }> = ({ value }) => {
 
 const dateTime = (value?: string) =>
   value ? new Date(value).toLocaleString() : '—';
-const readJson = <T,>(value?: string): T | undefined => {
-  if (!value) return undefined;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return undefined;
-  }
-};
 
 const AgentBuilderPage: React.FC = () => {
   const navigate = useNavigate();
@@ -333,9 +332,6 @@ const AgentBuilderPage: React.FC = () => {
   const [showScenarioDraft, setShowScenarioDraft] = useState(false);
   const [evalRun, setEvalRun] = useState<EvalRun | null>(null);
   const [evalRuns, setEvalRuns] = useState<EvalRun[]>([]);
-  const [expandedEvalRunId, setExpandedEvalRunId] = useState<string | null>(
-    null,
-  );
   const [scenarioId, setScenarioId] = useState<string | null>(null);
   const [savedScenario, setSavedScenario] = useState<ScenarioDetail | null>(
     null,
@@ -377,7 +373,6 @@ const AgentBuilderPage: React.FC = () => {
   useEffect(() => {
     let active = true;
     setEvaluationDetail(null);
-    setExpandedEvalRunId(null);
     setScenarioScoring(newScenarioScoring());
     setEvaluationDetailError(null);
     setSavedScenario(null);
@@ -1132,22 +1127,6 @@ const AgentBuilderPage: React.FC = () => {
     { id: 'admin', label: 'Platform assets', icon: 'settings' },
   ];
   const isFocusedAuthoring = view === 'authoring' && Boolean(sessionId);
-  const recentEvalRuns = [
-    ...new Map(
-      [...evalRuns, ...(evalRun ? [evalRun] : [])].map((run) => [
-        run.runId,
-        run,
-      ]),
-    ).values(),
-  ].sort((first, second) => {
-    const timestamp = (run: EvalRun) => {
-      const value = Date.parse(
-        run.createdAt || run.startedAt || run.completedAt || '',
-      );
-      return Number.isNaN(value) ? 0 : value;
-    };
-    return timestamp(second) - timestamp(first);
-  });
   const returnToEvaluationList = () => {
     setEvaluationTarget(null);
     setSeedJob(null);
@@ -2553,203 +2532,6 @@ const AgentBuilderPage: React.FC = () => {
                     )}
                   </div>
                 )}
-                {evaluationTarget && recentEvalRuns.length > 0 && (
-                  <section className="rounded-xl border border-slate-200 bg-white p-4">
-                    <h2 className="text-sm font-semibold">Recent runs</h2>
-                    <div className="mt-3 divide-y divide-slate-100">
-                      {recentEvalRuns.map((run) => (
-                        <div key={run.runId}>
-                          <button
-                            type="button"
-                            aria-expanded={expandedEvalRunId === run.runId}
-                            aria-controls={`evaluation-result-${run.runId}`}
-                            onClick={() => {
-                              if (expandedEvalRunId === run.runId) {
-                                setExpandedEvalRunId(null);
-                                return;
-                              }
-                              setExpandedEvalRunId(run.runId);
-                              if (evalRun) {
-                                setEvalRuns((previous) => [
-                                  ...previous.filter(
-                                    (item) => item.runId !== evalRun.runId,
-                                  ),
-                                  evalRun,
-                                ]);
-                              }
-                              setEvalRun(run);
-                              void agentBuilderService
-                                .getEval(run.runId)
-                                .then((updated) => {
-                                  setEvalRuns((previous) => [
-                                    ...previous.filter(
-                                      (item) => item.runId !== updated.runId,
-                                    ),
-                                    updated,
-                                  ]);
-                                  setEvalRun((current) =>
-                                    current?.runId === updated.runId
-                                      ? updated
-                                      : current,
-                                  );
-                                })
-                                .catch((error) =>
-                                  notify('error', String(error)),
-                                );
-                            }}
-                            title={
-                              expandedEvalRunId === run.runId
-                                ? 'Collapse evaluation result'
-                                : 'Expand evaluation result'
-                            }
-                            className="group flex w-full items-center justify-between gap-3 rounded-lg py-3 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"
-                          >
-                            <span className="flex min-w-0 items-center gap-3">
-                              <span
-                                aria-hidden="true"
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${expandedEvalRunId === run.runId ? 'border-cyan-700 bg-cyan-700 text-white' : 'border-slate-300 bg-slate-100 text-slate-700 group-hover:border-cyan-500 group-hover:bg-cyan-50 group-hover:text-cyan-800'}`}
-                              >
-                                <Icon
-                                  name="chevron"
-                                  className={`h-5 w-5 transition-transform ${expandedEvalRunId === run.runId ? 'rotate-90' : ''}`}
-                                />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block text-xs font-semibold text-slate-800">
-                                  {run.personaVersion} · {run.runId.slice(0, 8)}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  {dateTime(
-                                    run.createdAt ||
-                                      run.startedAt ||
-                                      run.completedAt,
-                                  )}
-                                </span>
-                              </span>
-                            </span>
-                            <span className="flex items-center gap-3">
-                              <StatusBadge value={run.runStatus} />
-                              <span className="text-sm font-semibold">
-                                {run.qualityScore ?? '—'}
-                              </span>
-                            </span>
-                          </button>
-                          {expandedEvalRunId === run.runId &&
-                            evalRun?.runId === run.runId && (
-                              <div
-                                id={`evaluation-result-${run.runId}`}
-                                className="w-full pb-4"
-                              >
-                                <div className="space-y-3">
-                                  <EvalRunCard run={evalRun} />
-                                  {['COMPLETED', 'FAILED'].includes(
-                                    evalRun.runStatus,
-                                  ) &&
-                                    evaluationTarget && (
-                                      <div className="flex flex-wrap gap-2">
-                                        <Button
-                                          disabled={busy}
-                                          onClick={async () => {
-                                            try {
-                                              const result =
-                                                await agentBuilderService.compare(
-                                                  evaluationTarget.personaId,
-                                                  TENANT_ID,
-                                                );
-                                              notify(
-                                                'success',
-                                                result.betterVersion === 'none'
-                                                  ? 'No completed evaluations to compare.'
-                                                  : `Highest-scoring version: ${result.betterVersion}`,
-                                              );
-                                            } catch (error) {
-                                              setLifecycleError(
-                                                error instanceof Error
-                                                  ? error.message
-                                                  : 'Unable to compare versions.',
-                                              );
-                                            }
-                                          }}
-                                        >
-                                          Compare versions
-                                        </Button>
-                                        {seedJob &&
-                                          seedJob.seedStatus !==
-                                            'TORN_DOWN' && (
-                                            <Button
-                                              disabled={busy}
-                                              onClick={async () => {
-                                                setConfirmation({
-                                                  title:
-                                                    'Clean up sandbox data?',
-                                                  message: `This permanently removes test data from sandbox tenant ${seedJob.evalTenantId}.`,
-                                                  confirmLabel:
-                                                    'Delete sandbox data',
-                                                  tone: 'danger',
-                                                  onConfirm: async () => {
-                                                    setBusy(true);
-                                                    try {
-                                                      await agentBuilderService.teardown(
-                                                        seedJob.evalTenantId,
-                                                      );
-                                                      setSeedJob({
-                                                        ...seedJob,
-                                                        seedStatus: 'TORN_DOWN',
-                                                      });
-                                                    } catch (error) {
-                                                      setLifecycleError(
-                                                        error instanceof Error
-                                                          ? error.message
-                                                          : 'Unable to clean up sandbox.',
-                                                      );
-                                                    } finally {
-                                                      setBusy(false);
-                                                    }
-                                                  },
-                                                });
-                                              }}
-                                            >
-                                              Clean up sandbox
-                                            </Button>
-                                          )}
-                                      </div>
-                                    )}
-                                  {evalRun.runStatus === 'COMPLETED' &&
-                                    evaluationTarget?.lifecycleState ===
-                                      'UAT_TRAINING' &&
-                                    evalRun.personaId ===
-                                      evaluationTarget.personaId &&
-                                    evalRun.personaVersion ===
-                                      evaluationTarget.version && (
-                                      <Button
-                                        tone="accent"
-                                        disabled={busy}
-                                        onClick={() => {
-                                          setConfirmation({
-                                            title: 'Approve for production?',
-                                            message: `Approve ${evaluationTarget.name} ${evaluationTarget.version} for production after reviewing this evaluation?`,
-                                            confirmLabel:
-                                              'Approve for production',
-                                            tone: 'primary',
-                                            onConfirm: () =>
-                                              runLifecycle(
-                                                'approve',
-                                                evaluationTarget,
-                                              ),
-                                          });
-                                        }}
-                                      >
-                                        Approve for production
-                                      </Button>
-                                    )}
-                                </div>
-                              </div>
-                            )}
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
               </section>
             )}
 
@@ -3685,91 +3467,5 @@ const PersonaDrawer: React.FC<{
     </aside>
   </div>
 );
-
-const EvalRunCard: React.FC<{ run: EvalRun }> = ({ run }) => {
-  const dimensions =
-    typeof run.qualityDimensions === 'string'
-      ? readJson<Record<string, number>>(run.qualityDimensions)
-      : run.qualityDimensions;
-  const trace =
-    typeof run.replayTrace === 'string'
-      ? readJson<any>(run.replayTrace)
-      : run.replayTrace;
-  return (
-    <article className="w-full border-t border-slate-100 py-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-mono text-slate-400">
-            Run {run.runId}
-          </p>
-          <h2 className="mt-1 text-sm font-semibold">Evaluation result</h2>
-        </div>
-        <StatusBadge value={run.runStatus} />
-      </div>
-      {run.runStatus === 'PENDING' || run.runStatus === 'RUNNING' ? (
-        <div className="mt-5 flex items-center gap-3 text-xs text-cyan-700">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
-          Running evaluation in isolated tenant…
-        </div>
-      ) : run.runStatus === 'FAILED' ? (
-        <p className="mt-4 rounded-lg bg-rose-50 p-3 text-xs text-rose-700">
-          {run.errorMessage || 'Evaluation failed.'}
-        </p>
-      ) : (
-        <>
-          <div className="mt-4 flex items-end gap-3">
-            <p className="text-4xl font-semibold tracking-tight">
-              {run.qualityScore ?? '—'}
-              <span className="ml-1 text-sm font-normal text-slate-400">
-                /100
-              </span>
-            </p>
-            <p className="pb-1 text-xs text-slate-500">Quality score</p>
-          </div>
-          {dimensions && (
-            <div className="mt-4 space-y-2">
-              {Object.entries(dimensions).map(([name, value]) => (
-                <div key={name}>
-                  <div className="mb-1 flex justify-between text-[11px]">
-                    <span className="text-slate-600">
-                      {name.replace(/([A-Z])/g, ' $1')}
-                    </span>
-                    <span className="font-medium">
-                      {Math.round(value * 100)}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-slate-100">
-                    <div
-                      className="h-1.5 rounded-full bg-cyan-500"
-                      style={{
-                        width: `${Math.max(0, Math.min(100, value * 100))}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <details className="mt-4">
-            <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-              Scenario response
-            </summary>
-            <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
-              {run.personaResponse || 'No response returned.'}
-            </p>
-          </details>
-          <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-              Replay trace
-            </summary>
-            <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] text-emerald-100">
-              {JSON.stringify(trace ?? {}, null, 2)}
-            </pre>
-          </details>
-        </>
-      )}
-    </article>
-  );
-};
 
 export default AgentBuilderPage;

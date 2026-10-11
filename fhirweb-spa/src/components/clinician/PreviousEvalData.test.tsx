@@ -14,10 +14,13 @@ vi.mock('../../services/agentBuilderService', () => ({
     listScenarios: vi.fn(),
     listSeedJobs: vi.fn(),
     listEvalRuns: vi.fn(),
+    listEvalRunsForSeedJob: vi.fn(),
     getScenario: vi.fn(),
+    getEval: vi.fn(),
     getSeededPatients: vi.fn(),
     getSeededPatientBundle: vi.fn(),
     seedScenario: vi.fn(),
+    teardown: vi.fn(),
   },
 }));
 
@@ -39,7 +42,7 @@ const completed = {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(agentBuilderService.listScenarios).mockResolvedValue([scenario]);
-  vi.mocked(agentBuilderService.listEvalRuns).mockResolvedValue([]);
+  vi.mocked(agentBuilderService.listEvalRunsForSeedJob).mockResolvedValue([]);
   vi.mocked(agentBuilderService.listSeedJobs).mockResolvedValue([
     {
       ...completed,
@@ -50,6 +53,16 @@ beforeEach(() => {
     completed,
   ]);
   vi.mocked(agentBuilderService.getScenario).mockResolvedValue(scenario);
+  vi.mocked(agentBuilderService.getEval).mockImplementation(async (runId) => ({
+    runId,
+    personaId: 'persona-1',
+    personaVersion: '1',
+    runStatus: 'COMPLETED',
+    evalTenantId: 'saved-tenant',
+    qualityScore: 1,
+    personaResponse: 'Created two care plans.',
+    simulatedQuestion: 'Review this patient.',
+  }));
   vi.mocked(agentBuilderService.getSeededPatients).mockResolvedValue({
     ...completed,
     patientIds: ['patient-1', 'patient-2'],
@@ -74,7 +87,7 @@ afterEach(cleanup);
 
 describe('PreviousEvalData', () => {
   it('keeps evaluated data browsable while disabling another submission', async () => {
-    vi.mocked(agentBuilderService.listEvalRuns).mockResolvedValue([
+    vi.mocked(agentBuilderService.listEvalRunsForSeedJob).mockResolvedValue([
       {
         runId: 'existing-run',
         personaId: 'persona-1',
@@ -200,5 +213,144 @@ describe('PreviousEvalData', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh seed jobs' }));
     expect(await screen.findByRole('combobox')).toBeTruthy();
+  });
+
+  it('loads seed-scoped run history and opens the full run detail', async () => {
+    vi.mocked(agentBuilderService.listEvalRunsForSeedJob).mockResolvedValue([
+      {
+        runId: 'run-new',
+        personaId: 'persona-1',
+        personaVersion: '1',
+        runStatus: 'COMPLETED',
+        evalTenantId: 'saved-tenant',
+        qualityScore: 1,
+        createdAt: '2026-10-11T12:00:00Z',
+      },
+      {
+        runId: 'run-old',
+        personaId: 'persona-1',
+        personaVersion: '1',
+        runStatus: 'FAILED',
+        evalTenantId: 'saved-tenant',
+        qualityScore: 0.4,
+        createdAt: '2026-10-10T12:00:00Z',
+      },
+    ]);
+    vi.mocked(agentBuilderService.getEval).mockResolvedValue({
+      runId: 'run-new',
+      personaId: 'persona-1',
+      personaVersion: '1',
+      runStatus: 'COMPLETED',
+      evalTenantId: 'saved-tenant',
+      qualityScore: 1,
+      personaResponse: 'Created two care plans.',
+      simulatedQuestion: 'Review this patient.',
+    });
+    render(
+      <PreviousEvalData
+        personaId="persona-1"
+        refreshKey=""
+        disabled={false}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText('Run History')).toBeTruthy();
+    expect(agentBuilderService.listEvalRunsForSeedJob).toHaveBeenCalledWith(
+      'completed-job',
+    );
+    expect(screen.getByText('100/100')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'View' })[0]);
+    expect(await screen.findByText('Created two care plans.')).toBeTruthy();
+    expect(screen.getByText('Review this patient.')).toBeTruthy();
+    expect(
+      screen
+        .getByTestId('seed-run-row-run-new')
+        .contains(screen.getByText('Evaluation run details')),
+    ).toBe(true);
+    expect(
+      screen
+        .getByTestId('seed-run-row-run-new')
+        .contains(
+          screen.getByText('Evaluation run details').closest('section'),
+        ),
+    ).toBe(true);
+  });
+
+  it('loads scenario scoring and cohort details on request', async () => {
+    vi.mocked(agentBuilderService.getScenario).mockResolvedValue({
+      ...scenario,
+      seedSpec: {
+        description: 'Hypertension cohort',
+        cohortGroups: [{ label: 'Uncontrolled', count: 5 }],
+      },
+      conversationScript: [{ role: 'user', content: 'Review the patient.' }],
+      responseCriteria: ['States the latest blood pressure'],
+      expectedQueryPatterns: [
+        { resourceType: 'Observation', expectedParams: { code: '8480-6' } },
+      ],
+    });
+    render(
+      <PreviousEvalData
+        personaId="persona-1"
+        refreshKey=""
+        disabled={false}
+        onSubmit={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'View scenario details' }),
+    );
+    expect(await screen.findByText('Scenario definition')).toBeTruthy();
+    expect(screen.getByText('Seed specification')).toBeTruthy();
+    expect(screen.getByText('Conversation script')).toBeTruthy();
+    expect(screen.getByText('Response criteria')).toBeTruthy();
+    expect(screen.getByText('Expected query patterns')).toBeTruthy();
+  });
+
+  it('requires viewing a completed run before teardown and marks the job torn down', async () => {
+    vi.mocked(agentBuilderService.listEvalRunsForSeedJob).mockResolvedValue([
+      {
+        runId: 'run-new',
+        personaId: 'persona-1',
+        personaVersion: '1',
+        runStatus: 'COMPLETED',
+        evalTenantId: 'saved-tenant',
+        qualityScore: 0.8,
+      },
+    ]);
+    vi.mocked(agentBuilderService.getEval).mockResolvedValue({
+      runId: 'run-new',
+      personaId: 'persona-1',
+      personaVersion: '1',
+      runStatus: 'COMPLETED',
+      evalTenantId: 'saved-tenant',
+      qualityScore: 0.8,
+    });
+    render(
+      <PreviousEvalData
+        personaId="persona-1"
+        refreshKey=""
+        disabled={false}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(
+      (
+        (await screen.findByRole('button', {
+          name: 'Tear down sandbox',
+        })) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    await screen.findByText('Evaluation run details');
+    fireEvent.click(screen.getByRole('button', { name: 'Tear down sandbox' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('alertdialog').querySelector('button:last-child')!,
+    );
+    await waitFor(() =>
+      expect(agentBuilderService.teardown).toHaveBeenCalledWith('saved-tenant'),
+    );
+    expect(screen.getByText('Sandbox data removed')).toBeTruthy();
   });
 });

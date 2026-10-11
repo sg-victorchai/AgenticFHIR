@@ -27,6 +27,40 @@ const mockStream = (chunks: string[]) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('persisted evaluation data endpoints', () => {
+  it('lists evaluation runs for a specific encoded seed job ID', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string) => new Response(JSON.stringify([])),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.listEvalRunsForSeedJob('seed/job-id');
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/eval/seed/seed%2Fjob-id/runs',
+    );
+  });
+
+  it('lists runs for one seed job using the scoped endpoint', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string) => new Response(JSON.stringify([])),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.listEvalRunsForSeedJob('seed/job');
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/eval/seed/seed%2Fjob/runs',
+    );
+  });
+
+  it('tears down a sandbox tenant using the teardown operation', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.teardown('eval/tenant');
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/eval/$teardown?evalTenantId=eval%2Ftenant',
+    );
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+  });
   it('searches terminology using encoded query and resource type', async () => {
     const fetchMock = vi.fn(
       async (_url: string) =>

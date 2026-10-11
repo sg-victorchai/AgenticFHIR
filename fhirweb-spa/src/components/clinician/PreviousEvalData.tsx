@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   agentBuilderService,
+  EvalRun,
   ScenarioDetail,
   ScenarioSummary,
   SeedStatus,
   SeededPatientBundle,
 } from '../../services/agentBuilderService';
+import ConfirmationDialog from '../common/ConfirmationDialog';
 
 interface PreviousSeed {
   scenario: ScenarioSummary;
@@ -23,7 +25,20 @@ const PreviousEvalData: React.FC<{
   const [selectedId, setSelectedId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [evaluatedTenants, setEvaluatedTenants] = useState<string[]>([]);
+  const [jobRuns, setJobRuns] = useState<EvalRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const [runDetail, setRunDetail] = useState<EvalRun | null>(null);
+  const [runDetailLoading, setRunDetailLoading] = useState(false);
+  const [reviewedRunIds, setReviewedRunIds] = useState<string[]>([]);
+  const [scenarioDetail, setScenarioDetail] = useState<ScenarioDetail | null>(
+    null,
+  );
+  const [scenarioLoading, setScenarioLoading] = useState(false);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+  const [showTeardownConfirmation, setShowTeardownConfirmation] =
+    useState(false);
+  const [tearingDown, setTearingDown] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [browseJob, setBrowseJob] = useState<SeedStatus | null>(null);
@@ -36,8 +51,13 @@ const PreviousEvalData: React.FC<{
   const selected = items.find((item) => item.job.seedJobId === selectedId);
   const alreadyEvaluated = Boolean(
     selected &&
-    (evaluatedTenants.includes(selected.job.evalTenantId) ||
+    (jobRuns.some((run) => run.evalTenantId === selected.job.evalTenantId) ||
       selected.job.evalTenantId === submittedTenantId),
+  );
+  const hasReviewedFinishedRun = jobRuns.some(
+    (run) =>
+      ['COMPLETED', 'FAILED'].includes(run.runStatus) &&
+      reviewedRunIds.includes(run.runId),
   );
   const buttonClass =
     'rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium disabled:opacity-50';
@@ -48,13 +68,7 @@ const PreviousEvalData: React.FC<{
     setError(null);
     void (async () => {
       try {
-        const [scenarios, runs] = await Promise.all([
-          agentBuilderService.listScenarios(personaId),
-          agentBuilderService.listEvalRuns(
-            personaId,
-            import.meta.env.VITE_TENANT_ID || 'default',
-          ),
-        ]);
+        const scenarios = await agentBuilderService.listScenarios(personaId);
         const histories = await Promise.all(
           scenarios.map(async (scenario) => {
             const jobs = await agentBuilderService.listSeedJobs(
@@ -71,9 +85,6 @@ const PreviousEvalData: React.FC<{
             ),
           );
         if (!active) return;
-        setEvaluatedTenants(
-          runs.flatMap((run) => (run.evalTenantId ? [run.evalTenantId] : [])),
-        );
         setItems(previous);
         setSelectedId((current) =>
           previous.some((item) => item.job.seedJobId === current)
@@ -99,6 +110,53 @@ const PreviousEvalData: React.FC<{
       requestId.current += 1;
     };
   }, [personaId, refreshKey, refresh]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setJobRuns([]);
+      setRunDetail(null);
+      return;
+    }
+    let active = true;
+    setRunsLoading(true);
+    setRunsError(null);
+    setJobRuns([]);
+    setRunDetail(null);
+    setScenarioDetail(null);
+    setScenarioError(null);
+    void agentBuilderService
+      .listEvalRunsForSeedJob(selectedId)
+      .then(
+        (runs) => {
+          if (active)
+            setJobRuns(
+              [...runs].sort((first, second) => {
+                const timestamp = (run: EvalRun) => {
+                  const parsed = Date.parse(
+                    run.createdAt || run.startedAt || run.completedAt || '',
+                  );
+                  return Number.isNaN(parsed) ? 0 : parsed;
+                };
+                return timestamp(second) - timestamp(first);
+              }),
+            );
+        },
+        (failure: unknown) => {
+          if (active)
+            setRunsError(
+              failure instanceof Error
+                ? failure.message
+                : 'Unable to load runs for this seed job.',
+            );
+        },
+      )
+      .finally(() => {
+        if (active) setRunsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
 
   const browsePatients = async (job: SeedStatus) => {
     const current = ++requestId.current;
@@ -147,6 +205,71 @@ const PreviousEvalData: React.FC<{
         );
     } finally {
       if (current === requestId.current) setBrowseLoading(false);
+    }
+  };
+
+  const loadScenarioDetails = async () => {
+    if (!selected) return;
+    setScenarioLoading(true);
+    setScenarioError(null);
+    try {
+      setScenarioDetail(
+        await agentBuilderService.getScenario(selected.scenario.scenarioId),
+      );
+    } catch (failure) {
+      setScenarioError(
+        failure instanceof Error
+          ? failure.message
+          : 'Unable to load scenario details.',
+      );
+    } finally {
+      setScenarioLoading(false);
+    }
+  };
+
+  const viewRun = async (run: EvalRun) => {
+    setRunDetailLoading(true);
+    setRunsError(null);
+    try {
+      const detail = await agentBuilderService.getEval(run.runId);
+      setRunDetail(detail);
+      setReviewedRunIds((previous) =>
+        previous.includes(run.runId) ? previous : [...previous, run.runId],
+      );
+    } catch (failure) {
+      setRunsError(
+        failure instanceof Error
+          ? failure.message
+          : 'Unable to load evaluation run details.',
+      );
+    } finally {
+      setRunDetailLoading(false);
+    }
+  };
+
+  const teardown = async () => {
+    if (!selected) return;
+    setTearingDown(true);
+    setRunsError(null);
+    try {
+      await agentBuilderService.teardown(selected.job.evalTenantId);
+      setItems((previous) =>
+        previous.map((item) =>
+          item.job.seedJobId === selected.job.seedJobId
+            ? { ...item, job: { ...item.job, seedStatus: 'TORN_DOWN' } }
+            : item,
+        ),
+      );
+      setRunDetail(null);
+      setShowTeardownConfirmation(false);
+    } catch (failure) {
+      setRunsError(
+        failure instanceof Error
+          ? failure.message
+          : 'Unable to tear down sandbox data.',
+      );
+    } finally {
+      setTearingDown(false);
     }
   };
 
@@ -323,7 +446,224 @@ const PreviousEvalData: React.FC<{
                       ? 'Already evaluated'
                       : 'Submit Eval'}
                 </button>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={scenarioLoading}
+                  onClick={() => void loadScenarioDetails()}
+                >
+                  {scenarioLoading
+                    ? 'Loading scenario...'
+                    : scenarioDetail
+                      ? 'Refresh scenario details'
+                      : 'View scenario details'}
+                </button>
+                {selected.job.seedStatus === 'TORN_DOWN' ? (
+                  <span className="self-center text-xs font-semibold text-slate-500">
+                    Sandbox data removed
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-50"
+                    disabled={tearingDown || !hasReviewedFinishedRun}
+                    title={
+                      !hasReviewedFinishedRun
+                        ? 'View a completed or failed run before tearing down this sandbox'
+                        : undefined
+                    }
+                    onClick={() => setShowTeardownConfirmation(true)}
+                  >
+                    Tear down sandbox
+                  </button>
+                )}
               </div>
+              {scenarioError && (
+                <p role="alert" className="text-xs text-rose-700">
+                  {scenarioError}
+                </p>
+              )}
+              {scenarioDetail && (
+                <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <h3 className="text-sm font-semibold">Scenario definition</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {scenarioDetail.scenarioName} · {scenarioDetail.scenarioId}
+                  </p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        ['Seed specification', scenarioDetail.seedSpec],
+                        [
+                          'Conversation script',
+                          scenarioDetail.conversationScript,
+                        ],
+                        ['Response criteria', scenarioDetail.responseCriteria],
+                        [
+                          'Expected query patterns',
+                          scenarioDetail.expectedQueryPatterns,
+                        ],
+                      ] as const
+                    ).map(([label, content]) => (
+                      <details
+                        key={label}
+                        className="rounded border border-slate-200 bg-white p-2"
+                      >
+                        <summary className="cursor-pointer text-xs font-medium">
+                          {label}
+                        </summary>
+                        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-[11px]">
+                          {content == null
+                            ? 'Not provided.'
+                            : JSON.stringify(content, null, 2)}
+                        </pre>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {runsLoading && (
+                <p role="status" className="text-xs text-slate-500">
+                  Loading runs for this seed job...
+                </p>
+              )}
+              {runsError && (
+                <p role="alert" className="text-xs text-rose-700">
+                  {runsError}
+                </p>
+              )}
+              {!runsLoading && !runsError && (
+                <section className="rounded-lg border border-slate-200">
+                  <h3 className="border-b border-slate-200 px-3 py-2 text-sm font-semibold">
+                    Run History
+                  </h3>
+                  {!jobRuns.length ? (
+                    <p className="px-3 py-3 text-xs text-slate-500">
+                      No evaluation runs for this seed job.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {jobRuns.map((run) => {
+                        const score =
+                          run.qualityScore === undefined
+                            ? undefined
+                            : Math.round(
+                                (run.qualityScore >= 0 && run.qualityScore <= 1
+                                  ? run.qualityScore * 100
+                                  : run.qualityScore) * 10,
+                              ) / 10;
+                        const scoreColor =
+                          score === undefined
+                            ? 'bg-slate-100 text-slate-600'
+                            : score >= 90
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : score >= 60
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800';
+                        return (
+                          <div
+                            key={run.runId}
+                            data-testid={`seed-run-row-${run.runId}`}
+                            className="px-3 py-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs text-slate-600">
+                                {new Date(
+                                  run.createdAt ||
+                                    run.startedAt ||
+                                    run.completedAt ||
+                                    '',
+                                ).toLocaleString()}{' '}
+                                · {run.runStatus}
+                              </span>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className={`rounded-full px-2 py-1 text-xs font-semibold ${scoreColor}`}
+                                >
+                                  {score === undefined ? '—' : `${score}/100`}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-xs font-semibold text-cyan-800 underline"
+                                  disabled={runDetailLoading}
+                                  aria-expanded={runDetail?.runId === run.runId}
+                                  onClick={() => void viewRun(run)}
+                                >
+                                  {runDetail?.runId === run.runId
+                                    ? 'Viewing'
+                                    : 'View'}
+                                </button>
+                              </span>
+                            </div>
+                            {runDetail?.runId === run.runId && (
+                              <section className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50/50 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <h3 className="text-sm font-semibold">
+                                      Evaluation run details
+                                    </h3>
+                                    <p className="break-all font-mono text-[11px] text-slate-500">
+                                      {runDetail.runId}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className={buttonClass}
+                                    onClick={() => setRunDetail(null)}
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                                <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                                  <div>
+                                    <dt className="text-slate-500">Status</dt>
+                                    <dd>{runDetail.runStatus}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-slate-500">Score</dt>
+                                    <dd>
+                                      {runDetail.qualityScore === undefined
+                                        ? '—'
+                                        : `${Math.round((runDetail.qualityScore >= 0 && runDetail.qualityScore <= 1 ? runDetail.qualityScore * 100 : runDetail.qualityScore) * 10) / 10}/100`}
+                                    </dd>
+                                  </div>
+                                </dl>
+                                {[
+                                  ['Question', runDetail.simulatedQuestion],
+                                  [
+                                    'Persona response',
+                                    runDetail.personaResponse,
+                                  ],
+                                  [
+                                    'Quality dimensions',
+                                    runDetail.qualityDimensions,
+                                  ],
+                                  ['Replay trace', runDetail.replayTrace],
+                                ].map(([label, content]) => (
+                                  <details
+                                    key={String(label)}
+                                    className="mt-2 rounded border border-slate-200 bg-white p-2"
+                                  >
+                                    <summary className="cursor-pointer text-xs font-medium">
+                                      {String(label)}
+                                    </summary>
+                                    <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-[11px]">
+                                      {content == null
+                                        ? 'Not provided.'
+                                        : typeof content === 'string'
+                                          ? content
+                                          : JSON.stringify(content, null, 2)}
+                                    </pre>
+                                  </details>
+                                ))}
+                              </section>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              )}
             </div>
           )}
         </>
@@ -448,6 +788,19 @@ const PreviousEvalData: React.FC<{
             </div>
           </section>
         </div>
+      )}
+      {showTeardownConfirmation && selected && (
+        <ConfirmationDialog
+          title="Tear down sandbox data?"
+          message={`This permanently deletes all seeded FHIR data in ${selected.job.evalTenantId}. The seed job will be marked TORN_DOWN. To run this scenario again, create a fresh seed job.`}
+          confirmLabel="Tear down sandbox"
+          tone="danger"
+          busy={tearingDown}
+          onCancel={() => {
+            if (!tearingDown) setShowTeardownConfirmation(false);
+          }}
+          onConfirm={teardown}
+        />
       )}
     </section>
   );

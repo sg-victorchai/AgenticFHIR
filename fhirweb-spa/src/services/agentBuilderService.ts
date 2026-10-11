@@ -501,6 +501,10 @@ export const agentBuilderService = {
     if (version) params.set('version', version);
     return request<EvalRun[]>(`/api/agentbuilder/experiments/eval?${params}`);
   },
+  listEvalRunsForSeedJob: (seedJobId: string) =>
+    request<EvalRun[]>(
+      `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}/runs`,
+    ),
   compare: (personaId: string, tenantId: string) =>
     request<{ betterVersion: string }>(
       `/api/agentbuilder/experiments/$compare?${new URLSearchParams({ personaId, tenantId })}`,
