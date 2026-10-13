@@ -77,7 +77,8 @@ describe('SessionTimeoutManager', () => {
     const store = renderSignedIn();
     advance(IDLE_TIMEOUT_MS + 1000);
     expect(store.getState().auth.isAuthenticated).toBe(false);
-    expect(mocks.removeUser).toHaveBeenCalled();
+    expect(mocks.signOut).toHaveBeenCalledOnce();
+    expect(mocks.removeUser).not.toHaveBeenCalled();
   });
 
   it('slides the window on user activity', () => {

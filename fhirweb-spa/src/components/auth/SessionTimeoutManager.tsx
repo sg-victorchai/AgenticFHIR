@@ -61,14 +61,11 @@ const SessionTimeoutManager: React.FC = () => {
     window.localStorage.removeItem(LAST_ACTIVITY_KEY);
     dispatch(logout());
     dispatch(clearRole());
-    void oidcUserManager
-      .removeUser()
-      .catch(() => undefined)
-      .then(() => signOut())
-      .catch((error) => {
-        console.error('Unable to start OIDC sign-out:', error);
-        window.location.assign('/smartapp/login');
-      });
+    void signOut().catch(async (error) => {
+      console.error('Unable to start OIDC sign-out:', error);
+      await oidcUserManager.removeUser().catch(() => undefined);
+      window.location.assign('/smartapp/login');
+    });
   }, [dispatch]);
 
   const handleContinue = useCallback(async () => {
