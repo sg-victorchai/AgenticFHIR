@@ -52,6 +52,21 @@ export const qualityScoreToPercent = (score?: number): number | undefined => {
   return Math.round(percent * 10) / 10;
 };
 
+export const sessionDisplayName = (session: AuthoringSession): string => {
+  const personaName = session.persona_name?.trim();
+  if (personaName) return personaName;
+
+  const description = session.description?.trim();
+  if (!description) return 'Untitled persona';
+
+  const title = (
+    description.split(/\s+(?:to|so that|in order to)\s+/i)[0] || description
+  )
+    .replace(/[.!?]+$/, '')
+    .trim();
+  return title.charAt(0).toLocaleUpperCase() + title.slice(1);
+};
+
 const normalizeConfirmationName = (name: string) =>
   name
     .normalize('NFKC')
@@ -1894,7 +1909,7 @@ const AgentBuilderPage: React.FC = () => {
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <p className="text-sm font-semibold">
-                                  {session.persona_name || 'Untitled persona'}
+                                  {sessionDisplayName(session)}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-500">
                                   {session.authoring_mode.replace(/_/g, ' ')} ·
@@ -2752,7 +2767,7 @@ const AgentBuilderPage: React.FC = () => {
           <div className="space-y-4">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="break-words text-sm font-semibold text-slate-900">
-                {abandoningSession.persona_name || 'Untitled persona'}
+                {sessionDisplayName(abandoningSession)}
               </p>
               <p className="mt-1 break-all font-mono text-xs text-slate-600">
                 {abandoningSession.session_id}

@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import AgentBuilderPage, { qualityScoreToPercent } from './AgentBuilderPage';
+import AgentBuilderPage, {
+  qualityScoreToPercent,
+  sessionDisplayName,
+} from './AgentBuilderPage';
 
 vi.mock('../services/agentBuilderService', () => {
   const personas = ['First persona', 'Second persona'].map((name, index) => ({
@@ -36,6 +39,28 @@ vi.mock('../services/agentBuilderService', () => {
 afterEach(cleanup);
 
 describe('evaluation navigation', () => {
+  it('uses the session persona name or derives a title from its description', () => {
+    const session = {
+      session_id: 'session-1',
+      authoring_mode: 'FROM_SCRATCH',
+      persona_type: 'AGENT',
+      status: 'IN_PROGRESS',
+      current_phase: 0,
+      created_at: '',
+      updated_at: '',
+      description:
+        'hypertension care management to identify candidate patients and recommend intervention plans',
+    };
+
+    expect(sessionDisplayName(session)).toBe('Hypertension care management');
+    expect(
+      sessionDisplayName({ ...session, persona_name: 'Hypertension Coach' }),
+    ).toBe('Hypertension Coach');
+    expect(sessionDisplayName({ ...session, description: '  ' })).toBe(
+      'Untitled persona',
+    );
+  });
+
   it.each([
     [1, 100],
     [0.4, 40],
