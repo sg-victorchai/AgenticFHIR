@@ -1158,37 +1158,28 @@ const AgentBuilderPage: React.FC = () => {
   };
   const chatTheme = {
     professional: {
-      transcript: 'bg-[#252d36]',
-      userBubble: 'border-slate-500 bg-[#3b4652] text-white',
-      assistantText: 'text-white',
-      composer: 'border-slate-600 bg-[#1c232b]',
+      transcript: 'bg-white',
+      userBubble: 'border-[#ededed] bg-[#f0f0f0] text-[#171717]',
+      assistantText: 'text-[#171717]',
+      composer: 'border-[#e5e5e5] bg-white',
       input:
-        'border-slate-500 bg-[#303a45] text-white placeholder:text-slate-400 focus:border-slate-300 focus:ring-slate-600',
-      send: 'bg-slate-600 hover:bg-slate-500',
+        'border-[#d4d4d4] bg-white text-[#171717] placeholder:text-[#8a8a8a] focus:border-[#a3a3a3] focus:ring-slate-200',
+      send: 'bg-[#262626] hover:bg-[#404040]',
     },
-    ocean: {
-      transcript: 'bg-[#ead9bb]',
-      userBubble: 'border-[#c5b18d] bg-[#f6eddd] text-[#174a70]',
-      assistantText: 'text-[#174a70]',
-      composer: 'border-[#c5b18d] bg-[#f1e5d0]',
+    'blue-horizon': {
+      transcript: 'bg-[#edf4fd]',
+      userBubble: 'border-[#e1e9f6] bg-[#f8faff] text-[#263858]',
+      assistantText: 'text-[#263858]',
+      composer: 'border-[#dce6f6] bg-[#f4f7fc]',
       input:
-        'border-[#c5b18d] bg-[#f8f0e2] text-[#174a70] placeholder:text-[#52718a] focus:border-[#28658d] focus:ring-[#c9dce8]',
-      send: 'bg-[#174a70] hover:bg-[#103a59]',
-    },
-    savanna: {
-      transcript: 'bg-[#e5efda]',
-      userBubble: 'border-[#c0d0a9] bg-[#f0f4e5] text-[#685714]',
-      assistantText: 'text-[#685714]',
-      composer: 'border-[#c0d0a9] bg-[#eaf0df]',
-      input:
-        'border-[#c0d0a9] bg-[#f3f5e8] text-[#685714] placeholder:text-[#8a7c3e] focus:border-[#8b7928] focus:ring-[#e4dda9]',
-      send: 'bg-[#75621a] hover:bg-[#5f4e12]',
+        'border-[#d4def0] bg-white text-[#263858] placeholder:text-[#7e8ca5] focus:border-[#86a9f2] focus:ring-[#dbe7ff]',
+      send: 'bg-[#477bea] hover:bg-[#3568d4]',
     },
   }[authoringTheme];
 
   return (
     <div
-      className={`${isFocusedAuthoring ? 'h-[calc(100dvh-4rem)] overflow-hidden' : 'min-h-[calc(100vh-4rem)]'} bg-[#f5f7fb] text-slate-900`}
+      className={`${isFocusedAuthoring ? 'fixed inset-0 z-30 overflow-hidden' : 'min-h-[calc(100vh-4rem)]'} bg-[#f5f7fb] text-slate-900`}
     >
       <div
         className={`flex ${isFocusedAuthoring ? 'h-full min-h-0' : 'min-h-[calc(100vh-4rem)]'}`}
@@ -1247,7 +1238,9 @@ const AgentBuilderPage: React.FC = () => {
         <main
           className={`min-w-0 flex-1 ${isFocusedAuthoring ? 'flex min-h-0 flex-col' : ''}`}
         >
-          <header className="sticky top-0 z-20 shrink-0 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+          <header
+            className={`${isFocusedAuthoring ? 'hidden' : 'sticky top-0 z-20 shrink-0 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl'}`}
+          >
             <div
               className={`flex flex-wrap items-center justify-between gap-3 px-4 sm:px-7 ${isFocusedAuthoring ? 'py-2' : 'py-3'}`}
             >
@@ -1653,7 +1646,7 @@ const AgentBuilderPage: React.FC = () => {
                   className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${sessionId ? 'flex min-h-0 flex-1 flex-col' : ''}`}
                 >
                   <div
-                    className={`flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 ${sessionId ? 'py-2' : 'py-4 sm:px-5'}`}
+                    className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 ${sessionId ? 'border-slate-700 bg-[#111827] py-2 text-white' : 'border-slate-200 bg-white py-4 sm:px-5'}`}
                   >
                     <div>
                       {!sessionId && (
@@ -1667,7 +1660,7 @@ const AgentBuilderPage: React.FC = () => {
                         {sessionId ? 'Authoring session' : 'Create a persona'}
                       </h1>
                       {sessionId && (
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        <p className="mt-0.5 truncate text-[11px] text-slate-300">
                           Session {sessionId} · Powered by {activeModelName}
                           {sessionReadOnly ? ' · View-only history' : ''}
                         </p>
@@ -1675,7 +1668,7 @@ const AgentBuilderPage: React.FC = () => {
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       {sessionId && (
-                        <label className="flex items-center gap-2 text-xs text-slate-600">
+                        <label className="flex items-center gap-2 text-xs text-slate-300">
                           <span>Theme</span>
                           <select
                             aria-label="Authoring theme"
@@ -1688,8 +1681,7 @@ const AgentBuilderPage: React.FC = () => {
                             className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
                           >
                             <option value="professional">Professional</option>
-                            <option value="ocean">Beach</option>
-                            <option value="savanna">Savanna</option>
+                            <option value="blue-horizon">Blue Horizon</option>
                           </select>
                         </label>
                       )}
@@ -1727,7 +1719,16 @@ const AgentBuilderPage: React.FC = () => {
                         />
                       )}
                       <div
-                        className={`min-h-0 flex-1 overflow-y-auto px-5 py-4 ${chatTheme.transcript}`}
+                        className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${chatTheme.transcript}`}
+                        style={
+                          authoringTheme === 'blue-horizon'
+                            ? {
+                                backgroundImage:
+                                  'linear-gradient(to right, rgba(71, 123, 234, 0.045) 1px, transparent 1px), linear-gradient(to bottom, rgba(71, 123, 234, 0.045) 1px, transparent 1px)',
+                                backgroundSize: '112px 112px',
+                              }
+                            : undefined
+                        }
                       >
                         {sessionTurns.length ? (
                           <div className="space-y-5" aria-live="polite">
@@ -1758,7 +1759,9 @@ const AgentBuilderPage: React.FC = () => {
                         )}
                       </div>
                       {!sessionReadOnly && (
-                        <div className={`border-t p-4 ${chatTheme.composer}`}>
+                        <div
+                          className={`shrink-0 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${chatTheme.composer}`}
+                        >
                           {chatError && (
                             <div
                               role="alert"

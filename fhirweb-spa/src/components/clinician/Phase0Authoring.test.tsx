@@ -40,8 +40,10 @@ describe('guided intake widgets', () => {
     const reply =
       '1. Ask for outcome\n2. Provide a goal\n3. No\n4. Yes\n5. Yes\n6. No\n7. Free form text';
     fireEvent.change(screen.getByRole('textbox'), { target: { value: reply } });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reply' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
     expect(submit).toHaveBeenCalledWith(reply);
+    expect(screen.queryByText('Submit reply')).toBeNull();
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).rows).toBe(2);
   });
 
   it('normalizes inline numbered answers and leaves multiline replies intact', () => {
@@ -63,43 +65,50 @@ describe('guided intake widgets', () => {
     ).toBeTruthy();
   });
 
-  it('applies the Ocean theme to the guided input and progress indicator', () => {
+  it('uses a light neutral palette for the Professional theme', () => {
     render(
       <>
-        <Phase0Progress step="P0_PROXY_QUESTIONS" theme="ocean" />
+        <Phase0Progress step="P0_PROXY_QUESTIONS" />
         <Phase0Authoring
           step="P0_PROXY_QUESTIONS"
           description=""
           lastAssistantMessage={questions}
           busy={false}
-          theme="ocean"
           onSubmit={vi.fn()}
         />
       </>,
     );
-    expect(screen.getByRole('textbox').className).toContain('bg-[#f6eddd]');
+
     expect(screen.getByLabelText('Guided intake progress').className).toContain(
-      'bg-[#ead9bb]',
+      'bg-white',
     );
+    expect(screen.getByRole('textbox').className).toContain('bg-white');
+    expect(screen.getByRole('textbox').className).toContain('text-slate-900');
+    expect(screen.getByLabelText('Your reply').className).toContain(
+      'text-slate-900',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Send reply' }).className,
+    ).toContain('text-slate-800');
   });
 
-  it('applies the Savanna palette to guided progress and input controls', () => {
+  it('applies the Blue Horizon theme to the guided input and progress indicator', () => {
     render(
       <>
-        <Phase0Progress step="P0_PROXY_QUESTIONS" theme="savanna" />
+        <Phase0Progress step="P0_PROXY_QUESTIONS" theme="blue-horizon" />
         <Phase0Authoring
           step="P0_PROXY_QUESTIONS"
           description=""
           lastAssistantMessage={questions}
           busy={false}
-          theme="savanna"
+          theme="blue-horizon"
           onSubmit={vi.fn()}
         />
       </>,
     );
-    expect(screen.getByRole('textbox').className).toContain('bg-[#f0f4e5]');
+    expect(screen.getByRole('textbox').className).toContain('bg-[#f8faff]');
     expect(screen.getByLabelText('Guided intake progress').className).toContain(
-      'bg-[#e5efda]',
+      'bg-[#f2f6fd]',
     );
   });
 
