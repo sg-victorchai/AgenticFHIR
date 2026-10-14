@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthoringStep } from '../../services/agentBuilderService';
+import AuthoringSendButton from './AuthoringSendButton';
 
 export type AuthoringTheme = 'professional' | 'blue-horizon';
 
@@ -50,7 +51,7 @@ const Phase0Authoring: React.FC<{
   lastAssistantMessage: string;
   busy: boolean;
   theme?: AuthoringTheme;
-  onSubmit: (message: string) => Promise<void>;
+  onSubmit: (message: string, displayMessage?: string) => Promise<void>;
 }> = ({
   step,
   description,
@@ -69,8 +70,12 @@ const Phase0Authoring: React.FC<{
   const inputClass = `mt-2 w-full rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 ${theme === 'professional' ? 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-slate-500 focus:ring-slate-200' : 'border-[#d4def0] bg-[#f8faff] text-[#263858] placeholder:text-[#7e8ca5] focus:border-[#86a9f2] focus:ring-[#dbe7ff]'}`;
   const primaryButtonClass = `rounded-lg px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-40 ${theme === 'professional' ? 'bg-[#262626] hover:bg-[#404040]' : 'bg-[#477bea] hover:bg-[#3568d4]'}`;
   const labelClass = `block text-sm font-medium ${theme === 'professional' ? 'text-slate-900' : 'text-[#263858]'}`;
-  const send = (message: string) => {
-    if (!busy && message.trim()) void onSubmit(message.trim());
+  const send = (message: string, displayMessage?: string) => {
+    if (!busy && message.trim()) {
+      if (displayMessage !== undefined)
+        void onSubmit(message.trim(), displayMessage.trim());
+      else void onSubmit(message.trim());
+    }
   };
   const submitButton = (message: string, label: string) => (
     <button
@@ -81,6 +86,14 @@ const Phase0Authoring: React.FC<{
     >
       {busy ? 'Processing...' : label}
     </button>
+  );
+  const textareaSubmitButton = (message: string, label: string) => (
+    <AuthoringSendButton
+      label={label}
+      disabled={busy || !message.trim()}
+      theme={theme}
+      onClick={() => send(message)}
+    />
   );
   if (!PHASE0_STEPS.includes(step))
     return (
@@ -95,21 +108,26 @@ const Phase0Authoring: React.FC<{
     >
       {(step === 'P0_OUTCOME_INTAKE' || step === 'P0_COHORT_RECIPE') && (
         <>
-          <label className={labelClass}>
-            {step === 'P0_OUTCOME_INTAKE'
-              ? 'Describe what this persona should accomplish'
-              : 'Describe the patient cohort in plain English'}
-            <textarea
-              rows={step === 'P0_OUTCOME_INTAKE' ? 5 : 4}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          {submitButton(
-            text,
-            step === 'P0_OUTCOME_INTAKE' ? 'Next' : 'Continue',
-          )}
+          <div>
+            <label className={labelClass} htmlFor="phase0-description">
+              {step === 'P0_OUTCOME_INTAKE'
+                ? 'Describe what this persona should accomplish'
+                : 'Describe the patient cohort in plain English'}
+            </label>
+            <div className="relative">
+              <textarea
+                id="phase0-description"
+                rows={step === 'P0_OUTCOME_INTAKE' ? 5 : 4}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                className={`${inputClass} resize-y pr-12`}
+              />
+              {textareaSubmitButton(
+                text,
+                step === 'P0_OUTCOME_INTAKE' ? 'Next' : 'Continue',
+              )}
+            </div>
+          </div>
         </>
       )}
       {step === 'P0_PROXY_QUESTIONS' && (
@@ -124,32 +142,17 @@ const Phase0Authoring: React.FC<{
                 rows={2}
                 value={proxyReply}
                 onChange={(event) => setProxyReply(event.target.value)}
-                placeholder={
-                  '1. Ask for an outcome\n2. Provide a goal\n3. No\n4. Yes\n5. Yes\n6. No\n7. Free-form text'
-                }
+                placeholder="Reply with numbered answers 1-7 in plain language..."
                 className={`${inputClass.replace('mt-2 ', '')} resize-y pr-12`}
               />
-              <button
-                type="button"
-                aria-label="Send reply"
-                title="Send reply"
+              <AuthoringSendButton
+                label="Send reply"
                 disabled={busy || !proxyReply.trim()}
-                onClick={() => send(normalizeProxyReply(proxyReply))}
-                className={`absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${theme === 'professional' ? 'text-slate-800 hover:bg-slate-100' : 'bg-[#477bea] text-white hover:bg-[#3568d4]'}`}
-              >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 19V5m-6 6 6-6 6 6" />
-                </svg>
-              </button>
+                theme={theme}
+                onClick={() =>
+                  send(normalizeProxyReply(proxyReply), proxyReply)
+                }
+              />
             </div>
           </div>
           <p
@@ -161,11 +164,22 @@ const Phase0Authoring: React.FC<{
       )}
       {step === 'P0_TYPE_DECISION' && (
         <>
-          <p
-            className={`whitespace-pre-wrap text-sm ${theme === 'professional' ? 'text-slate-900' : 'text-[#263858]'}`}
+          <section
+            aria-labelledby="type-recommendation-title"
+            className={`border-l-4 pl-4 ${theme === 'professional' ? 'border-slate-500' : 'border-[#477bea]'}`}
           >
-            {lastAssistantMessage}
-          </p>
+            <h2
+              id="type-recommendation-title"
+              className={`mb-2 text-sm font-semibold ${theme === 'professional' ? 'text-slate-900' : 'text-[#263858]'}`}
+            >
+              Type recommendation
+            </h2>
+            <p
+              className={`whitespace-pre-wrap break-words text-sm ${theme === 'professional' ? 'text-slate-900' : 'text-[#263858]'}`}
+            >
+              {lastAssistantMessage}
+            </p>
+          </section>
           <div className="flex flex-wrap gap-2">
             {submitButton('accept', 'Accept recommendation')}
             <button

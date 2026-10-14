@@ -4,6 +4,7 @@ import Phase0Authoring, {
   AuthoringTheme,
   Phase0Progress,
 } from '../components/clinician/Phase0Authoring';
+import AuthoringSendButton from '../components/clinician/AuthoringSendButton';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
 import PreviousEvalData from '../components/clinician/PreviousEvalData';
 import SeededResourceBrowser from '../components/clinician/SeededResourceBrowser';
@@ -608,14 +609,18 @@ const AgentBuilderPage: React.FC = () => {
     await streamAuthoringTurn(sessionId, text);
   };
 
-  const streamAuthoringTurn = async (targetSessionId: string, text: string) => {
+  const streamAuthoringTurn = async (
+    targetSessionId: string,
+    text: string,
+    displayText = text,
+  ) => {
     if (chatBusy) return;
     let receivedStep = false;
     setChatBusy(true);
     setChatError(null);
     setSessionTurns((previous) => [
       ...previous,
-      { role: 'user', content: text },
+      { role: 'user', content: displayText },
       { role: 'assistant', content: '' },
     ]);
     try {
@@ -1161,7 +1166,7 @@ const AgentBuilderPage: React.FC = () => {
       transcript: 'bg-white',
       userBubble: 'border-[#ededed] bg-[#f0f0f0] text-[#171717]',
       assistantText: 'text-[#171717]',
-      composer: 'border-[#e5e5e5] bg-white',
+      composer: 'border-[#cbd5e1] bg-[#f1f5f9]',
       input:
         'border-[#d4d4d4] bg-white text-[#171717] placeholder:text-[#8a8a8a] focus:border-[#a3a3a3] focus:ring-slate-200',
       send: 'bg-[#262626] hover:bg-[#404040]',
@@ -1170,7 +1175,7 @@ const AgentBuilderPage: React.FC = () => {
       transcript: 'bg-[#edf4fd]',
       userBubble: 'border-[#e1e9f6] bg-[#f8faff] text-[#263858]',
       assistantText: 'text-[#263858]',
-      composer: 'border-[#dce6f6] bg-[#f4f7fc]',
+      composer: 'border-[#86a9f2] bg-[#eaf1ff]',
       input:
         'border-[#d4def0] bg-white text-[#263858] placeholder:text-[#7e8ca5] focus:border-[#86a9f2] focus:ring-[#dbe7ff]',
       send: 'bg-[#477bea] hover:bg-[#3568d4]',
@@ -1688,7 +1693,7 @@ const AgentBuilderPage: React.FC = () => {
                       {!sessionId && (
                         <Button onClick={() => setShowCreate(true)}>
                           <Icon name="plus" />
-                          New session
+                          New Persona
                         </Button>
                       )}
                       <Button
@@ -1760,7 +1765,7 @@ const AgentBuilderPage: React.FC = () => {
                       </div>
                       {!sessionReadOnly && (
                         <div
-                          className={`shrink-0 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${chatTheme.composer}`}
+                          className={`shrink-0 border-t-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(15,23,42,0.08)] ${chatTheme.composer}`}
                         >
                           {chatError && (
                             <div
@@ -1796,7 +1801,7 @@ const AgentBuilderPage: React.FC = () => {
                               }
                               busy={chatBusy || busy}
                               theme={authoringTheme}
-                              onSubmit={async (message) => {
+                              onSubmit={async (message, displayMessage) => {
                                 if (
                                   !sessionId ||
                                   sessionReadOnly ||
@@ -1804,20 +1809,36 @@ const AgentBuilderPage: React.FC = () => {
                                   busy
                                 )
                                   return;
-                                await streamAuthoringTurn(sessionId, message);
+                                await streamAuthoringTurn(
+                                  sessionId,
+                                  message,
+                                  displayMessage,
+                                );
                               }}
                             />
                           ) : (
                             <form onSubmit={sendAuthoringMessage}>
-                              <textarea
-                                value={chatInput}
-                                onChange={(event) =>
-                                  setChatInput(event.target.value)
-                                }
-                                rows={3}
-                                placeholder="Describe the persona, its users, workflow, tools, and success criteria…"
-                                className={`w-full resize-y rounded-xl border p-3 text-sm outline-none focus:ring-2 ${chatTheme.input}`}
-                              />
+                              <div className="relative">
+                                <textarea
+                                  value={chatInput}
+                                  onChange={(event) =>
+                                    setChatInput(event.target.value)
+                                  }
+                                  rows={3}
+                                  placeholder="Describe the persona, its users, workflow, tools, and success criteria…"
+                                  className={`w-full resize-y rounded-xl border p-3 pr-12 text-sm outline-none focus:ring-2 ${chatTheme.input}`}
+                                />
+                                <AuthoringSendButton
+                                  type="submit"
+                                  label={
+                                    chatBusy
+                                      ? 'Generating response'
+                                      : 'Send message'
+                                  }
+                                  disabled={chatBusy || !chatInput.trim()}
+                                  theme={authoringTheme}
+                                />
+                              </div>
                               <div className="mt-2 flex items-center justify-between gap-2">
                                 {conversationModels &&
                                 conversationModels.models.length > 1 ? (
@@ -1867,34 +1888,6 @@ const AgentBuilderPage: React.FC = () => {
                                     {activeModelName}
                                   </span>
                                 )}
-                                <button
-                                  type="submit"
-                                  disabled={chatBusy || !chatInput.trim()}
-                                  aria-label={
-                                    chatBusy
-                                      ? 'Generating response'
-                                      : 'Send message'
-                                  }
-                                  title={
-                                    chatBusy
-                                      ? 'Generating response'
-                                      : 'Send message'
-                                  }
-                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${chatTheme.send}`}
-                                >
-                                  <svg
-                                    className="h-5 w-5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    aria-hidden="true"
-                                  >
-                                    <path d="M12 19V5m-6 6 6-6 6 6" />
-                                  </svg>
-                                </button>
                               </div>
                             </form>
                           )}
@@ -2001,7 +1994,7 @@ const AgentBuilderPage: React.FC = () => {
                           onClick={() => setShowCreate(true)}
                         >
                           <Icon name="plus" />
-                          Create session
+                          Create Persona
                         </Button>
                       </div>
                     </div>

@@ -31,6 +31,9 @@ describe('guided intake widgets', () => {
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
       'Initial outcome',
     );
+    expect(screen.getByRole('button', { name: 'Next' }).parentElement).toBe(
+      screen.getByRole('textbox').parentElement,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(submit).toHaveBeenCalledWith('Initial outcome');
   });
@@ -41,7 +44,7 @@ describe('guided intake widgets', () => {
       '1. Ask for outcome\n2. Provide a goal\n3. No\n4. Yes\n5. Yes\n6. No\n7. Free form text';
     fireEvent.change(screen.getByRole('textbox'), { target: { value: reply } });
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
-    expect(submit).toHaveBeenCalledWith(reply);
+    expect(submit).toHaveBeenCalledWith(reply, reply);
     expect(screen.queryByText('Submit reply')).toBeNull();
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).rows).toBe(2);
   });
@@ -57,9 +60,26 @@ describe('guided intake widgets', () => {
     );
   });
 
+  it('normalizes the submitted inline reply while preserving its display text', () => {
+    const submit = show('P0_PROXY_QUESTIONS');
+    const reply = '1. Outcome 2. Goal 3. No';
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: reply } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+
+    expect(submit).toHaveBeenCalledWith(
+      '1. Outcome\n2. Goal\n3. No',
+      '1. Outcome 2. Goal 3. No',
+    );
+  });
+
   it('offers a single free-form textarea instead of individual answer fields', () => {
     show('P0_PROXY_QUESTIONS');
+    const input = screen.getByRole('textbox') as HTMLTextAreaElement;
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(input.placeholder).toBe(
+      'Reply with numbered answers 1-7 in plain language...',
+    );
+    expect(input.placeholder).not.toContain('\n');
     expect(
       screen.getByText(/Reply in one line or across multiple lines/),
     ).toBeTruthy();
@@ -89,7 +109,50 @@ describe('guided intake widgets', () => {
     );
     expect(
       screen.getByRole('button', { name: 'Send reply' }).className,
-    ).toContain('text-slate-800');
+    ).toContain('bg-[#262626]');
+    expect(
+      screen.getByRole('button', { name: 'Send reply' }).className,
+    ).toContain('disabled:bg-slate-200');
+    expect(
+      screen.getByRole('button', { name: 'Send reply' }).className,
+    ).toContain('rounded-xl');
+    expect(
+      screen.getByRole('button', { name: 'Send reply' }).className,
+    ).toContain('bottom-[14px] right-1');
+    expect(
+      screen
+        .getByRole('button', { name: 'Send reply' })
+        .querySelector('path')
+        ?.getAttribute('d'),
+    ).toContain('M4 15h11a4 4 0 0 0 4-4V4');
+  });
+
+  it('uses the same filled send control in enabled and disabled states', () => {
+    const { rerender } = render(
+      <Phase0Authoring
+        step="P0_OUTCOME_INTAKE"
+        description=""
+        lastAssistantMessage=""
+        busy={false}
+        onSubmit={vi.fn()}
+      />,
+    );
+    const enabledClass = screen.getByRole('button', { name: 'Next' }).className;
+    expect(enabledClass).toContain('bg-[#262626]');
+
+    rerender(
+      <Phase0Authoring
+        step="P0_OUTCOME_INTAKE"
+        description=""
+        lastAssistantMessage=""
+        busy
+        onSubmit={vi.fn()}
+      />,
+    );
+    const disabledButton = screen.getByRole('button', { name: 'Next' });
+    expect(disabledButton.hasAttribute('disabled')).toBe(true);
+    expect(disabledButton.className).toContain('bg-[#262626]');
+    expect(disabledButton.className).toContain('disabled:bg-slate-200');
   });
 
   it('applies the Blue Horizon theme to the guided input and progress indicator', () => {
@@ -114,6 +177,9 @@ describe('guided intake widgets', () => {
 
   it('sends exact accept and override commands', () => {
     const submit = show('P0_TYPE_DECISION');
+    expect(
+      screen.getByRole('region', { name: 'Type recommendation' }).textContent,
+    ).toContain(questions);
     fireEvent.click(
       screen.getByRole('button', { name: 'Accept recommendation' }),
     );
@@ -155,6 +221,9 @@ describe('guided intake widgets', () => {
     const input = screen.getByRole('textbox') as HTMLTextAreaElement;
     expect(input.rows).toBe(4);
     fireEvent.change(input, { target: { value: 'Patients aged 45 or older' } });
+    expect(screen.getByRole('button', { name: 'Continue' }).parentElement).toBe(
+      input.parentElement,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(submit).toHaveBeenCalledWith('Patients aged 45 or older');
   });
