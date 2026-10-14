@@ -36,7 +36,7 @@ const Header: React.FC = () => {
               to="/"
               className="text-white text-lg md:text-xl font-bold whitespace-nowrap"
             >
-              HealthConnect
+              AgentiFHIR Platform
             </Link>
             {isAuthenticated && (
               <span className="text-white text-xs md:text-sm font-medium truncate">
@@ -51,6 +51,14 @@ const Header: React.FC = () => {
               <li>
                 <Link to="/" className="hover:text-blue-200 transition-colors">
                   Home
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/data-assets"
+                  className="hover:text-blue-200 transition-colors"
+                >
+                  Data Assets
                 </Link>
               </li>
               {canUseAgentBuilder && (
@@ -160,6 +168,13 @@ const Header: React.FC = () => {
                       className="px-4 py-2 text-white hover:bg-blue-800 transition-colors rounded-t-lg"
                     >
                       Home
+                    </Link>
+                    <Link
+                      to="/data-assets"
+                      onClick={() => setMenuOpen(false)}
+                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                    >
+                      Data Assets
                     </Link>
                     {canUseAgentBuilder && (
                       <Link
