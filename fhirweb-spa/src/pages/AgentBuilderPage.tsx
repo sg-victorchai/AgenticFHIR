@@ -316,6 +316,7 @@ const AgentBuilderPage: React.FC = () => {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [chosenModelId, setChosenModelId] = useState('');
   const [activeModelId, setActiveModelId] = useState('');
+  const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [sessionTurns, setSessionTurns] = useState<AuthoringTurn[]>([]);
   const [authoringStep, setAuthoringStep] = useState<AuthoringStep>(null);
   const [intakeDescription, setIntakeDescription] = useState('');
@@ -607,6 +608,52 @@ const AgentBuilderPage: React.FC = () => {
     const text = chatInput.trim();
     setChatInput('');
     await streamAuthoringTurn(sessionId, text);
+  };
+
+  const switchSessionModel = async (modelId: string) => {
+    if (
+      !sessionId ||
+      !modelId ||
+      modelId === activeModelId ||
+      modelSwitchBusy ||
+      chatBusy ||
+      busy ||
+      sessionReadOnly ||
+      !editableSession(activeSession?.status ?? '')
+    )
+      return;
+
+    setModelSwitchBusy(true);
+    setChatError(null);
+    try {
+      const result = await agentBuilderService.updateSessionModel(
+        sessionId,
+        modelId,
+      );
+      const selectedModelId = result.selectedModelId || modelId;
+      setActiveModelId(selectedModelId);
+      setChosenModelId(selectedModelId);
+      setActiveSession((previous) =>
+        previous
+          ? {
+              ...previous,
+              selected_model_id: selectedModelId,
+              selectedModelId,
+            }
+          : previous,
+      );
+      notify(
+        'success',
+        result.message ||
+          'Model updated. It will be used for the next message.',
+      );
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : 'Unable to switch model.',
+      );
+    } finally {
+      setModelSwitchBusy(false);
+    }
   };
 
   const streamAuthoringTurn = async (
@@ -1409,29 +1456,31 @@ const AgentBuilderPage: React.FC = () => {
                     Refresh
                   </Button>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
                   {visiblePersonas.map((persona) => (
                     <article
                       key={`${persona.personaId}-${persona.version}`}
-                      className="group flex min-h-52 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/[0.02] transition-all hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-lg hover:shadow-cyan-900/[0.06]"
+                      className="group flex min-h-52 min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/[0.02] transition-all hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-lg hover:shadow-cyan-900/[0.06] sm:p-4"
                     >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
+                      <div className="mb-3 flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
+                        <div className="flex w-full min-w-0 items-center gap-2 sm:flex-1">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-cyan-300">
                             <Icon name="sparkle" />
                           </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold">
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-2 break-words text-sm font-semibold">
                               {persona.name}
                             </p>
-                            <p className="truncate font-mono text-[10px] text-slate-400">
+                            <p className="break-all font-mono text-[10px] text-slate-400">
                               {persona.personaId}
                             </p>
                           </div>
                         </div>
-                        <StatusBadge value={persona.lifecycleState} />
+                        <div className="max-w-full self-start sm:shrink-0">
+                          <StatusBadge value={persona.lifecycleState} />
+                        </div>
                       </div>
-                      <p className="line-clamp-3 flex-1 text-xs leading-relaxed text-slate-500">
+                      <p className="line-clamp-3 flex-1 break-words text-xs leading-relaxed text-slate-500">
                         {persona.description || 'No description provided.'}
                       </p>
                       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -1452,11 +1501,11 @@ const AgentBuilderPage: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                        <span className="text-[10px] text-slate-400">
+                      <div className="mt-4 flex flex-col items-start gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="break-words text-[10px] text-slate-400">
                           Updated {dateTime(persona.updatedAt)}
                         </span>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-x-3 gap-y-2 sm:gap-2">
                           {persona.lifecycleState === 'UAT_TRAINING' && (
                             <button
                               onClick={() => {
@@ -1651,7 +1700,7 @@ const AgentBuilderPage: React.FC = () => {
                   className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${sessionId ? 'flex min-h-0 flex-1 flex-col' : ''}`}
                 >
                   <div
-                    className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 ${sessionId ? 'border-slate-700 bg-[#111827] py-2 text-white' : 'border-slate-200 bg-white py-4 sm:px-5'}`}
+                    className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 ${sessionId ? 'border-blue-700 bg-blue-600 py-2 text-white' : 'border-slate-200 bg-white py-4 sm:px-5'}`}
                   >
                     <div>
                       {!sessionId && (
@@ -1665,16 +1714,18 @@ const AgentBuilderPage: React.FC = () => {
                         {sessionId ? 'Authoring session' : 'Create a persona'}
                       </h1>
                       {sessionId && (
-                        <p className="mt-0.5 truncate text-[11px] text-slate-300">
+                        <p className="mt-0.5 truncate text-[11px] text-white/80">
                           Session {sessionId} · Powered by {activeModelName}
                           {sessionReadOnly ? ' · View-only history' : ''}
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div
+                      className={`flex items-center gap-1.5 sm:gap-2 ${sessionId ? 'w-full justify-between sm:w-auto sm:justify-end' : 'flex-wrap justify-end'}`}
+                    >
                       {sessionId && (
-                        <label className="flex items-center gap-2 text-xs text-slate-300">
-                          <span>Theme</span>
+                        <label className="flex min-w-0 items-center gap-1 text-xs text-white/90 sm:gap-2">
+                          <span className="hidden sm:inline">Theme</span>
                           <select
                             aria-label="Authoring theme"
                             value={authoringTheme}
@@ -1683,7 +1734,7 @@ const AgentBuilderPage: React.FC = () => {
                                 event.target.value as AuthoringTheme,
                               )
                             }
-                            className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                            className="max-w-[112px] rounded-lg border border-slate-200 bg-white px-1.5 py-2 text-[11px] font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200 sm:max-w-none sm:px-2 sm:text-xs"
                           >
                             <option value="professional">Professional</option>
                             <option value="blue-horizon">Blue Horizon</option>
@@ -1699,11 +1750,17 @@ const AgentBuilderPage: React.FC = () => {
                       <Button
                         disabled={busy}
                         onClick={() => void loadWorkspace()}
+                        className={
+                          sessionId
+                            ? 'shrink-0 px-2 text-xs sm:px-3 sm:text-sm'
+                            : ''
+                        }
                       >
                         Refresh
                       </Button>
                       {sessionId && (
                         <Button
+                          className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm"
                           onClick={() => {
                             setSessionId(null);
                             setAuthoringStep(null);
@@ -1844,11 +1901,20 @@ const AgentBuilderPage: React.FC = () => {
                                 conversationModels.models.length > 1 ? (
                                   <label className="min-w-0 text-xs text-slate-600">
                                     <span className="sr-only">
-                                      Model (new session required to change)
+                                      Model for this session
                                     </span>
                                     <select
-                                      aria-label="Model (starts a new session)"
-                                      title="Changing models starts a new authoring session"
+                                      aria-label="Model for this session"
+                                      title="Switch the model for this authoring session"
+                                      disabled={
+                                        modelSwitchBusy ||
+                                        chatBusy ||
+                                        busy ||
+                                        sessionReadOnly ||
+                                        !editableSession(
+                                          activeSession?.status ?? '',
+                                        )
+                                      }
                                       value={
                                         activeModelId &&
                                         conversationModels.models.some(
@@ -1858,8 +1924,9 @@ const AgentBuilderPage: React.FC = () => {
                                           : ''
                                       }
                                       onChange={(event) => {
-                                        setChosenModelId(event.target.value);
-                                        setShowCreate(true);
+                                        void switchSessionModel(
+                                          event.target.value,
+                                        );
                                       }}
                                       className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
                                     >

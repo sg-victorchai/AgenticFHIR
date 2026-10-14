@@ -27,6 +27,33 @@ const mockStream = (chunks: string[]) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('persisted evaluation data endpoints', () => {
+  it('switches the model for an existing authoring session', async () => {
+    const response = {
+      sessionId: 'session/1',
+      selectedModelId: 'gpt-6-luna',
+      message: 'Model updated. Takes effect on the next message.',
+    };
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(JSON.stringify(response)),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await agentBuilderService.updateSessionModel(
+      'session/1',
+      'gpt-6-luna',
+    );
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/api/agentbuilder/sessions/session%2F1/model',
+    );
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      modelId: 'gpt-6-luna',
+    });
+    expect(result.selectedModelId).toBe('gpt-6-luna');
+  });
+
   it('lists evaluation runs for a specific encoded seed job ID', async () => {
     const fetchMock = vi.fn(
       async (_url: string) => new Response(JSON.stringify([])),

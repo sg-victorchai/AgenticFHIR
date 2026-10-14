@@ -334,6 +334,14 @@ export const agentBuilderService = {
     request<AuthoringSession>(
       `/api/agentbuilder/sessions/${encodeURIComponent(id)}`,
     ),
+  updateSessionModel: (id: string, modelId: string) =>
+    request<{ sessionId: string; selectedModelId: string; message: string }>(
+      `/api/agentbuilder/sessions/${encodeURIComponent(id)}/model`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ modelId }),
+      },
+    ),
   createSession: (body: {
     personaType: 'AGENT' | 'DATA_PIPELINE';
     authoringMode: 'FROM_SCRATCH' | 'ADAPT_FROM';
