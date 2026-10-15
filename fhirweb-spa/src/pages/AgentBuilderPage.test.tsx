@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { agentBuilderService } from '../services/agentBuilderService';
 import AgentBuilderPage, {
   qualityScoreToPercent,
   sessionDisplayName,
@@ -19,6 +20,7 @@ vi.mock('../services/agentBuilderService', () => {
     agentBuilderService: {
       listPersonas: vi.fn(async () => personas),
       listMine: vi.fn(async () => personas),
+      fork: vi.fn(async () => ({ newVersion: 'v1-exp-1' })),
       listSessions: vi.fn(async () => []),
       getModels: vi.fn(async () => ({
         provider: 'test',
@@ -98,5 +100,55 @@ describe('evaluation navigation', () => {
         name: /Open evaluations & previous data/,
       }),
     ).toHaveLength(2);
+  });
+
+  it('shows the forked draft from the owned-persona list after forking', async () => {
+    const forkedPersona = {
+      personaId: 'persona-0',
+      name: 'First persona',
+      version: 'v1-exp-1',
+      personaType: 'AGENT',
+      authoringSource: 'portal',
+      lifecycleState: 'DRAFT',
+    };
+    vi.mocked(agentBuilderService.listMine)
+      .mockResolvedValueOnce([
+        {
+          personaId: 'persona-0',
+          name: 'First persona',
+          version: '1',
+          personaType: 'AGENT',
+          authoringSource: 'portal',
+          lifecycleState: 'UAT_TRAINING',
+        },
+      ])
+      .mockResolvedValueOnce([forkedPersona]);
+    vi.mocked(agentBuilderService.fork).mockResolvedValue({
+      newVersion: forkedPersona.version,
+    });
+
+    render(
+      <MemoryRouter>
+        <AgentBuilderPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('First persona');
+    fireEvent.click(screen.getAllByRole('button', { name: /Inspect/ })[0]);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Fork version' }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /View evaluations & previous data.*v1-exp-1/i,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Portal' })).toBeTruthy();
+    expect(agentBuilderService.fork).toHaveBeenCalledWith(
+      'persona-0',
+      '1',
+      expect.any(String),
+    );
   });
 });

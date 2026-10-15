@@ -369,7 +369,14 @@ const AgentBuilderPage: React.FC = () => {
         agentBuilderService.listMine(),
         agentBuilderService.listSessions(),
       ]);
-      setPersonas(allPersonas);
+      const personaByVersion = new Map<string, PersonaSummary>();
+      [...allPersonas, ...ownPersonas].forEach((persona) => {
+        personaByVersion.set(
+          `${persona.personaId}\u0000${persona.version}`,
+          persona,
+        );
+      });
+      setPersonas([...personaByVersion.values()]);
       setMine(ownPersonas);
       setSessions(
         ownSessions.filter((session) => session.status !== 'ABANDONED'),
@@ -1136,6 +1143,11 @@ const AgentBuilderPage: React.FC = () => {
         TENANT_ID,
       );
       notify('success', `Created draft ${fork.newVersion}.`);
+      setSelected(null);
+      setDetail(null);
+      setView('marketplace');
+      setSource('portal');
+      setQuery('');
       await loadWorkspace();
     } catch (error) {
       notify(

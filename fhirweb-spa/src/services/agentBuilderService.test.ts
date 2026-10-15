@@ -27,6 +27,36 @@ const mockStream = (chunks: string[]) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('persisted evaluation data endpoints', () => {
+  it('forks a persona version through the experimental fork endpoint', async () => {
+    const response = { newVersion: 'v1-exp-1728032401234' };
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(JSON.stringify(response)),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await agentBuilderService.fork(
+      'care/gap-manager',
+      'v1',
+      'my-tenant',
+      'metadata:\n  description: Updated thresholds\n',
+    );
+
+    const requestUrl = new URL(
+      String(fetchMock.mock.calls[0][0]),
+      'http://localhost',
+    );
+    expect(requestUrl.pathname).toContain('/api/agentbuilder/experiments/fork');
+    expect(requestUrl.searchParams.get('personaId')).toBe('care/gap-manager');
+    expect(requestUrl.searchParams.get('baseVersion')).toBe('v1');
+    expect(requestUrl.searchParams.get('tenantId')).toBe('my-tenant');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      patchYaml: 'metadata:\n  description: Updated thresholds\n',
+    });
+    expect(result.newVersion).toBe('v1-exp-1728032401234');
+  });
+
   it('switches the model for an existing authoring session', async () => {
     const response = {
       sessionId: 'session/1',
