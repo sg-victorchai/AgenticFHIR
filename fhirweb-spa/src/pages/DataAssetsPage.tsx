@@ -110,17 +110,29 @@ const ParameterList: React.FC<{
 interface StructureTreeRow {
   node: StructureTreeNode;
   depth: number;
+  ancestorContinuations: boolean[];
+  isLastSibling: boolean;
 }
 
 const collectVisibleStructureRows = (
   node: StructureTreeNode,
   expanded: Set<string>,
   depth = 0,
+  ancestorContinuations: boolean[] = [],
+  isLastSibling = true,
 ): StructureTreeRow[] => [
-  { node, depth },
+  { node, depth, ancestorContinuations, isLastSibling },
   ...(expanded.has(node.key)
-    ? node.children.flatMap((child) =>
-        collectVisibleStructureRows(child, expanded, depth + 1),
+    ? node.children.flatMap((child, index) =>
+        collectVisibleStructureRows(
+          child,
+          expanded,
+          depth + 1,
+          depth === 0
+            ? ancestorContinuations
+            : [...ancestorContinuations, !isLastSibling],
+          index === node.children.length - 1,
+        ),
       )
     : []),
 ];
@@ -160,7 +172,8 @@ const StructureDefinitionTable: React.FC<{ tree: StructureTreeNode }> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {rows.map(({ node, depth }) => {
+          {rows.map((row) => {
+            const { node, depth, ancestorContinuations, isLastSibling } = row;
             const element = node.element;
             const hasChildren = node.children.length > 0;
             const flags = [
@@ -171,9 +184,45 @@ const StructureDefinitionTable: React.FC<{ tree: StructureTreeNode }> = ({
 
             return (
               <tr key={node.key} className="align-top even:bg-slate-50/70">
-                <td className="px-3 py-2">
+                <td className="relative px-3 py-2">
                   <div
-                    className="flex min-w-0 items-start gap-1.5"
+                    className="pointer-events-none absolute inset-y-0 left-3 z-0"
+                    aria-hidden="true"
+                  >
+                    {ancestorContinuations.map(
+                      (continues, index) =>
+                        continues && (
+                          <span
+                            key={`ancestor-${index}`}
+                            className="absolute inset-y-0 border-l border-dotted border-slate-500"
+                            style={{ left: `${index * 18 + 9}px` }}
+                          />
+                        ),
+                    )}
+                    {depth === 0 && hasChildren && expanded.has(node.key) && (
+                      <span
+                        className="absolute bottom-0 border-l border-dotted border-slate-500"
+                        style={{ left: `${depth * 18 + 9}px`, top: '24px' }}
+                      />
+                    )}
+                    {depth > 0 && (
+                      <>
+                        <span
+                          className={`absolute top-0 border-l border-dotted border-slate-500 ${isLastSibling ? 'h-1/2' : 'bottom-0'}`}
+                          style={{ left: `${(depth - 1) * 18 + 9}px` }}
+                        />
+                        <span
+                          className="absolute top-1/2 border-t border-dotted border-slate-500"
+                          style={{
+                            left: `${(depth - 1) * 18 + 9}px`,
+                            width: '18px',
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+                  <div
+                    className="relative z-10 flex min-w-0 items-start gap-1.5"
                     style={{ paddingLeft: `${depth * 18}px` }}
                   >
                     {hasChildren ? (
@@ -321,15 +370,27 @@ const DataAssetsPage: React.FC = () => {
     };
   }, [selected]);
 
+  const catalogResources = useMemo(
+    () =>
+      resources.filter(
+        (resource) =>
+          ![
+            'StructureDefinition',
+            'SearchParameter',
+            'OperationDefinition',
+          ].includes(resource.type),
+      ),
+    [resources],
+  );
   const visibleResources = useMemo(() => {
     const value = filter.trim().toLowerCase();
-    if (!value) return resources;
-    return resources.filter((resource) =>
+    if (!value) return catalogResources;
+    return catalogResources.filter((resource) =>
       `${resource.type} ${resource.supportedProfile?.join(' ') ?? ''}`
         .toLowerCase()
         .includes(value),
     );
-  }, [filter, resources]);
+  }, [catalogResources, filter]);
 
   const structureTree = useMemo(
     () =>
@@ -377,7 +438,7 @@ const DataAssetsPage: React.FC = () => {
               />
             </label>
             <span className="text-xs text-slate-500">
-              {resources.length} available resource types
+              {catalogResources.length} available resource types
             </span>
           </div>
 
@@ -412,27 +473,27 @@ const DataAssetsPage: React.FC = () => {
                       <h2 className="break-words text-base font-semibold text-slate-900 group-hover:text-cyan-800">
                         {resource.type}
                       </h2>
-                      {resourceProfile(resource) && (
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          {profileOrigin(resourceProfile(resource)) ===
-                          'fhir' ? (
-                            <img
-                              src="https://hl7.org/fhir/assets/images/fhir-logo.png"
-                              alt="HL7 FHIR"
-                              title="HL7 FHIR"
-                              className="h-6 w-auto max-w-24 object-contain object-left"
-                            />
-                          ) : profileOrigin(resourceProfile(resource)) ===
-                            'custom' ? (
-                            <span className="rounded bg-violet-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
-                              Custom
-                            </span>
-                          ) : null}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {!resourceProfile(resource) ||
+                        profileOrigin(resourceProfile(resource)) === 'fhir' ? (
+                          <img
+                            src="https://hl7.org/fhir/assets/images/fhir-logo.png"
+                            alt="HL7 FHIR"
+                            title="HL7 FHIR"
+                            className="h-6 w-auto max-w-24 object-contain object-left"
+                          />
+                        ) : profileOrigin(resourceProfile(resource)) ===
+                          'custom' ? (
+                          <span className="rounded bg-violet-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                            Custom
+                          </span>
+                        ) : null}
+                        {resourceProfile(resource) && (
                           <span className="break-all font-mono text-[10px] text-slate-400">
                             {resourceProfile(resource)}
                           </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                     <span
                       className="shrink-0 text-slate-400"

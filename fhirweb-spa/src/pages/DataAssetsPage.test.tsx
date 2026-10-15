@@ -48,6 +48,9 @@ describe('DataAssetsPage', () => {
         type: 'LegacyResource',
         interaction: [{ code: 'read' }],
       },
+      { type: 'StructureDefinition' },
+      { type: 'SearchParameter' },
+      { type: 'OperationDefinition' },
     ]);
     serviceMocks.getDataAssetDetails.mockResolvedValue({
       structureDefinition: {
@@ -107,7 +110,8 @@ describe('DataAssetsPage', () => {
     ).toBeTruthy();
     expect(await screen.findAllByText('Read')).toHaveLength(3);
     expect(screen.getAllByText('Supported Interactions')).toHaveLength(3);
-    expect(screen.getAllByAltText('HL7 FHIR')).toHaveLength(1);
+    expect(screen.getAllByAltText('HL7 FHIR')).toHaveLength(2);
+    expect(screen.getByText('3 available resource types')).toBeTruthy();
     expect(screen.getByText('Custom')).toBeTruthy();
     expect(
       screen
@@ -115,7 +119,18 @@ describe('DataAssetsPage', () => {
           name: 'View LegacyResource resource details',
         })
         .querySelector('img[alt="HL7 FHIR"]'),
-    ).toBeNull();
+    ).toBeTruthy();
+    for (const type of [
+      'StructureDefinition',
+      'SearchParameter',
+      'OperationDefinition',
+    ]) {
+      expect(
+        screen.queryByRole('button', {
+          name: `View ${type} resource details`,
+        }),
+      ).toBeNull();
+    }
     fireEvent.click(
       screen.getByRole('button', { name: 'View Patient resource details' }),
     );
@@ -131,6 +146,15 @@ describe('DataAssetsPage', () => {
     expect(structure.getByRole('columnheader', { name: 'Flags' })).toBeTruthy();
     expect(structure.getByRole('columnheader', { name: 'Card.' })).toBeTruthy();
     expect(structure.getByRole('columnheader', { name: 'Type' })).toBeTruthy();
+    expect(
+      structureSection?.querySelectorAll('.border-dotted').length,
+    ).toBeGreaterThan(0);
+    const rootRow = structure
+      .getByRole('button', { name: 'Collapse Patient' })
+      .closest('tr');
+    expect(
+      rootRow?.querySelector('.border-dotted.border-slate-500'),
+    ).toBeTruthy();
     expect(
       structure.getByRole('columnheader', {
         name: 'Description & Constraints',
