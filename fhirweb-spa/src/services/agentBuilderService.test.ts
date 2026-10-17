@@ -141,6 +141,115 @@ describe('persisted evaluation data endpoints', () => {
     );
     expect(result[0].primaryCode).toBe('866427');
   });
+  it('applies a system prompt with the documented persona version query', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.updateSystemPrompt(
+      'care/gap-manager',
+      'v1-exp-2',
+      'my-tenant',
+      'Prompt text',
+    );
+    const url = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+    expect(url.pathname).toBe(
+      '/api/agentbuilder/experiments/persona-system-prompt',
+    );
+    expect(url.searchParams.get('personaId')).toBe('care/gap-manager');
+    expect(url.searchParams.get('version')).toBe('v1-exp-2');
+    expect(url.searchParams.get('tenantId')).toBe('my-tenant');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('PUT');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      systemPrompt: 'Prompt text',
+    });
+  });
+  it('refines a system prompt from a selected eval run and optional guidance', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({ suggestedSystemPrompt: 'Better prompt' }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.refineSystemPrompt(
+      'care-gap-manager',
+      'v1',
+      'tenant',
+      'run-1',
+      'Query Conditions first',
+    );
+    const url = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+    expect(url.pathname).toBe(
+      '/api/agentbuilder/experiments/eval/$refine-prompt',
+    );
+    expect(url.searchParams.get('runId')).toBe('run-1');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      guidance: 'Query Conditions first',
+    });
+  });
+  it('submits a three-strategy HITL comparison for the selected scenario and tenant', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            comparisonGroup: 'group-1',
+            runIds: ['a', 'b', 'c'],
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await agentBuilderService.submitHitlComparison({
+      personaId: 'care-gap-manager',
+      version: 'v1',
+      scenarioId: 'scenario-1',
+      tenantId: 'tenant',
+      evalTenantId: 'eval-tenant',
+    });
+    const url = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+    expect(url.pathname).toBe(
+      '/api/agentbuilder/experiments/eval/$submit-hitl-comparison',
+    );
+    expect(url.searchParams.get('scenarioId')).toBe('scenario-1');
+    expect(url.searchParams.get('evalTenantId')).toBe('eval-tenant');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(result.runIds).toEqual(['a', 'b', 'c']);
+  });
+  it('lists and creates tenant terminology through the AgentBuilder API', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      String(_init?.method || 'GET') === 'POST'
+        ? new Response(JSON.stringify({ id: 7, code: 'HTN-1' }), {
+            status: 201,
+          })
+        : new Response(JSON.stringify([])),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await agentBuilderService.listTenantTerminology(
+      'Condition',
+      'hypertension',
+    );
+    await agentBuilderService.createTenantTerminology({
+      resourceType: 'Condition',
+      name: 'hypertension',
+      system: 'https://hospital.example/codes',
+      code: 'HTN-1',
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/api/agentbuilder/terminology?resourceType=Condition&q=hypertension',
+    );
+    expect(String(fetchMock.mock.calls[1][0])).toContain(
+      '/api/agentbuilder/terminology',
+    );
+    expect(fetchMock.mock.calls[1][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      resourceType: 'Condition',
+      name: 'hypertension',
+      system: 'https://hospital.example/codes',
+      code: 'HTN-1',
+    });
+  });
   it('requests resource-type pages with encoded IDs and pagination defaults', async () => {
     const fetchMock = vi.fn(
       async (_url: string) =>

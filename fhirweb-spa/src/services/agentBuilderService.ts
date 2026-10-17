@@ -49,8 +49,12 @@ export interface PersonaDetail extends PersonaSummary {
   pipelineSteps?: Array<Record<string, any>>;
   bindings?: Array<Record<string, any>>;
   policies?: Record<string, any>;
-  completionCriteria?: Record<string, any>;
+  completionCriteria?: Record<string, any> | Array<Record<string, any>>;
   safety?: Record<string, any>;
+  roleValidation?: Record<string, boolean>;
+  metadata?: Record<string, any>;
+  guardrailProfileRef?: string;
+  guardrailProfile?: Record<string, any>;
 }
 
 export interface AuthoringSession {
@@ -147,6 +151,7 @@ export interface EvalRun {
   runId: string;
   personaId: string;
   personaVersion: string;
+  scenarioId?: string;
   tenantId?: string;
   evalTenantId?: string;
   runStatus: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | string;
@@ -157,6 +162,16 @@ export interface EvalRun {
   replayTrace?: string | Record<string, any>;
   humanRating?: number;
   humanNotes?: string;
+  hitlSimStrategy?: 'APPROVE' | 'REJECT' | 'REFINE' | string;
+  hitlComparisonGroup?: string;
+  testInput?: string;
+  createdResources?:
+    | string
+    | Array<{
+        resourceType: string;
+        resourceId: string;
+        operation: string;
+      }>;
   errorMessage?: string;
   startedAt?: string;
   completedAt?: string;
@@ -204,6 +219,43 @@ export interface TerminologySearchResult {
   primaryCode?: string;
   primarySystem?: string;
   primaryDisplay?: string;
+}
+
+export interface TerminologyConcept {
+  id: number;
+  tenantId: string;
+  resourceType: string;
+  name: string;
+  displayName?: string;
+  system: string;
+  code: string;
+  display?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface PromptRefinement {
+  suggestedSystemPrompt: string;
+  reasoning?: string;
+  sourceRunId?: string;
+  scores?: Record<string, number | string>;
+}
+
+export interface HitlComparisonResult {
+  comparisonGroup: string;
+  runIds: string[];
+}
+
+export interface CreatedEvalResources {
+  runId: string;
+  evalTenantId: string;
+  personaId: string;
+  personaVersion: string;
+  createdResources: Array<{
+    resourceType: string;
+    resourceId: string;
+    operation: string;
+  }>;
 }
 
 export const normalizeSeedStatus = (
@@ -268,7 +320,14 @@ export interface ScenarioDetail extends ScenarioSummary {
     resourceType: string;
     expectedParams: Record<string, string>;
   }>;
+  expectedWrites?: Record<string, any> | null;
   generateRubric?: boolean;
+  hitlSimConfig?: {
+    strategy: 'APPROVE' | 'REJECT' | 'REFINE';
+    refineInstruction?: string;
+    applyToCount?: number;
+  };
+  hitlStrategyGoldSets?: Record<string, unknown>;
 }
 
 const apiUrl = (path: string) => `${API_BASE}${path}`;
@@ -459,6 +518,11 @@ export const agentBuilderService = {
     request<ScenarioDetail>(
       `/api/agentbuilder/scenarios/${encodeURIComponent(scenarioId)}`,
     ),
+  patchScenario: (scenarioId: string, body: Record<string, unknown>) =>
+    request<ScenarioDetail>(
+      `/api/agentbuilder/scenarios/${encodeURIComponent(scenarioId)}`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
   seedScenario: (scenarioId: string) =>
     request<{ seedJobId: string; evalTenantId: string }>(
       `/api/agentbuilder/experiments/eval/$seed?scenarioId=${encodeURIComponent(scenarioId)}`,
@@ -489,16 +553,26 @@ export const agentBuilderService = {
     request<SeededResourceBundle>(
       `/api/agentbuilder/experiments/eval/seed/${encodeURIComponent(seedJobId)}/resources/${encodeURIComponent(resourceType)}?${new URLSearchParams({ page: String(page), size: String(size) })}`,
     ),
-  submitEval: (params: {
-    personaId: string;
-    version: string;
-    scenarioId: string;
-    tenantId: string;
-    evalTenantId: string;
-  }) =>
+  submitEval: (
+    params: {
+      personaId: string;
+      version: string;
+      scenarioId: string;
+      tenantId: string;
+      evalTenantId: string;
+    },
+    hitlSimConfig?: {
+      strategy: 'APPROVE' | 'REJECT' | 'REFINE';
+      refineInstruction?: string;
+      applyToCount?: number;
+    },
+  ) =>
     request<{ runId: string }>(
       `/api/agentbuilder/experiments/eval/$submit?${new URLSearchParams(params)}`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        ...(hitlSimConfig ? { body: JSON.stringify({ hitlSimConfig }) } : {}),
+      },
     ),
   getEval: (runId: string) =>
     request<EvalRun>(
@@ -517,6 +591,79 @@ export const agentBuilderService = {
     request<{ betterVersion: string }>(
       `/api/agentbuilder/experiments/$compare?${new URLSearchParams({ personaId, tenantId })}`,
     ),
+  submitHitlComparison: (params: {
+    personaId: string;
+    version: string;
+    scenarioId: string;
+    tenantId: string;
+    evalTenantId: string;
+  }) =>
+    request<HitlComparisonResult>(
+      `/api/agentbuilder/experiments/eval/$submit-hitl-comparison?${new URLSearchParams(params)}`,
+      { method: 'POST' },
+    ),
+  refineSystemPrompt: (
+    personaId: string,
+    version: string,
+    tenantId: string,
+    runId?: string,
+    guidance?: string,
+  ) =>
+    request<PromptRefinement>(
+      `/api/agentbuilder/experiments/eval/$refine-prompt?${new URLSearchParams({
+        personaId,
+        version,
+        tenantId,
+        ...(runId ? { runId } : {}),
+      })}`,
+      guidance?.trim()
+        ? {
+            method: 'POST',
+            body: JSON.stringify({ guidance: guidance.trim() }),
+          }
+        : { method: 'POST' },
+    ),
+  updateSystemPrompt: (
+    personaId: string,
+    version: string,
+    tenantId: string,
+    systemPrompt: string,
+  ) =>
+    request<void>(
+      `/api/agentbuilder/experiments/persona-system-prompt?${new URLSearchParams({ personaId, version, tenantId })}`,
+      { method: 'PUT', body: JSON.stringify({ systemPrompt }) },
+    ),
+  getCreatedEvalResources: (runId: string) =>
+    request<CreatedEvalResources>(
+      `/api/agentbuilder/experiments/eval/${encodeURIComponent(runId)}/created-resources`,
+    ),
+  getCreatedEvalResource: (
+    runId: string,
+    resourceType: string,
+    resourceId: string,
+  ) =>
+    request<Record<string, unknown>>(
+      `/api/agentbuilder/experiments/eval/${encodeURIComponent(runId)}/created-resources/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}`,
+    ),
+  listTenantTerminology: (resourceType?: string, query?: string) => {
+    const params = new URLSearchParams();
+    if (resourceType) params.set('resourceType', resourceType);
+    if (query?.trim()) params.set('q', query.trim());
+    return request<TerminologyConcept[]>(
+      `/api/agentbuilder/terminology${params.size ? `?${params}` : ''}`,
+    );
+  },
+  createTenantTerminology: (
+    concept: Pick<
+      TerminologyConcept,
+      'resourceType' | 'name' | 'system' | 'code'
+    > &
+      Partial<Pick<TerminologyConcept, 'displayName' | 'display'>>,
+  ) =>
+    request<TerminologyConcept>('/api/agentbuilder/terminology', {
+      method: 'POST',
+      body: JSON.stringify(concept),
+    }),
   fork: (
     personaId: string,
     baseVersion: string,

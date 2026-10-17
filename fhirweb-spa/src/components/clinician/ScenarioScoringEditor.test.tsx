@@ -27,6 +27,7 @@ describe('scenario scoring', () => {
       generateRubric: false,
       criteria:
         ' States the most recent blood pressure numerically \n\nLists current medications',
+      expectedWriteTypes: [],
       queries: [
         { resourceType: 'Patient', filters: [] },
         {
@@ -51,6 +52,22 @@ describe('scenario scoring', () => {
         { resourceType: 'Observation', expectedParams: { code: '85354-9' } },
         { resourceType: 'Condition', expectedParams: { code: '38341003' } },
         { resourceType: 'MedicationRequest', expectedParams: {} },
+      ],
+    });
+  });
+
+  it('serializes expected writes as one gold-bundle entry per unique type', () => {
+    expect(
+      buildScenarioScoring({
+        ...newScenarioScoring(),
+        expectedWriteTypes: ['CarePlan', 'MedicationRequest', 'CarePlan'],
+      }).expectedWrites,
+    ).toEqual({
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        { resource: { resourceType: 'CarePlan' } },
+        { resource: { resourceType: 'MedicationRequest' } },
       ],
     });
   });

@@ -17,10 +17,10 @@ vi.mock('../../services/agentBuilderService', () => ({
   agentBuilderService: { searchTerminology: vi.fn() },
 }));
 
-const renderEditor = () => {
+const renderEditor = (initialGroup = newCohortGroup()) => {
   const onChange = vi.fn();
   const StatefulEditor = () => {
-    const [groups, setGroups] = React.useState([newCohortGroup()]);
+    const [groups, setGroups] = React.useState([initialGroup]);
     return (
       <EvaluationCohortEditor
         groups={groups}
@@ -73,6 +73,96 @@ describe('EvaluationCohortEditor medication and terminology', () => {
         },
       ]),
     ).toThrow(/positive lookback/);
+  });
+
+  it('serializes optional patient demographics and omits an empty profile', () => {
+    const baseGroup = {
+      ...newCohortGroup(),
+      label: 'Older female patients',
+      count: 4,
+    };
+    expect(buildCohortGroups([baseGroup])[0]).not.toHaveProperty(
+      'patientProfile',
+    );
+
+    expect(
+      buildCohortGroups([
+        {
+          ...baseGroup,
+          patientProfile: {
+            ...baseGroup.patientProfile,
+            minAge: '65',
+            gender: 'female',
+            city: 'Singapore',
+            country: 'SG',
+          },
+        },
+      ])[0],
+    ).toMatchObject({
+      patientProfile: {
+        minAge: 65,
+        gender: 'female',
+        city: 'Singapore',
+        country: 'SG',
+      },
+    });
+  });
+
+  it('validates demographic age bounds', () => {
+    const group = {
+      ...newCohortGroup(),
+      label: 'Invalid ages',
+      patientProfile: {
+        ...newCohortGroup().patientProfile,
+        minAge: '70',
+        maxAge: '60',
+      },
+    };
+    expect(() => buildCohortGroups([group])).toThrow(
+      /Maximum patient age must be at least the minimum age/,
+    );
+  });
+
+  it('serializes decimal and percent observation results as numeric values with units', () => {
+    const group = {
+      ...newCohortGroup(),
+      label: 'HbA1c results',
+      observationConstraints: [
+        {
+          loincCode: '4548-4',
+          daysBack: 180,
+          comparator: 'gt',
+          value: '5.7%',
+          unit: '',
+        },
+        {
+          loincCode: '718-7',
+          daysBack: 90,
+          comparator: 'le',
+          value: '12.25',
+          unit: 'g/dL',
+        },
+      ],
+    };
+
+    expect(buildCohortGroups([group])[0]).toMatchObject({
+      observationConstraints: [
+        {
+          loincCode: '4548-4',
+          daysBack: 180,
+          comparator: 'gt',
+          value: 5.7,
+          unit: '%',
+        },
+        {
+          loincCode: '718-7',
+          daysBack: 90,
+          comparator: 'le',
+          value: 12.25,
+          unit: 'g/dL',
+        },
+      ],
+    });
   });
 
   it('adds medication criteria on request with RxNorm search, status and lookback controls', () => {
@@ -220,6 +310,31 @@ describe('EvaluationCohortEditor medication and terminology', () => {
     ]);
   });
 
+  it('removes one selected condition code without clearing the others', () => {
+    const { onChange } = renderEditor({
+      ...newCohortGroup(),
+      conditionCodes: '73211009, 254637007',
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remove condition code 73211009',
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ conditionCodes: '254637007' }),
+    ]);
+    expect(
+      screen.queryByRole('button', {
+        name: 'Remove condition code 73211009',
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', {
+        name: 'Remove condition code 254637007',
+      }),
+    ).toBeTruthy();
+  });
+
   it('uses selected terminology code and display for lab tests', async () => {
     vi.mocked(agentBuilderService.searchTerminology).mockResolvedValue([
       {
@@ -257,5 +372,20 @@ describe('EvaluationCohortEditor medication and terminology', () => {
       '4548',
       'Observation',
     );
+  });
+
+  it('opens tenant code entry in a labeled dialog that can be dismissed', () => {
+    renderEditor();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add tenant Condition code' }),
+    );
+    expect(
+      screen.getByRole('dialog', { name: 'Add tenant code' }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('System URI')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close terminology form' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

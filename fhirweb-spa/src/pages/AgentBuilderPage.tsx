@@ -7,9 +7,14 @@ import Phase0Authoring, {
 import AuthoringSendButton from '../components/clinician/AuthoringSendButton';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
 import PreviousEvalData from '../components/clinician/PreviousEvalData';
+import {
+  ParameterList,
+  PersonaDetailSections,
+} from '../components/clinician/PersonaDetailSections';
 import SeededResourceBrowser from '../components/clinician/SeededResourceBrowser';
 import ScenarioScoringEditor, {
   buildScenarioScoring,
+  expectedWriteTypesFromBundle,
   newScenarioScoring,
 } from '../components/clinician/ScenarioScoringEditor';
 import SavedScenarioPicker, {
@@ -20,6 +25,9 @@ import EvaluationCohortEditor, {
   CohortGroupDraft,
   newCohortGroup,
 } from '../components/clinician/EvaluationCohortEditor';
+import TenantTerminologyPage, {
+  TenantTerminologyForm,
+} from './TenantTerminologyPage';
 import {
   agentBuilderService,
   AuthoringSession,
@@ -36,7 +44,12 @@ import {
 } from '../services/agentBuilderService';
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || 'default';
-type View = 'marketplace' | 'authoring' | 'evaluations' | 'admin';
+type View =
+  | 'marketplace'
+  | 'authoring'
+  | 'evaluations'
+  | 'terminology'
+  | 'admin';
 type Toast = { kind: 'success' | 'error'; text: string } | null;
 type ConfirmationRequest = {
   title: string;
@@ -264,6 +277,44 @@ const StatusBadge: React.FC<{ value?: string }> = ({ value }) => {
 const dateTime = (value?: string) =>
   value ? new Date(value).toLocaleString() : '—';
 
+const scenarioSeedGroups = (scenario: ScenarioDetail): CohortGroupDraft[] => {
+  const groups = scenario.seedSpec?.cohortGroups;
+  if (!Array.isArray(groups) || !groups.length) return [newCohortGroup()];
+  return groups.map((group: any) => ({
+    label: String(group.label || ''),
+    count: Number(group.count || 1),
+    patientProfile: {
+      minAge: group.patientProfile?.minAge ?? '',
+      maxAge: group.patientProfile?.maxAge ?? '',
+      gender: group.patientProfile?.gender ?? '',
+      city: group.patientProfile?.city ?? '',
+      state: group.patientProfile?.state ?? '',
+      postalCode: group.patientProfile?.postalCode ?? '',
+      country: group.patientProfile?.country ?? '',
+    },
+    conditionCodes: Array.isArray(group.conditionCodes)
+      ? group.conditionCodes.join(', ')
+      : '',
+    noObservations: Boolean(group.noObservations),
+    observationConstraints: Array.isArray(group.observationConstraints)
+      ? group.observationConstraints.map((rule: any) => ({
+          loincCode: String(rule.loincCode || ''),
+          daysBack: Number(rule.daysBack || 180),
+          comparator: String(rule.comparator || 'le'),
+          value: `${rule.value ?? 0}${rule.unit === '%' ? '%' : ''}`,
+          unit: rule.unit === '%' ? '' : String(rule.unit || ''),
+        }))
+      : [],
+    medicationRequests: Array.isArray(group.medicationRequests)
+      ? group.medicationRequests.map((medication: any) => ({
+          medicationCode: String(medication.medicationCode || ''),
+          status: String(medication.status || 'active'),
+          daysBack: Number(medication.daysBack || 180),
+        }))
+      : [],
+  }));
+};
+
 const AgentBuilderPage: React.FC = () => {
   const navigate = useNavigate();
   const [view, setView] = useState<View>('marketplace');
@@ -323,6 +374,11 @@ const AgentBuilderPage: React.FC = () => {
   const [authoringTheme, setAuthoringTheme] =
     useState<AuthoringTheme>('professional');
   const [chatInput, setChatInput] = useState('');
+  const [showAuthoringTerminologyForm, setShowAuthoringTerminologyForm] =
+    useState(false);
+  const [authoringTerminologyType, setAuthoringTerminologyType] = useState<
+    'Condition' | 'Observation' | 'MedicationRequest'
+  >('Condition');
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [evaluationTarget, setEvaluationTarget] =
@@ -336,6 +392,10 @@ const AgentBuilderPage: React.FC = () => {
   const [scenarioName, setScenarioName] = useState('');
   const [scenarioQuestion, setScenarioQuestion] = useState('');
   const [scenarioScoring, setScenarioScoring] = useState(newScenarioScoring);
+  const [hitlComparisonEnabled, setHitlComparisonEnabled] = useState(false);
+  const [hitlRefineInstruction, setHitlRefineInstruction] = useState('');
+  const [hitlApplyToCount, setHitlApplyToCount] = useState(10);
+  const [hitlGoldSets, setHitlGoldSets] = useState('');
   const [scenarioParams, setScenarioParams] = useState('{}');
   const [seedDescription, setSeedDescription] = useState('');
   const [seedGroups, setSeedGroups] = useState<CohortGroupDraft[]>([
@@ -853,6 +913,18 @@ const AgentBuilderPage: React.FC = () => {
         : evaluationTarget.personaType !== 'AGENT'
           ? JSON.parse(scenarioParams)
           : undefined;
+      const goldSets = hitlGoldSets.trim()
+        ? JSON.parse(hitlGoldSets)
+        : undefined;
+      if (
+        hitlComparisonEnabled &&
+        !hitlRefineInstruction.trim() &&
+        hitlComparisonEnabled
+      ) {
+        throw new Error(
+          'Add the instruction used for the REFINE comparison run.',
+        );
+      }
       const scenario = await agentBuilderService.createScenario({
         personaId: evaluationTarget.personaId,
         scenarioName: scenarioName.trim(),
@@ -875,6 +947,16 @@ const AgentBuilderPage: React.FC = () => {
         ...(evaluationTarget.personaType === 'AGENT'
           ? buildScenarioScoring(scenarioScoring)
           : { generateRubric: true }),
+        ...(hitlComparisonEnabled
+          ? {
+              hitlSimConfig: {
+                strategy: 'APPROVE',
+                refineInstruction: hitlRefineInstruction.trim(),
+                applyToCount: hitlApplyToCount,
+              },
+              ...(goldSets ? { hitlStrategyGoldSets: goldSets } : {}),
+            }
+          : {}),
       });
       setScenarioId(scenario.scenarioId);
       const blueprint = await agentBuilderService.getScenario(
@@ -883,7 +965,7 @@ const AgentBuilderPage: React.FC = () => {
       setSavedScenario(blueprint);
       setEvalRun(null);
       setView('evaluations');
-      await seedSavedScenario(scenario.scenarioId, blueprint);
+      await seedSavedScenario(scenario.scenarioId);
     } catch (error) {
       setScenarioError(
         error instanceof Error
@@ -895,19 +977,54 @@ const AgentBuilderPage: React.FC = () => {
     }
   };
 
-  const seedSavedScenario = async (
-    id: string,
-    knownBlueprint?: ScenarioDetail,
-  ) => {
+  const reviseScenario = (scenario: ScenarioDetail) => {
+    const seedSpec = scenario.seedSpec || {};
+    const responseCriteria = Array.isArray(scenario.responseCriteria)
+      ? scenario.responseCriteria
+      : typeof scenario.responseCriteria === 'string'
+        ? JSON.parse(scenario.responseCriteria)
+        : [];
+    setScenarioName(`${scenario.scenarioName} (revised)`);
+    setSeedDescription(String(seedSpec.description || ''));
+    setSeedGroups(scenarioSeedGroups(scenario));
+    setScenarioQuestion(
+      scenario.conversationScript?.find((turn) => turn.role === 'user')
+        ?.content || '',
+    );
+    setScenarioParams(JSON.stringify(scenario.missionParams || {}, null, 2));
+    setScenarioScoring({
+      generateRubric: scenario.generateRubric ?? !responseCriteria.length,
+      criteria: responseCriteria.map(String).join('\n'),
+      expectedWriteTypes: expectedWriteTypesFromBundle(scenario.expectedWrites),
+      queries: (scenario.expectedQueryPatterns || []).map((pattern) => ({
+        resourceType: pattern.resourceType,
+        filters: Object.entries(pattern.expectedParams || {}).map(
+          ([name, value]) => ({ name, value: String(value) }),
+        ),
+      })),
+    });
+    setHitlComparisonEnabled(Boolean(scenario.hitlSimConfig));
+    setHitlRefineInstruction(scenario.hitlSimConfig?.refineInstruction || '');
+    setHitlApplyToCount(scenario.hitlSimConfig?.applyToCount || 10);
+    setHitlGoldSets(
+      scenario.hitlStrategyGoldSets
+        ? JSON.stringify(scenario.hitlStrategyGoldSets, null, 2)
+        : '',
+    );
+    setSavedScenario(null);
+    setScenarioId(null);
+    setSeedJob(null);
+    setEvalRun(null);
+    setScenarioError(null);
+    setShowScenarioDraft(true);
+  };
+
+  const seedSavedScenario = async (id: string) => {
     if (!evaluationTarget || scenarioLoading) return;
     setBusy(true);
     setScenarioError(null);
     try {
-      const blueprint =
-        knownBlueprint ||
-        (savedScenario?.scenarioId === id
-          ? savedScenario
-          : await agentBuilderService.getScenario(id));
+      const blueprint = await agentBuilderService.getScenario(id);
       if (
         blueprint.personaId &&
         blueprint.personaId !== evaluationTarget.personaId
@@ -981,6 +1098,9 @@ const AgentBuilderPage: React.FC = () => {
     }
     setBusy(true);
     try {
+      const currentScenario =
+        await agentBuilderService.getScenario(targetScenarioId);
+      setSavedScenario(currentScenario);
       const runs = await agentBuilderService.listEvalRuns(
         evaluationTarget.personaId,
         TENANT_ID,
@@ -1203,6 +1323,7 @@ const AgentBuilderPage: React.FC = () => {
     { id: 'marketplace', label: 'Marketplace', icon: 'grid' },
     { id: 'authoring', label: 'Builder', icon: 'chat' },
     { id: 'evaluations', label: 'Evaluations', icon: 'chart' },
+    { id: 'terminology', label: 'Terminology', icon: 'search' },
     { id: 'admin', label: 'Platform assets', icon: 'settings' },
   ];
   const isFocusedAuthoring = view === 'authoring' && Boolean(sessionId);
@@ -1217,7 +1338,9 @@ const AgentBuilderPage: React.FC = () => {
     setShowScenarioDraft(false);
   };
   const navigateWorkspace = (nextView: View) => {
-    if (nextView === 'evaluations') returnToEvaluationList();
+    // Re-clicking Evaluations while on it returns to the persona list; arriving from another view resumes the open persona.
+    if (nextView === 'evaluations' && view === 'evaluations')
+      returnToEvaluationList();
     setView(nextView);
   };
   const chatTheme = {
@@ -1753,6 +1876,15 @@ const AgentBuilderPage: React.FC = () => {
                           </select>
                         </label>
                       )}
+                      {sessionId && !sessionReadOnly && (
+                        <Button
+                          disabled={busy || chatBusy}
+                          className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm"
+                          onClick={() => setShowAuthoringTerminologyForm(true)}
+                        >
+                          Add terminology
+                        </Button>
+                      )}
                       {!sessionId && (
                         <Button onClick={() => setShowCreate(true)}>
                           <Icon name="plus" />
@@ -2102,20 +2234,42 @@ const AgentBuilderPage: React.FC = () => {
                       inspect quality traces before production approval.
                     </p>
                   </div>
-                  {evaluationTarget && (
-                    <Button onClick={returnToEvaluationList}>
-                      Back to personas
+                  <div className="flex flex-wrap items-center gap-2">
+                    {evaluationTarget && !scenarioId && !showScenarioDraft && (
+                      <Button
+                        tone="accent"
+                        onClick={() => setShowScenarioDraft(true)}
+                      >
+                        <Icon name="plus" />
+                        Draft new test scenario
+                      </Button>
+                    )}
+                    {evaluationTarget && (
+                      <Button onClick={returnToEvaluationList}>
+                        Back to personas
+                      </Button>
+                    )}
+                    <Button onClick={() => void loadWorkspace()}>
+                      Refresh personas
                     </Button>
-                  )}
-                  <Button onClick={() => void loadWorkspace()}>
-                    Refresh personas
-                  </Button>
+                  </div>
                 </div>
                 {evaluationTarget && (
                   <PreviousEvalData
                     key={`seed-history:${evaluationTarget.personaId}`}
                     personaId={evaluationTarget.personaId}
-                    refreshKey={`${seedJob?.seedJobId || ''}:${seedJob?.seedStatus || ''}`}
+                    personaVersion={evaluationTarget.version}
+                    tenantId={TENANT_ID}
+                    currentSystemPrompt={evaluationDetail?.systemPrompt}
+                    canWrite={Boolean(
+                      evaluationDetail?.tools?.includes('fhir_mutate') ||
+                      evaluationDetail?.toolConfig?.fhir_mutate,
+                    )}
+                    onScenarioUpdated={(scenario) => {
+                      if (scenario.scenarioId === scenarioId)
+                        setSavedScenario(scenario);
+                    }}
+                    refreshKey={`${seedJob?.seedJobId || ''}:${seedJob?.seedStatus || ''}:${evalRun?.runId || ''}:${evalRun?.runStatus || ''}`}
                     disabled={
                       busy ||
                       ['PENDING', 'SEEDING'].includes(
@@ -2125,15 +2279,23 @@ const AgentBuilderPage: React.FC = () => {
                     }
                     onSubmit={submitEvaluation}
                     submittedTenantId={evalRun?.evalTenantId}
+                    onPromptApplied={async (version, systemPrompt) => {
+                      await agentBuilderService.updateSystemPrompt(
+                        evaluationTarget.personaId,
+                        version,
+                        TENANT_ID,
+                        systemPrompt,
+                      );
+                      if (evaluationTarget.version === version)
+                        setEvaluationDetail(
+                          await agentBuilderService.getPersona(
+                            evaluationTarget.personaId,
+                            version,
+                          ),
+                        );
+                      notify('success', 'Refined system prompt applied.');
+                    }}
                   />
-                )}
-                {evaluationTarget && !scenarioId && !showScenarioDraft && (
-                  <Button
-                    tone="accent"
-                    onClick={() => setShowScenarioDraft(true)}
-                  >
-                    Draft new test scenario
-                  </Button>
                 )}
                 {evaluationTarget && (
                   <SavedScenarioPicker
@@ -2169,7 +2331,15 @@ const AgentBuilderPage: React.FC = () => {
                 {evaluationTarget && scenarioId && (
                   <div className="space-y-3">
                     {savedScenario && (
-                      <ScenarioBlueprint scenario={savedScenario} />
+                      <>
+                        <ScenarioBlueprint scenario={savedScenario} />
+                        <Button
+                          disabled={busy || scenarioLoading}
+                          onClick={() => reviseScenario(savedScenario)}
+                        >
+                          Create revised scenario
+                        </Button>
+                      </>
                     )}
                     <div className="flex flex-wrap gap-2">
                       {(!seedJob ||
@@ -2433,8 +2603,116 @@ const AgentBuilderPage: React.FC = () => {
                       <ScenarioScoringEditor
                         value={scenarioScoring}
                         onChange={setScenarioScoring}
+                        showExpectedWrites={Boolean(
+                          evaluationDetail?.tools?.includes('fhir_mutate') ||
+                          evaluationDetail?.toolConfig?.fhir_mutate,
+                        )}
                       />
                     )}
+                    <fieldset className="space-y-3 border-t border-slate-200 pt-4 xl:col-span-2">
+                      <legend className="text-sm font-semibold text-slate-900">
+                        HITL strategy comparison
+                      </legend>
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={hitlComparisonEnabled}
+                          onChange={(event) =>
+                            setHitlComparisonEnabled(event.target.checked)
+                          }
+                        />
+                        Enable APPROVE / REJECT / REFINE evaluation runs
+                      </label>
+                      {hitlComparisonEnabled && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="text-xs font-medium text-slate-600">
+                            Number of review steps to simulate
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={hitlApplyToCount}
+                              onChange={(event) =>
+                                setHitlApplyToCount(Number(event.target.value))
+                              }
+                              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                            />
+                            <span className="mt-1 block font-normal leading-relaxed text-slate-500">
+                              Maximum number of HITL review requests the
+                              simulated reviewer will answer in each run. The
+                              comparison runs use the same patient data and
+                              apply APPROVE, REJECT, or REFINE to each request.
+                              Set this to the number of review steps the agent
+                              is expected to request.
+                            </span>
+                          </label>
+                          <label className="text-xs font-medium text-slate-600 sm:col-span-2">
+                            Instruction sent to the agent for REFINE
+                            <textarea
+                              required
+                              rows={2}
+                              value={hitlRefineInstruction}
+                              onChange={(event) =>
+                                setHitlRefineInstruction(event.target.value)
+                              }
+                              placeholder="e.g. Add a follow-up appointment for the patient."
+                              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-slate-600 sm:col-span-2">
+                            Expected writes by strategy (optional JSON)
+                            <textarea
+                              rows={4}
+                              value={hitlGoldSets}
+                              onChange={(event) =>
+                                setHitlGoldSets(event.target.value)
+                              }
+                              placeholder={
+                                '{ "approve": { "entries": [] }, "reject": { "entries": [] }, "refine": { "entries": [] } }'
+                              }
+                              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs"
+                            />
+                            <span className="mt-1 block font-normal leading-relaxed text-slate-500">
+                              Optional scoring targets for resources expected
+                              after each reviewer decision. Leave empty to use
+                              the scenario’s standard expected writes for all
+                              strategies.
+                            </span>
+                          </label>
+                          <details className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs sm:col-span-2">
+                            <summary className="cursor-pointer font-semibold text-cyan-800">
+                              Example and field guide
+                            </summary>
+                            <p className="mt-2 leading-relaxed text-slate-600">
+                              Each strategy can have its own expected write
+                              bundle. Replace the example entries with the
+                              resources that should exist after that decision.
+                              Strategies you omit use the scenario’s regular
+                              expected writes.
+                            </p>
+                            <pre className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
+                              {`{
+  "approve": { "entries": ["<expected resources after approval>"] },
+  "reject": { "entries": ["<expected resources after rejection>"] },
+  "refine": { "entries": ["<expected resources after refinement>"] }
+}`}
+                            </pre>
+                            <p className="mt-2 leading-relaxed text-slate-600">
+                              Use the same expected-write bundle format as the
+                              scenario’s base scoring setup. For example, a
+                              reject strategy may expect no new resources;
+                              approve and refine may expect different CarePlan
+                              or MedicationRequest resources.
+                            </p>
+                          </details>
+                          <p className="text-xs text-slate-500 sm:col-span-2">
+                            This configuration is saved when the scenario is
+                            created. Scenarios cannot be edited; revise one by
+                            creating a new scenario.
+                          </p>
+                        </div>
+                      )}
+                    </fieldset>
                     <div className="flex items-end justify-end gap-2 xl:col-span-2">
                       <Button
                         type="button"
@@ -2599,6 +2877,20 @@ const AgentBuilderPage: React.FC = () => {
                             {seedJob.errorMessage}
                           </p>
                         )}
+                        {savedScenario?.scenarioId === scenarioId && (
+                          <div
+                            className={`mt-3 rounded-lg border p-3 text-xs ${expectedWriteTypesFromBundle(savedScenario.expectedWrites).length ? 'border-cyan-200 bg-cyan-50 text-cyan-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}
+                          >
+                            <span className="font-semibold">
+                              Expected writes for scoring:{' '}
+                            </span>
+                            {expectedWriteTypesFromBundle(
+                              savedScenario.expectedWrites,
+                            ).length
+                              ? `at least one ${expectedWriteTypesFromBundle(savedScenario.expectedWrites).join(', ')} resource. Data Accuracy will be evaluated against this gold bundle.`
+                              : 'not set. Data Accuracy will be neutral for this scenario.'}
+                          </div>
+                        )}
                         {seedJob.seedStatus === 'COMPLETED' && (
                           <Button
                             tone="accent"
@@ -2618,12 +2910,24 @@ const AgentBuilderPage: React.FC = () => {
                             Submit evaluation
                           </Button>
                         )}
+                        {evalRun?.evalTenantId === seedJob.evalTenantId && (
+                          <p
+                            role="status"
+                            className="mt-3 text-xs text-slate-600"
+                          >
+                            Evaluation run {evalRun.runStatus.toLowerCase()}.
+                            Results appear in Run History under Previous Eval
+                            Data.
+                          </p>
+                        )}
                       </article>
                     )}
                   </div>
                 )}
               </section>
             )}
+
+            {view === 'terminology' && <TenantTerminologyPage />}
 
             {view === 'admin' && (
               <section>
@@ -2810,6 +3114,29 @@ const AgentBuilderPage: React.FC = () => {
                 }
               : undefined;
           })()}
+          promptSessionId={
+            sessions.find(
+              (session) =>
+                session.finalized_persona_id === selected.personaId &&
+                session.finalized_persona_version === selected.version &&
+                editableSession(session.status),
+            )?.session_id
+          }
+          onSaveSystemPrompt={async (systemPrompt) => {
+            await agentBuilderService.updateSystemPrompt(
+              selected.personaId,
+              selected.version,
+              TENANT_ID,
+              systemPrompt,
+            );
+            const updated = await agentBuilderService.getPersona(
+              selected.personaId,
+              selected.version,
+            );
+            setDetail(updated);
+            setSelected(updated);
+            notify('success', 'System prompt applied.');
+          }}
           onEvaluate={() => {
             setEvaluationTarget(selected);
             setSeedJob(null);
@@ -3193,6 +3520,31 @@ const AgentBuilderPage: React.FC = () => {
           </form>
         </Modal>
       )}
+      {showAuthoringTerminologyForm && (
+        <Modal
+          title="Add tenant terminology"
+          onClose={() => setShowAuthoringTerminologyForm(false)}
+        >
+          <p className="mb-3 text-xs text-slate-500">
+            The code will be available to terminology lookup in this and future
+            authoring sessions.
+          </p>
+          <TenantTerminologyForm
+            initialResourceType={authoringTerminologyType}
+            onSaved={(concept) => {
+              setAuthoringTerminologyType(
+                concept.resourceType as
+                  | 'Condition'
+                  | 'Observation'
+                  | 'MedicationRequest',
+              );
+              setShowAuthoringTerminologyForm(false);
+              notify('success', `Added tenant code ${concept.code}.`);
+            }}
+            onCancel={() => setShowAuthoringTerminologyForm(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 };
@@ -3227,6 +3579,202 @@ const Modal: React.FC<{
   </div>
 );
 
+const MANUAL_SYSTEM_PROMPT_TEMPLATE = `You are a <clinical-role> agent. Your responses MUST begin with a JSON tool call object (no preamble text). Output EXACTLY ONE tool call JSON per turn.
+
+CLINICAL DECISION RULES:
+- <Group A condition>: CREATE <ResourceType>
+- <Group B condition>: CREATE <ResourceType>
+
+WORKFLOW (follow in order):
+1. Query required FHIR resources with fhir_query and action=search.
+2. Apply the clinical decision rules to the returned data.
+3. Create one resource at a time with fhir_mutate using the body parameter.
+4. Call mission_complete after all work is finished.
+
+RULES:
+- Start with the first required query; do not add a prose preamble.
+- Use actual IDs returned by FHIR queries.
+- Never use fhir_search; use fhir_query.
+- Do not create a Bundle; create resources individually.
+- Call mission_complete only after all qualifying records are processed.`;
+
+const SystemPromptWorkbench: React.FC<{
+  persona: PersonaDetail;
+  sessionId?: string;
+  onSaved: (systemPrompt: string) => Promise<void>;
+}> = ({ persona, sessionId, onSaved }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(persona.systemPrompt || '');
+  const [generationSessionId, setGenerationSessionId] = useState<string | null>(
+    null,
+  );
+  const [generationOutput, setGenerationOutput] = useState('');
+  const [generationUnavailable, setGenerationUnavailable] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setDraft(persona.systemPrompt || ''), [persona.systemPrompt]);
+
+  const generate = async () => {
+    setGenerating(true);
+    setError(null);
+    setGenerationOutput('');
+    setGenerationUnavailable(false);
+    let output = '';
+    try {
+      let activeSessionId = sessionId || generationSessionId;
+      if (!activeSessionId) {
+        const session = await agentBuilderService.createSession({
+          personaType: 'AGENT',
+          authoringMode: 'ADAPT_FROM',
+          sourcePersonaId: persona.personaId,
+          sourcePersonaVersion: persona.version,
+          description: `Generate and refine the system prompt for ${persona.name}.`,
+        });
+        activeSessionId = session.sessionId;
+        setGenerationSessionId(activeSessionId);
+      }
+      await agentBuilderService.streamMessage(
+        activeSessionId,
+        'Generate the system prompt for this persona.',
+        (token) => {
+          output += token;
+          setGenerationOutput(output);
+        },
+      );
+      const match = output.match(/"systemPrompt"\s*:\s*("(?:\\.|[^"\\])*")/s);
+      if (match) {
+        setDraft(JSON.parse(match[1]) as string);
+      } else {
+        setGenerationUnavailable(true);
+      }
+    } catch (failure) {
+      setGenerationUnavailable(true);
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : 'Unable to generate the system prompt.',
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const save = async () => {
+    if (!draft.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSaved(draft.trim());
+      setEditing(false);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : 'Unable to apply the system prompt.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        System prompt
+      </h3>
+      <p className="text-xs text-slate-500">
+        {persona.systemPrompt?.length ?? 0} characters · Updated{' '}
+        {dateTime(persona.updatedAt)}
+      </p>
+      {editing ? (
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={generating || saving}
+              onClick={() => void generate()}
+            >
+              {generating
+                ? 'Generating…'
+                : sessionId || generationSessionId
+                  ? 'Generate with authoring session'
+                  : 'Generate system prompt'}
+            </Button>
+            {generationUnavailable && (
+              <Button
+                disabled={saving}
+                onClick={() => setDraft(MANUAL_SYSTEM_PROMPT_TEMPLATE)}
+              >
+                Use manual template fallback
+              </Button>
+            )}
+          </div>
+          {generationOutput && !draft.includes(generationOutput) && (
+            <details>
+              <summary className="cursor-pointer text-xs font-medium text-cyan-800">
+                Authoring session response
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-[11px]">
+                {generationOutput}
+              </pre>
+              {!generationOutput.match(
+                /"systemPrompt"\s*:\s*("(?:\\.|[^"\\])*")/s,
+              ) && (
+                <p className="mt-1 text-xs text-amber-800">
+                  The response did not contain a structured systemPrompt field.
+                  Copy the generated text into the editor for review.
+                </p>
+              )}
+            </details>
+          )}
+          <label className="block text-xs font-medium text-slate-700">
+            Prompt draft
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              rows={12}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs"
+            />
+          </label>
+          {error && (
+            <p role="alert" className="text-xs text-rose-700">
+              {error}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              disabled={saving || generating}
+              onClick={() => {
+                setDraft(persona.systemPrompt || '');
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              tone="accent"
+              disabled={saving || generating || !draft.trim()}
+              onClick={() => void save()}
+            >
+              {saving ? 'Applying…' : 'Apply prompt'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black p-4 font-mono text-xs leading-relaxed text-white">
+            {persona.systemPrompt || 'No system prompt available.'}
+          </pre>
+          <div className="flex justify-end">
+            <Button onClick={() => setEditing(true)}>Edit</Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+};
+
 const PersonaDrawer: React.FC<{
   persona: PersonaSummary;
   detail: PersonaDetail | null;
@@ -3237,6 +3785,8 @@ const PersonaDrawer: React.FC<{
   onFork: () => void;
   onEditDraft?: () => void;
   onRequestRevisions?: () => void;
+  promptSessionId?: string;
+  onSaveSystemPrompt: (systemPrompt: string) => Promise<void>;
   onEvaluate: () => void;
   onLifecycle: (action: LifecycleAction) => void;
 }> = ({
@@ -3249,6 +3799,8 @@ const PersonaDrawer: React.FC<{
   onFork,
   onEditDraft,
   onRequestRevisions,
+  promptSessionId,
+  onSaveSystemPrompt,
   onEvaluate,
   onLifecycle,
 }) => (
@@ -3421,62 +3973,25 @@ const PersonaDrawer: React.FC<{
                     </p>
                   )}
                 </section>
-              ) : (
-                <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Capabilities
-                  </h3>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(detail.tools ?? []).map((tool) => (
-                      <span
-                        key={tool}
-                        className="rounded-md bg-indigo-50 px-2 py-1 font-mono text-[10px] text-indigo-700"
-                      >
-                        {tool}
-                      </span>
-                    ))}
-                  </div>
-                </section>
-              )}
+              ) : null}
               {detail.params?.length ? (
                 <section>
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Parameters
                   </h3>
-                  <div className="mt-2 space-y-2">
-                    {detail.params.map((param: any) => (
-                      <div
-                        key={param.id}
-                        className="rounded-lg border border-slate-100 p-3"
-                      >
-                        <p className="text-xs font-semibold">{param.label}</p>
-                        <p className="text-[11px] text-slate-500">
-                          {param.description}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="mt-2">
+                    <ParameterList params={detail.params} />
                   </div>
                 </section>
               ) : null}
-              {detail.roleGuardrails && (
-                <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Guardrails
-                  </h3>
-                  <pre className="mt-2 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] text-emerald-100">
-                    {JSON.stringify(detail.roleGuardrails, null, 2)}
-                  </pre>
-                </section>
-              )}
-              {detail.systemPrompt && (
-                <details>
-                  <summary className="cursor-pointer text-xs font-semibold text-slate-600">
-                    Resolved system prompt
-                  </summary>
-                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-[10px] leading-relaxed text-slate-200">
-                    {detail.systemPrompt}
-                  </pre>
-                </details>
+              <PersonaDetailSections detail={detail} />
+              {detail.personaType === 'AGENT' && (
+                <SystemPromptWorkbench
+                  key={`${detail.personaId}:${detail.version}`}
+                  persona={detail}
+                  sessionId={promptSessionId}
+                  onSaved={onSaveSystemPrompt}
+                />
               )}
             </>
           )

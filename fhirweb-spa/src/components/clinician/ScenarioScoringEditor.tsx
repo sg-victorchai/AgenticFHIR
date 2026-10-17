@@ -9,13 +9,42 @@ export interface ScenarioScoringDraft {
   generateRubric: boolean;
   criteria: string;
   queries: QueryPatternDraft[];
+  expectedWriteTypes: string[];
 }
 
 export const newScenarioScoring = (): ScenarioScoringDraft => ({
   generateRubric: true,
   criteria: '',
   queries: [],
+  expectedWriteTypes: [],
 });
+
+export const expectedWriteTypesFromBundle = (bundle: unknown): string[] => {
+  if (typeof bundle === 'string') {
+    try {
+      bundle = JSON.parse(bundle) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!bundle || typeof bundle !== 'object') return [];
+  const entries = (bundle as { entry?: unknown }).entry;
+  if (!Array.isArray(entries)) return [];
+  return [
+    ...new Set(
+      entries
+        .map(
+          (entry) =>
+            (entry as { resource?: { resourceType?: unknown } })?.resource
+              ?.resourceType,
+        )
+        .filter(
+          (type): type is string =>
+            typeof type === 'string' && type !== 'Bundle',
+        ),
+    ),
+  ];
+};
 
 export const duplicateQueryParameters = (query: QueryPatternDraft) => {
   const seen = new Set<string>();
@@ -65,6 +94,19 @@ export const buildScenarioScoring = (draft: ScenarioScoringDraft) => {
     generateRubric: draft.generateRubric,
     ...(responseCriteria.length ? { responseCriteria } : {}),
     expectedQueryPatterns,
+    ...(draft.expectedWriteTypes.length
+      ? {
+          expectedWrites: {
+            resourceType: 'Bundle',
+            type: 'collection',
+            entry: [...new Set(draft.expectedWriteTypes)].map(
+              (resourceType) => ({
+                resource: { resourceType },
+              }),
+            ),
+          },
+        }
+      : {}),
   };
 };
 
@@ -88,7 +130,8 @@ const buttonClass =
 const ScenarioScoringEditor: React.FC<{
   value: ScenarioScoringDraft;
   onChange: (value: ScenarioScoringDraft) => void;
-}> = ({ value, onChange }) => {
+  showExpectedWrites?: boolean;
+}> = ({ value, onChange, showExpectedWrites = false }) => {
   const changeQuery = (index: number, query: QueryPatternDraft) =>
     onChange({
       ...value,
@@ -99,11 +142,11 @@ const ScenarioScoringEditor: React.FC<{
   return (
     <fieldset className="space-y-4 border-t border-slate-200 pt-4 xl:col-span-2">
       <legend className="text-sm font-semibold text-slate-900">
-        Evaluation scoring
+        4. Scoring configuration
       </legend>
       <section className="space-y-3 border-b border-slate-200 pb-4">
         <h3 className="text-base font-semibold text-slate-900">
-          1. Auto-generated baseline
+          Automatic response baseline
         </h3>
         <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
           <input
@@ -137,7 +180,7 @@ const ScenarioScoringEditor: React.FC<{
       </section>
       <section className="space-y-3 border-b border-slate-200 pb-4">
         <h3 className="text-base font-semibold text-slate-900">
-          2. What makes a good response?
+          Response quality criteria
         </h3>
         <label className="block text-sm font-medium text-slate-700">
           What should a good response include?
@@ -184,7 +227,7 @@ const ScenarioScoringEditor: React.FC<{
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-base font-semibold text-slate-900">
-              3. Did the agent query the right data?
+              Query correctness
             </h3>
           </div>
           <button
@@ -355,6 +398,67 @@ const ScenarioScoringEditor: React.FC<{
           </div>
         ))}
       </section>
+      {showExpectedWrites && (
+        <section className="space-y-3 border-t border-slate-200 pt-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Expected writes
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              Optional on the first run. Selecting expected resource types lets
+              Data Accuracy measure whether the agent wrote them. One entry per
+              type is the baseline: at least one matching resource earns full
+              credit for that type; extra resources are not penalized.
+            </p>
+          </div>
+          <details>
+            <summary className="cursor-pointer text-xs font-semibold text-cyan-800">
+              About expected writes
+            </summary>
+            <aside className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm leading-relaxed text-cyan-950">
+              <p>
+                You can skip this before the first run, discover what the agent
+                actually created, then set those types as the gold bundle from
+                the run details. Edit the bundle later as the scenario changes.
+                Data Accuracy is only one part of the overall score; query and
+                response scores are evaluated independently.
+              </p>
+            </aside>
+          </details>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {resourceTypes
+              .filter(([type]) => type !== 'Patient')
+              .map(([type, label]) => (
+                <label
+                  key={type}
+                  className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-xs text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={value.expectedWriteTypes.includes(type)}
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        expectedWriteTypes: event.target.checked
+                          ? [...value.expectedWriteTypes, type]
+                          : value.expectedWriteTypes.filter(
+                              (current) => current !== type,
+                            ),
+                      })
+                    }
+                  />
+                  {label} ({type})
+                </label>
+              ))}
+          </div>
+          {value.expectedWriteTypes.length > 0 && (
+            <p className="text-xs font-medium text-slate-700">
+              Agent must create at least one of each:{' '}
+              {value.expectedWriteTypes.join(', ')}
+            </p>
+          )}
+        </section>
+      )}
     </fieldset>
   );
 };

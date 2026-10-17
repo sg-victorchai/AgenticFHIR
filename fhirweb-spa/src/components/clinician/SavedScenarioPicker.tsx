@@ -4,6 +4,7 @@ import {
   ScenarioDetail,
   ScenarioSummary,
 } from '../../services/agentBuilderService';
+import { expectedWriteTypesFromBundle } from './ScenarioScoringEditor';
 
 const SavedScenarioPicker: React.FC<{
   personaId: string;
@@ -130,34 +131,61 @@ const SavedScenarioPicker: React.FC<{
 
 export const ScenarioBlueprint: React.FC<{ scenario: ScenarioDetail }> = ({
   scenario,
-}) => (
-  <section className="rounded-lg border border-slate-200 bg-white p-4">
-    <h2 className="text-sm font-semibold text-slate-900">
-      {scenario.scenarioName}
-    </h2>
-    <p className="mt-1 break-all font-mono text-xs text-slate-500">
-      {scenario.scenarioId}
-    </p>
-    <div className="mt-3 space-y-3">
-      {[
-        ['Test patient blueprint', scenario.seedSpec],
-        ['Agent test settings', scenario.missionParams],
-        ['Test conversation', scenario.conversationScript],
-        ['Evaluation rubric', scenario.responseCriteria],
-        ['Expected data queries', scenario.expectedQueryPatterns],
-        ['Automatic rubric generation', scenario.generateRubric],
-      ].map(([label, value]) => (
-        <details key={String(label)}>
-          <summary className="cursor-pointer text-xs font-medium text-slate-700">
-            {String(label)}
-          </summary>
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700">
-            {value == null ? 'Not provided.' : JSON.stringify(value, null, 2)}
-          </pre>
-        </details>
-      ))}
-    </div>
-  </section>
-);
+}) => {
+  const expectedWriteTypes = expectedWriteTypesFromBundle(
+    scenario.expectedWrites,
+  );
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-slate-900">
+        {scenario.scenarioName}
+      </h2>
+      <p className="mt-1 break-all font-mono text-xs text-slate-500">
+        {scenario.scenarioId}
+      </p>
+      <div
+        className={`mt-3 rounded-lg border p-3 ${expectedWriteTypes.length ? 'border-cyan-200 bg-cyan-50' : 'border-amber-200 bg-amber-50'}`}
+      >
+        <p className="text-xs font-semibold text-slate-900">
+          Expected writes (gold bundle)
+        </p>
+        <p className="mt-1 text-xs text-slate-700">
+          {expectedWriteTypes.length
+            ? `Data Accuracy will check that the agent creates at least one ${expectedWriteTypes.join(', ')} resource.`
+            : 'Not configured. Data Accuracy will be neutral for this scenario.'}
+        </p>
+        {expectedWriteTypes.length > 0 && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs font-medium text-cyan-900">
+              View gold bundle JSON
+            </summary>
+            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white p-3 text-xs text-slate-700">
+              {JSON.stringify(scenario.expectedWrites, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+      <div className="mt-3 space-y-3">
+        {[
+          ['Test patient blueprint', scenario.seedSpec],
+          ['Agent test settings', scenario.missionParams],
+          ['Test conversation', scenario.conversationScript],
+          ['Evaluation rubric', scenario.responseCriteria],
+          ['Expected data queries', scenario.expectedQueryPatterns],
+          ['Automatic rubric generation', scenario.generateRubric],
+        ].map(([label, value]) => (
+          <details key={String(label)}>
+            <summary className="cursor-pointer text-xs font-medium text-slate-700">
+              {String(label)}
+            </summary>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700">
+              {value == null ? 'Not provided.' : JSON.stringify(value, null, 2)}
+            </pre>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 export default SavedScenarioPicker;

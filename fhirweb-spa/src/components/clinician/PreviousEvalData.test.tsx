@@ -17,6 +17,9 @@ vi.mock('../../services/agentBuilderService', () => ({
     listEvalRunsForSeedJob: vi.fn(),
     getScenario: vi.fn(),
     getEval: vi.fn(),
+    getCreatedEvalResources: vi.fn(),
+    getCreatedEvalResource: vi.fn(),
+    patchScenario: vi.fn(),
     getSeededPatients: vi.fn(),
     getSeededPatientBundle: vi.fn(),
     seedScenario: vi.fn(),
@@ -53,6 +56,13 @@ beforeEach(() => {
     completed,
   ]);
   vi.mocked(agentBuilderService.getScenario).mockResolvedValue(scenario);
+  vi.mocked(agentBuilderService.getCreatedEvalResources).mockResolvedValue({
+    runId: 'run-new',
+    evalTenantId: 'saved-tenant',
+    personaId: 'persona-1',
+    personaVersion: '1',
+    createdResources: [],
+  });
   vi.mocked(agentBuilderService.getEval).mockImplementation(async (runId) => ({
     runId,
     personaId: 'persona-1',
@@ -274,6 +284,81 @@ describe('PreviousEvalData', () => {
           screen.getByText('Evaluation run details').closest('section'),
         ),
     ).toBe(true);
+  });
+
+  it('sets unique created resource types as expected writes and opens raw JSON', async () => {
+    const createdResource = {
+      resourceType: 'CarePlan',
+      resourceId: 'care-plan-1',
+      operation: 'CREATE',
+    };
+    const goldBundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [{ resource: { resourceType: 'CarePlan' } }],
+    };
+    vi.mocked(agentBuilderService.listEvalRunsForSeedJob).mockResolvedValue([
+      {
+        runId: 'run-new',
+        personaId: 'persona-1',
+        personaVersion: '1',
+        runStatus: 'COMPLETED',
+        evalTenantId: 'saved-tenant',
+        qualityScore: 1,
+      },
+    ]);
+    vi.mocked(agentBuilderService.getCreatedEvalResources).mockResolvedValue({
+      runId: 'run-new',
+      evalTenantId: 'saved-tenant',
+      personaId: 'persona-1',
+      personaVersion: '1',
+      createdResources: [createdResource, { ...createdResource }],
+    });
+    vi.mocked(agentBuilderService.patchScenario).mockResolvedValue({
+      ...scenario,
+      expectedWrites: goldBundle,
+    });
+    vi.mocked(agentBuilderService.getCreatedEvalResource).mockResolvedValue({
+      resourceType: 'CarePlan',
+      id: 'care-plan-1',
+      status: 'draft',
+    });
+    render(
+      <PreviousEvalData
+        personaId="persona-1"
+        refreshKey=""
+        disabled={false}
+        canWrite
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View' }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Set CarePlan as expected output',
+      }),
+    );
+    await waitFor(() =>
+      expect(agentBuilderService.patchScenario).toHaveBeenCalledWith(
+        'scenario-1',
+        { expectedWrites: goldBundle },
+      ),
+    );
+    expect(await screen.findByText(/Gold bundle set/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'CarePlan raw FHIR resource',
+      }),
+    ).toBeTruthy();
+    expect(await screen.findByText(/"status": "draft"/)).toBeTruthy();
+    expect(agentBuilderService.getCreatedEvalResource).toHaveBeenCalledWith(
+      'run-new',
+      'CarePlan',
+      'care-plan-1',
+    );
   });
 
   it('loads scenario scoring and cohort details on request', async () => {

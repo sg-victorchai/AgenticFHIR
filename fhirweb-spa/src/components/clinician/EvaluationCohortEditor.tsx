@@ -3,17 +3,28 @@ import {
   agentBuilderService,
   TerminologySearchResult,
 } from '../../services/agentBuilderService';
+import { QuickAddTenantTerminology } from '../../pages/TenantTerminologyPage';
 
 export interface CohortGroupDraft {
   label: string;
   count: number;
+  patientProfile: {
+    minAge: string;
+    maxAge: string;
+    gender: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
   conditionCodes: string;
   noObservations: boolean;
   observationConstraints: Array<{
     loincCode: string;
     daysBack: number;
     comparator: string;
-    value: number;
+    value: string;
+    unit: string;
   }>;
   medicationRequests: Array<{
     medicationCode: string;
@@ -25,11 +36,29 @@ export interface CohortGroupDraft {
 export const newCohortGroup = (): CohortGroupDraft => ({
   label: '',
   count: 1,
+  patientProfile: {
+    minAge: '',
+    maxAge: '',
+    gender: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  },
   conditionCodes: '',
   noObservations: false,
   observationConstraints: [],
   medicationRequests: [],
 });
+
+const parseObservationValue = (value: string) => {
+  const match = value.trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(%)?$/);
+  if (!match) return undefined;
+  const numericValue = Number(match[1]);
+  return Number.isFinite(numericValue)
+    ? { value: numericValue, hasPercent: Boolean(match[2]) }
+    : undefined;
+};
 
 export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
   if (!groups.length) throw new Error('Add at least one patient group.');
@@ -47,16 +76,21 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
       );
     if (
       !group.noObservations &&
-      group.observationConstraints.some(
-        (rule) =>
+      group.observationConstraints.some((rule) => {
+        const parsedValue = parseObservationValue(rule.value);
+        return (
           !rule.loincCode.trim() ||
           !Number.isInteger(rule.daysBack) ||
           rule.daysBack < 1 ||
-          !Number.isFinite(rule.value),
-      )
+          !parsedValue ||
+          (parsedValue.hasPercent &&
+            Boolean(rule.unit.trim()) &&
+            rule.unit.trim() !== '%')
+        );
+      })
     )
       throw new Error(
-        'Each lab criterion needs a LOINC code, a positive lookback in days, and a numeric value.',
+        'Each lab criterion needs a LOINC code, a positive lookback, and a numeric value such as 7.5 or 5.7%.',
       );
     if (
       group.medicationRequests.some(
@@ -73,16 +107,52 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
       .split(',')
       .map((code) => code.trim())
       .filter(Boolean);
+    const minAgeText = group.patientProfile.minAge.trim();
+    const maxAgeText = group.patientProfile.maxAge.trim();
+    const minAge = minAgeText === '' ? undefined : Number(minAgeText);
+    const maxAge = maxAgeText === '' ? undefined : Number(maxAgeText);
+    if (
+      (minAge !== undefined && (!Number.isInteger(minAge) || minAge < 0)) ||
+      (maxAge !== undefined && (!Number.isInteger(maxAge) || maxAge < 0))
+    )
+      throw new Error('Patient ages must be whole numbers of 0 or greater.');
+    if (minAge !== undefined && maxAge !== undefined && maxAge < minAge)
+      throw new Error('Maximum patient age must be at least the minimum age.');
+    const patientProfile = {
+      ...(minAge !== undefined ? { minAge } : {}),
+      ...(maxAge !== undefined ? { maxAge } : {}),
+      ...(group.patientProfile.gender
+        ? { gender: group.patientProfile.gender }
+        : {}),
+      ...(['city', 'state', 'postalCode', 'country'] as const).reduce<
+        Record<string, string>
+      >((profile, field) => {
+        const value = group.patientProfile[field].trim();
+        if (value) profile[field] = value;
+        return profile;
+      }, {}),
+    };
     return {
       label: group.label.trim(),
       count: group.count,
+      ...(Object.keys(patientProfile).length ? { patientProfile } : {}),
       ...(conditionCodes.length ? { conditionCodes } : {}),
       ...(group.noObservations
         ? { noObservations: true }
         : group.observationConstraints.length
           ? {
               observationConstraints: group.observationConstraints.map(
-                (rule) => ({ ...rule, loincCode: rule.loincCode.trim() }),
+                (rule) => {
+                  const parsedValue = parseObservationValue(rule.value)!;
+                  const unit = parsedValue.hasPercent ? '%' : rule.unit.trim();
+                  return {
+                    loincCode: rule.loincCode.trim(),
+                    daysBack: rule.daysBack,
+                    comparator: rule.comparator,
+                    value: parsedValue.value,
+                    ...(unit ? { unit } : {}),
+                  };
+                },
               ),
             }
           : {}),
@@ -212,43 +282,108 @@ const TerminologyCodeSearch: React.FC<{
     searchOpen && (loading || error || options.length > 0 || showManualCode);
   return (
     <div className="relative min-w-0">
-      <input
-        aria-label={ariaLabel}
-        value={searchOpen ? query : value}
-        onFocus={() => {
-          setSearchOpen(true);
-          setQuery('');
-        }}
-        onChange={(event) => {
-          setSearchOpen(true);
-          setQuery(event.target.value);
-          if (!multiple) onChange(event.target.value);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            setSearchOpen(false);
+      {multiple ? (
+        <div className="mt-1 flex min-h-10 min-w-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1.5 focus-within:border-cyan-500 focus-within:ring-2 focus-within:ring-cyan-100">
+          {selectedCodes.map((code) => (
+            <span
+              key={code}
+              className="inline-flex max-w-full items-center gap-1 rounded bg-cyan-50 py-1 pl-2 pr-1 text-xs font-medium text-cyan-900"
+            >
+              <span className="break-all">{code}</span>
+              <button
+                type="button"
+                aria-label={`Remove condition code ${code}`}
+                onClick={() =>
+                  onChange(
+                    selectedCodes
+                      .filter((selected) => selected !== code)
+                      .join(', '),
+                  )
+                }
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-cyan-700 hover:bg-cyan-100 hover:text-cyan-950"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </span>
+          ))}
+          <input
+            aria-label={ariaLabel}
+            value={query}
+            onFocus={() => setSearchOpen(true)}
+            onChange={(event) => {
+              setSearchOpen(true);
+              setQuery(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSearchOpen(false);
+                setQuery('');
+                setResults([]);
+              }
+              if (event.key === 'Enter' && showManualCode) {
+                event.preventDefault();
+                addCode(query);
+              }
+              if (event.key === 'Backspace' && !query && selectedCodes.length) {
+                onChange(selectedCodes.slice(0, -1).join(', '));
+              }
+            }}
+            onBlur={(event) => {
+              if (
+                !event.currentTarget.parentElement?.parentElement?.contains(
+                  event.relatedTarget as Node | null,
+                )
+              ) {
+                setSearchOpen(false);
+                setQuery('');
+                setResults([]);
+              }
+            }}
+            placeholder={
+              selectedCodes.length ? 'Add another code' : placeholder
+            }
+            className="min-w-[8rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-slate-400 focus:ring-0"
+          />
+        </div>
+      ) : (
+        <input
+          aria-label={ariaLabel}
+          value={searchOpen ? query : value}
+          onFocus={() => {
+            setSearchOpen(true);
             setQuery('');
-            setResults([]);
-          }
-          if (event.key === 'Enter' && showManualCode) {
-            event.preventDefault();
-            addCode(query);
-          }
-        }}
-        onBlur={(event) => {
-          if (
-            !event.currentTarget.parentElement?.contains(
-              event.relatedTarget as Node | null,
-            )
-          ) {
-            setSearchOpen(false);
-            setQuery('');
-            setResults([]);
-          }
-        }}
-        placeholder={placeholder}
-        className={inputClass}
-      />
+          }}
+          onChange={(event) => {
+            setSearchOpen(true);
+            setQuery(event.target.value);
+            onChange(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setSearchOpen(false);
+              setQuery('');
+              setResults([]);
+            }
+            if (event.key === 'Enter' && showManualCode) {
+              event.preventDefault();
+              addCode(query);
+            }
+          }}
+          onBlur={(event) => {
+            if (
+              !event.currentTarget.parentElement?.contains(
+                event.relatedTarget as Node | null,
+              )
+            ) {
+              setSearchOpen(false);
+              setQuery('');
+              setResults([]);
+            }
+          }}
+          placeholder={placeholder}
+          className={inputClass}
+        />
+      )}
       {showSearchPanel && (
         <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
           {loading && (
@@ -299,6 +434,10 @@ const TerminologyCodeSearch: React.FC<{
           )}
         </div>
       )}
+      <QuickAddTenantTerminology
+        resourceType={resourceType}
+        onSaved={(concept) => addCode(concept.code)}
+      />
     </div>
   );
 };
@@ -378,6 +517,141 @@ const EvaluationCohortEditor: React.FC<{
               />
             </label>
           </div>
+          <details className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+              Patient demographics (optional)
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs font-medium text-slate-600">
+                Minimum age
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={group.patientProfile.minAge}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        minAge: event.target.value,
+                      },
+                    })
+                  }
+                  placeholder="Any age"
+                  className={inputClass}
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Maximum age
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={group.patientProfile.maxAge}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        maxAge: event.target.value,
+                      },
+                    })
+                  }
+                  placeholder={
+                    group.patientProfile.minAge
+                      ? `Default: ${Number(group.patientProfile.minAge) + 10}`
+                      : 'No maximum'
+                  }
+                  className={inputClass}
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Gender
+                <select
+                  value={group.patientProfile.gender}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        gender: event.target.value,
+                      },
+                    })
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Alternate male/female</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                City
+                <input
+                  value={group.patientProfile.city}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        city: event.target.value,
+                      },
+                    })
+                  }
+                  className={inputClass}
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                State / region
+                <input
+                  value={group.patientProfile.state}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        state: event.target.value,
+                      },
+                    })
+                  }
+                  className={inputClass}
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Postal code
+                <input
+                  value={group.patientProfile.postalCode}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        postalCode: event.target.value,
+                      },
+                    })
+                  }
+                  className={inputClass}
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Country code
+                <input
+                  value={group.patientProfile.country}
+                  onChange={(event) =>
+                    update(index, {
+                      patientProfile: {
+                        ...group.patientProfile,
+                        country: event.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g. SG, US"
+                  className={inputClass}
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">
+              Ages are inclusive. If only a minimum age is set, the sandbox uses
+              a maximum age 10 years higher.
+            </p>
+          </details>
           <label className="flex items-center gap-2 text-xs text-slate-700">
             <input
               type="checkbox"
@@ -401,7 +675,7 @@ const EvaluationCohortEditor: React.FC<{
                 return (
                   <div
                     key={ruleIndex}
-                    className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
+                    className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.65fr)_auto]"
                   >
                     <label className="text-xs text-slate-600">
                       Lab test LOINC code
@@ -447,12 +721,27 @@ const EvaluationCohortEditor: React.FC<{
                       Result value
                       <input
                         required
-                        type="number"
-                        step="any"
+                        type="text"
+                        inputMode="decimal"
                         value={rule.value}
                         onChange={(event) =>
-                          updateRule({ value: Number(event.target.value) })
+                          updateRule({ value: event.target.value })
                         }
+                        placeholder="e.g. 7.5 or 5.7%"
+                        aria-label={`Result value for group ${index + 1}, criterion ${ruleIndex + 1}`}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="text-xs text-slate-600">
+                      Unit (optional)
+                      <input
+                        type="text"
+                        value={rule.unit}
+                        onChange={(event) =>
+                          updateRule({ unit: event.target.value })
+                        }
+                        placeholder="e.g. % or mmol/L"
+                        aria-label={`Result unit for group ${index + 1}, criterion ${ruleIndex + 1}`}
                         className={inputClass}
                       />
                     </label>
@@ -466,7 +755,7 @@ const EvaluationCohortEditor: React.FC<{
                             ),
                         })
                       }
-                      className="py-2 text-xs text-rose-700"
+                      className="min-h-9 self-end py-2 text-left text-xs text-rose-700"
                     >
                       Remove criterion
                     </button>
@@ -483,7 +772,8 @@ const EvaluationCohortEditor: React.FC<{
                         loincCode: '',
                         daysBack: 180,
                         comparator: 'le',
-                        value: 8,
+                        value: '8',
+                        unit: '',
                       },
                     ],
                   })
@@ -508,7 +798,7 @@ const EvaluationCohortEditor: React.FC<{
               return (
                 <div
                   key={medicationIndex}
-                  className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[2fr,1fr,1fr,auto]"
+                  className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
                 >
                   <label className="text-xs text-slate-600">
                     Medication
@@ -554,7 +844,7 @@ const EvaluationCohortEditor: React.FC<{
                   </label>
                   <button
                     type="button"
-                    className="py-2 text-xs text-rose-700"
+                    className="min-h-9 self-end py-2 text-left text-xs text-rose-700"
                     onClick={() =>
                       update(index, {
                         medicationRequests: group.medicationRequests.filter(
