@@ -310,49 +310,91 @@ const TenantTerminologyPage: React.FC = () => {
           Loading tenant terminology…
         </p>
       ) : (
-        <div className="overflow-x-auto border-y border-slate-200">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-xs text-slate-500">
-              <tr>
-                <th className="py-2 pr-3 font-semibold">Name</th>
-                <th className="py-2 pr-3 font-semibold">Resource type</th>
-                <th className="py-2 pr-3 font-semibold">System</th>
-                <th className="py-2 pr-3 font-semibold">Code</th>
-                <th className="py-2 font-semibold">Display</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {concepts.map((concept) => (
-                <tr key={concept.id}>
-                  <td className="py-2 pr-3 font-medium text-slate-800">
-                    {concept.displayName || concept.name}
+        <>
+          <div className="divide-y divide-slate-200 border-y border-slate-200 md:hidden">
+            {concepts.map((concept) => (
+              <article key={concept.id} className="space-y-2 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="break-words text-sm font-semibold text-slate-900">
+                      {concept.displayName || concept.name}
+                    </h2>
                     {concept.displayName && (
-                      <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                      <p className="mt-0.5 break-words text-xs text-slate-500">
                         {concept.name}
-                      </span>
+                      </p>
                     )}
-                  </td>
-                  <td className="py-2 pr-3">{concept.resourceType}</td>
-                  <td className="max-w-64 break-all py-2 pr-3 font-mono text-xs">
+                  </div>
+                  <span className="shrink-0 rounded bg-cyan-50 px-2 py-1 text-[10px] font-semibold text-cyan-800">
+                    {concept.resourceType}
+                  </span>
+                </div>
+                <dl className="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-slate-500">Code</dt>
+                  <dd className="break-all font-mono text-slate-800">
+                    {concept.code}
+                  </dd>
+                  <dt className="text-slate-500">System</dt>
+                  <dd className="break-all font-mono text-slate-600">
                     {concept.system}
-                  </td>
-                  <td className="py-2 pr-3 font-mono">{concept.code}</td>
-                  <td className="py-2">{concept.display || '—'}</td>
-                </tr>
-              ))}
-              {!concepts.length && (
+                  </dd>
+                  <dt className="text-slate-500">Display</dt>
+                  <dd className="break-words text-slate-700">
+                    {concept.display || '—'}
+                  </dd>
+                </dl>
+              </article>
+            ))}
+            {!concepts.length && (
+              <p className="py-8 text-center text-sm text-slate-500">
+                No tenant codes match these filters.
+              </p>
+            )}
+          </div>
+          <div className="hidden overflow-x-auto border-y border-slate-200 md:block">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="text-xs text-slate-500">
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="py-8 text-center text-sm text-slate-500"
-                  >
-                    No tenant codes match these filters.
-                  </td>
+                  <th className="py-2 pr-3 font-semibold">Name</th>
+                  <th className="py-2 pr-3 font-semibold">Resource type</th>
+                  <th className="py-2 pr-3 font-semibold">System</th>
+                  <th className="py-2 pr-3 font-semibold">Code</th>
+                  <th className="py-2 font-semibold">Display</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {concepts.map((concept) => (
+                  <tr key={concept.id}>
+                    <td className="py-2 pr-3 font-medium text-slate-800">
+                      {concept.displayName || concept.name}
+                      {concept.displayName && (
+                        <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                          {concept.name}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3">{concept.resourceType}</td>
+                    <td className="max-w-64 break-all py-2 pr-3 font-mono text-xs">
+                      {concept.system}
+                    </td>
+                    <td className="py-2 pr-3 font-mono">{concept.code}</td>
+                    <td className="py-2">{concept.display || '—'}</td>
+                  </tr>
+                ))}
+                {!concepts.length && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="py-8 text-center text-sm text-slate-500"
+                    >
+                      No tenant codes match these filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
       <p className="text-xs text-slate-500">
         Codes can be added or searched here. Deletion is not available in the

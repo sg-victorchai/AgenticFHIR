@@ -25,9 +25,7 @@ import EvaluationCohortEditor, {
   CohortGroupDraft,
   newCohortGroup,
 } from '../components/clinician/EvaluationCohortEditor';
-import TenantTerminologyPage, {
-  TenantTerminologyForm,
-} from './TenantTerminologyPage';
+import TenantTerminologyPage from './TenantTerminologyPage';
 import {
   agentBuilderService,
   AuthoringSession,
@@ -374,11 +372,6 @@ const AgentBuilderPage: React.FC = () => {
   const [authoringTheme, setAuthoringTheme] =
     useState<AuthoringTheme>('professional');
   const [chatInput, setChatInput] = useState('');
-  const [showAuthoringTerminologyForm, setShowAuthoringTerminologyForm] =
-    useState(false);
-  const [authoringTerminologyType, setAuthoringTerminologyType] = useState<
-    'Condition' | 'Observation' | 'MedicationRequest'
-  >('Condition');
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [evaluationTarget, setEvaluationTarget] =
@@ -1875,15 +1868,6 @@ const AgentBuilderPage: React.FC = () => {
                             <option value="blue-horizon">Blue Horizon</option>
                           </select>
                         </label>
-                      )}
-                      {sessionId && !sessionReadOnly && (
-                        <Button
-                          disabled={busy || chatBusy}
-                          className="shrink-0 px-2 text-xs sm:px-3 sm:text-sm"
-                          onClick={() => setShowAuthoringTerminologyForm(true)}
-                        >
-                          Add terminology
-                        </Button>
                       )}
                       {!sessionId && (
                         <Button onClick={() => setShowCreate(true)}>
@@ -3518,31 +3502,6 @@ const AgentBuilderPage: React.FC = () => {
               </Button>
             </div>
           </form>
-        </Modal>
-      )}
-      {showAuthoringTerminologyForm && (
-        <Modal
-          title="Add tenant terminology"
-          onClose={() => setShowAuthoringTerminologyForm(false)}
-        >
-          <p className="mb-3 text-xs text-slate-500">
-            The code will be available to terminology lookup in this and future
-            authoring sessions.
-          </p>
-          <TenantTerminologyForm
-            initialResourceType={authoringTerminologyType}
-            onSaved={(concept) => {
-              setAuthoringTerminologyType(
-                concept.resourceType as
-                  | 'Condition'
-                  | 'Observation'
-                  | 'MedicationRequest',
-              );
-              setShowAuthoringTerminologyForm(false);
-              notify('success', `Added tenant code ${concept.code}.`);
-            }}
-            onCancel={() => setShowAuthoringTerminologyForm(false)}
-          />
         </Modal>
       )}
     </div>
