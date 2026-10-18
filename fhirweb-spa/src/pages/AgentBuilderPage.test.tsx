@@ -1,5 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { agentBuilderService } from '../services/agentBuilderService';
 import AgentBuilderPage, {
@@ -38,9 +44,144 @@ vi.mock('../services/agentBuilderService', () => {
   };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  sessionStorage.clear();
+  vi.restoreAllMocks();
+});
+
+const openScenarioDraft = async () => {
+  await screen.findByText('First persona');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Evaluations' })[0]);
+  fireEvent.click(
+    screen.getAllByRole('button', {
+      name: /Open evaluations & previous data/,
+    })[0],
+  );
+  await screen.findByText('Previous Eval Data');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Draft new test scenario' }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText('Loading agent test settings...')).toBeNull(),
+  );
+};
 
 describe('evaluation navigation', () => {
+  it('keeps the edited draft when browser Back is cancelled', async () => {
+    window.history.replaceState({ idx: 1 }, '', '/agentbuilder');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const go = vi
+      .spyOn(window.history, 'go')
+      .mockImplementation(() => undefined);
+    render(
+      <BrowserRouter>
+        <AgentBuilderPage />
+      </BrowserRouter>,
+    );
+    await openScenarioDraft();
+    fireEvent.change(screen.getByLabelText('Evaluation name'), {
+      target: { value: 'Keep after Back' },
+    });
+    window.dispatchEvent(new PopStateEvent('popstate', { state: { idx: 0 } }));
+    expect(confirm).toHaveBeenCalled();
+    expect(go).toHaveBeenCalledWith(1);
+    expect(
+      (screen.getByLabelText('Evaluation name') as HTMLInputElement).value,
+    ).toBe('Keep after Back');
+  });
+
+  it('offers continue editing or discard before leaving an edited scenario', async () => {
+    render(
+      <MemoryRouter>
+        <AgentBuilderPage />
+      </MemoryRouter>,
+    );
+    await openScenarioDraft();
+    fireEvent.change(screen.getByLabelText('Evaluation name'), {
+      target: { value: 'Unsaved cohort test' },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Evaluations' })[0]);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(
+      (screen.getByLabelText('Evaluation name') as HTMLInputElement).value,
+    ).toBe('Unsaved cohort test');
+    fireEvent.click(screen.getByRole('button', { name: 'Exit portal' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.queryByText('New scenario · First persona')).toBeNull();
+    expect(
+      sessionStorage.getItem('agentbuilder:scenario-draft:default'),
+    ).toBeNull();
+  });
+
+  it('warns on reload only after the draft has changed', async () => {
+    render(
+      <MemoryRouter>
+        <AgentBuilderPage />
+      </MemoryRouter>,
+    );
+    await openScenarioDraft();
+    const unchanged = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unchanged);
+    expect(unchanged.defaultPrevented).toBe(false);
+    fireEvent.change(screen.getByLabelText('Evaluation name'), {
+      target: { value: 'Keep this test' },
+    });
+    const changed = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(changed);
+    expect(changed.defaultPrevented).toBe(true);
+  });
+
+  it('recovers unsaved scenario fields after remounting the portal', async () => {
+    const first = render(
+      <MemoryRouter>
+        <AgentBuilderPage />
+      </MemoryRouter>,
+    );
+    await openScenarioDraft();
+    fireEvent.change(screen.getByLabelText('Evaluation name'), {
+      target: { value: 'Recovered cohort test' },
+    });
+    fireEvent.change(screen.getByLabelText('Test patient population'), {
+      target: { value: 'Ten synthetic diabetic patients' },
+    });
+    fireEvent.change(
+      screen.getByLabelText('What should a good response include?'),
+      {
+        target: { value: 'Identify patients missing HbA1c screening' },
+      },
+    );
+    first.unmount();
+    render(
+      <MemoryRouter>
+        <AgentBuilderPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Review draft' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resume draft' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Loading agent test settings...')).toBeNull(),
+    );
+    expect(
+      (screen.getByLabelText('Evaluation name') as HTMLInputElement).value,
+    ).toBe('Recovered cohort test');
+    expect(
+      (screen.getByLabelText('Test patient population') as HTMLTextAreaElement)
+        .value,
+    ).toBe('Ten synthetic diabetic patients');
+    expect(
+      (
+        screen.getByLabelText(
+          'What should a good response include?',
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe('Identify patients missing HbA1c screening');
+  });
+
   it('uses the session persona name or derives a title from its description', () => {
     const session = {
       session_id: 'session-1',

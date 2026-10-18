@@ -254,11 +254,17 @@ describe('EvaluationCohortEditor medication and terminology', () => {
       name: 'Medication code for group 1, medication 1',
     }) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'metoprolol' } });
-    fireEvent.click(
-      await screen.findByRole('option', {
-        name: /Metoprolol 50 MG Oral Tablet.*866427/,
-      }),
-    );
+    const option = await screen.findByRole('option', {
+      name: /Metoprolol 50 MG Oral Tablet.*866427/,
+    });
+    const pointerDown = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(pointerDown, 'pointerType', { value: 'touch' });
+    fireEvent(option, pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    fireEvent.click(option);
     expect(input.value).toBe('866427');
     expect(
       screen.queryByRole('listbox', {
@@ -295,20 +301,142 @@ describe('EvaluationCohortEditor medication and terminology', () => {
         ),
       { timeout: 1000 },
     );
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Use entered code/ }),
-    );
+    const manualOption = await screen.findByRole('button', {
+      name: /Use entered code/,
+    });
+    const pointerDown = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(pointerDown, 'pointerType', { value: 'touch' });
+    fireEvent(manualOption, pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    fireEvent.click(manualOption);
     expect(
       (
         screen.getByRole('textbox', {
           name: 'Condition codes for group 1',
         }) as HTMLInputElement
       ).value,
-    ).toBe('hypert');
+    ).toBe('');
+    expect(
+      screen.getByRole('button', { name: 'Remove condition code hypert' }),
+    ).toBeTruthy();
     expect(onChange).toHaveBeenCalledWith([
       expect.objectContaining({ conditionCodes: 'hypert' }),
     ]);
   });
+
+  it('preserves focus on touch pointer-down and selects a condition result', async () => {
+    vi.mocked(agentBuilderService.searchTerminology).mockResolvedValue([
+      {
+        displayName: 'Diabetes',
+        codes: [
+          {
+            system: 'http://snomed.info/sct',
+            code: '73211009',
+            display: 'Diabetes mellitus',
+          },
+        ],
+      },
+    ]);
+    const { onChange } = renderEditor();
+    const input = screen.getByRole('textbox', {
+      name: 'Condition codes for group 1',
+    });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'diabetes' } });
+    const option = await screen.findByRole('option', {
+      name: /Diabetes mellitus.*73211009/,
+    });
+    const pointerDown = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(pointerDown, 'pointerType', { value: 'touch' });
+    fireEvent(option, pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    fireEvent.click(option);
+    expect(
+      screen.getByRole('button', { name: 'Remove condition code 73211009' }),
+    ).toBeTruthy();
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ conditionCodes: '73211009' }),
+    ]);
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('adds another condition without enclosing chip or option buttons in a label', async () => {
+    vi.mocked(agentBuilderService.searchTerminology).mockResolvedValue([
+      {
+        codes: [
+          {
+            system: 'http://snomed.info/sct',
+            code: '38341003',
+            display: 'Hypertension',
+          },
+        ],
+      },
+    ]);
+    const { onChange } = renderEditor({
+      ...newCohortGroup(),
+      conditionCodes: '73211009',
+    });
+    const input = screen.getByRole('textbox', {
+      name: 'Condition codes for group 1',
+    });
+    expect(input.closest('label')).toBeNull();
+    fireEvent.change(input, { target: { value: 'hypertension' } });
+    const option = await screen.findByRole('option', {
+      name: /Hypertension.*38341003/,
+    });
+    expect(option.closest('label')).toBeNull();
+    fireEvent.pointerDown(option, { pointerType: 'touch' });
+    fireEvent.click(option);
+    expect(
+      screen.getByRole('button', { name: 'Remove condition code 73211009' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Remove condition code 38341003' }),
+    ).toBeTruthy();
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ conditionCodes: '73211009, 38341003' }),
+    ]);
+  });
+
+  it.each([
+    [
+      'lab',
+      '+ Add lab criterion',
+      'Lab test code for group 1, criterion 1',
+      '4548-4',
+    ],
+    [
+      'medication',
+      '+ Add medication criteria',
+      'Medication code for group 1, medication 1',
+      '866427',
+    ],
+  ])(
+    'keeps the %s code visible after blur and refocus and permits editing',
+    (_kind, addLabel, inputLabel, code) => {
+      renderEditor();
+      fireEvent.click(screen.getByRole('button', { name: addLabel }));
+      const input = screen.getByRole('textbox', {
+        name: inputLabel,
+      }) as HTMLInputElement;
+      expect(input.closest('label')).toBeNull();
+      fireEvent.change(input, { target: { value: code } });
+      fireEvent.blur(input);
+      expect(input.value).toBe(code);
+      fireEvent.focus(input);
+      expect(input.value).toBe(code);
+      fireEvent.change(input, { target: { value: 'replacement' } });
+      fireEvent.blur(input);
+      fireEvent.focus(input);
+      expect(input.value).toBe('replacement');
+    },
+  );
 
   it('removes one selected condition code without clearing the others', () => {
     const { onChange } = renderEditor({
@@ -358,9 +486,25 @@ describe('EvaluationCohortEditor medication and terminology', () => {
       }),
       { target: { value: '4548' } },
     );
-    fireEvent.click(
-      await screen.findByRole('option', { name: /Hemoglobin A1c.*4548-4/ }),
-    );
+    const option = await screen.findByRole('option', {
+      name: /Hemoglobin A1c.*4548-4/,
+    });
+    const pointerDown = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(pointerDown, 'pointerType', { value: 'touch' });
+    fireEvent(option, pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    fireEvent.click(option);
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: 'Lab test code for group 1, criterion 1',
+        }) as HTMLInputElement
+      ).value,
+    ).toBe('4548-4');
+    expect(screen.queryByRole('listbox')).toBeNull();
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({
         observationConstraints: [

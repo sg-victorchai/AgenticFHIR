@@ -1,11 +1,12 @@
 import React, {
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { UNSAFE_NavigationContext, useNavigate } from 'react-router-dom';
 import Phase0Authoring, {
   AuthoringTheme,
   Phase0Progress,
@@ -321,6 +322,7 @@ const scenarioSeedGroups = (scenario: ScenarioDetail): CohortGroupDraft[] => {
 
 const AgentBuilderPage: React.FC = () => {
   const navigate = useNavigate();
+  const { navigator } = useContext(UNSAFE_NavigationContext);
   const [view, setView] = useState<View>('marketplace');
   const [source, setSource] = useState<'all' | 'platform' | 'portal'>('all');
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
@@ -420,6 +422,140 @@ const AgentBuilderPage: React.FC = () => {
   const [formatters, setFormatters] = useState<Record<string, any> | null>(
     null,
   );
+  const scenarioDraftKey = `agentbuilder:scenario-draft:${TENANT_ID}`;
+  const [recoveredDraft, setRecoveredDraft] = useState<null | {
+    target: PersonaSummary;
+    name: string;
+    question: string;
+    scoring: ReturnType<typeof newScenarioScoring>;
+    settings: Record<string, any>;
+    params: string;
+    description: string;
+    groups: CohortGroupDraft[];
+    hitlEnabled: boolean;
+    hitlInstruction: string;
+    hitlCount: number;
+    goldSets: string;
+  }>(() => {
+    try {
+      const stored = JSON.parse(
+        sessionStorage.getItem(scenarioDraftKey) || 'null',
+      );
+      return stored?.target?.personaId && Array.isArray(stored.groups)
+        ? stored
+        : null;
+    } catch {
+      return null;
+    }
+  });
+  const [draftChanged, setDraftChanged] = useState(false);
+  const [pendingDraftAction, setPendingDraftAction] = useState<
+    (() => void) | null
+  >(null);
+  const restoringScenarioDraft = useRef(false);
+  const discardingScenarioDraft = useRef(false);
+  const hasUnsavedScenario = showScenarioDraft && !scenarioId && draftChanged;
+  const removeScenarioRecovery = () => {
+    try {
+      sessionStorage.removeItem(scenarioDraftKey);
+    } catch {}
+    setRecoveredDraft(null);
+  };
+  const guardScenarioAction = (action: () => void) => {
+    if (hasUnsavedScenario && !discardingScenarioDraft.current)
+      setPendingDraftAction(() => action);
+    else action();
+  };
+
+  useEffect(() => {
+    if (!hasUnsavedScenario || !evaluationTarget) return;
+    try {
+      sessionStorage.setItem(
+        scenarioDraftKey,
+        JSON.stringify({
+          target: evaluationTarget,
+          name: scenarioName,
+          question: scenarioQuestion,
+          scoring: scenarioScoring,
+          settings: testSettings,
+          params: scenarioParams,
+          description: seedDescription,
+          groups: seedGroups,
+          hitlEnabled: hitlComparisonEnabled,
+          hitlInstruction: hitlRefineInstruction,
+          hitlCount: hitlApplyToCount,
+          goldSets: hitlGoldSets,
+        }),
+      );
+    } catch {}
+  }, [
+    hasUnsavedScenario,
+    evaluationTarget,
+    scenarioName,
+    scenarioQuestion,
+    scenarioScoring,
+    testSettings,
+    scenarioParams,
+    seedDescription,
+    seedGroups,
+    hitlComparisonEnabled,
+    hitlRefineInstruction,
+    hitlApplyToCount,
+    hitlGoldSets,
+    scenarioDraftKey,
+  ]);
+
+  useEffect(() => {
+    if (!hasUnsavedScenario) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedScenario]);
+
+  useEffect(() => {
+    if (!hasUnsavedScenario) return;
+    const originalPush = navigator.push;
+    const originalReplace = navigator.replace;
+    navigator.push = (...args) =>
+      guardScenarioAction(() => originalPush.apply(navigator, args));
+    navigator.replace = (...args) =>
+      guardScenarioAction(() => originalReplace.apply(navigator, args));
+    const currentIndex = window.history.state?.idx;
+    let restoringHistory = false;
+    const guardHistory = (event: PopStateEvent) => {
+      if (restoringHistory) {
+        restoringHistory = false;
+        event.stopImmediatePropagation();
+        return;
+      }
+      const nextIndex = event.state?.idx;
+      if (typeof currentIndex !== 'number' || typeof nextIndex !== 'number')
+        return;
+      if (
+        window.confirm(
+          'Discard the unsaved test scenario and leave? Choose Cancel to continue editing.',
+        )
+      ) {
+        removeScenarioRecovery();
+        setDraftChanged(false);
+        return;
+      }
+      event.stopImmediatePropagation();
+      if (currentIndex !== nextIndex) {
+        restoringHistory = true;
+        window.history.go(currentIndex - nextIndex);
+      }
+    };
+    window.addEventListener('popstate', guardHistory, true);
+    return () => {
+      navigator.push = originalPush;
+      navigator.replace = originalReplace;
+      window.removeEventListener('popstate', guardHistory, true);
+    };
+  }, [hasUnsavedScenario, navigator]);
 
   const notify = (kind: 'success' | 'error', text: string) =>
     setToast({ kind, text });
@@ -457,8 +593,10 @@ const AgentBuilderPage: React.FC = () => {
   }, [loadWorkspace]);
   useEffect(() => {
     let active = true;
+    const restoringDraft = restoringScenarioDraft.current;
+    restoringScenarioDraft.current = false;
     setEvaluationDetail(null);
-    setScenarioScoring(newScenarioScoring());
+    if (!restoringDraft) setScenarioScoring(newScenarioScoring());
     setEvaluationDetailError(null);
     setSavedScenario(null);
     setScenarioError(null);
@@ -471,13 +609,14 @@ const AgentBuilderPage: React.FC = () => {
           (persona) => {
             if (!active) return;
             setEvaluationDetail(persona);
-            setTestSettings(
-              Object.fromEntries(
-                (persona.params ?? [])
-                  .filter((param) => param.default !== undefined)
-                  .map((param) => [param.id, param.default]),
-              ),
-            );
+            if (!restoringDraft)
+              setTestSettings(
+                Object.fromEntries(
+                  (persona.params ?? [])
+                    .filter((param) => param.default !== undefined)
+                    .map((param) => [param.id, param.default]),
+                ),
+              );
           },
           (error: unknown) => {
             if (active)
@@ -960,6 +1099,8 @@ const AgentBuilderPage: React.FC = () => {
           : {}),
       });
       setScenarioId(scenario.scenarioId);
+      setDraftChanged(false);
+      removeScenarioRecovery();
       const blueprint = await agentBuilderService.getScenario(
         scenario.scenarioId,
       );
@@ -979,6 +1120,7 @@ const AgentBuilderPage: React.FC = () => {
   };
 
   const reviseScenario = (scenario: ScenarioDetail) => {
+    setDraftChanged(true);
     const seedSpec = scenario.seedSpec || {};
     const responseCriteria = Array.isArray(scenario.responseCriteria)
       ? scenario.responseCriteria
@@ -1329,20 +1471,24 @@ const AgentBuilderPage: React.FC = () => {
   ];
   const isFocusedAuthoring = view === 'authoring' && Boolean(sessionId);
   const returnToEvaluationList = () => {
-    setEvaluationTarget(null);
-    setSeedJob(null);
-    setEvalRun(null);
-    setEvalRuns([]);
-    setScenarioId(null);
-    setSavedScenario(null);
-    setScenarioError(null);
-    setShowScenarioDraft(false);
+    guardScenarioAction(() => {
+      setEvaluationTarget(null);
+      setSeedJob(null);
+      setEvalRun(null);
+      setEvalRuns([]);
+      setScenarioId(null);
+      setSavedScenario(null);
+      setScenarioError(null);
+      setShowScenarioDraft(false);
+    });
   };
   const navigateWorkspace = (nextView: View) => {
-    // Re-clicking Evaluations while on it returns to the persona list; arriving from another view resumes the open persona.
-    if (nextView === 'evaluations' && view === 'evaluations')
-      returnToEvaluationList();
-    setView(nextView);
+    guardScenarioAction(() => {
+      // Re-clicking Evaluations while on it returns to the persona list; arriving from another view resumes the open persona.
+      if (nextView === 'evaluations' && view === 'evaluations')
+        returnToEvaluationList();
+      setView(nextView);
+    });
   };
   const chatTheme = {
     professional: {
@@ -1369,6 +1515,56 @@ const AgentBuilderPage: React.FC = () => {
     <div
       className={`${isFocusedAuthoring ? 'fixed inset-0 z-30 overflow-hidden' : 'min-h-[calc(100vh-4rem)]'} bg-[#f5f7fb] text-slate-900`}
     >
+      {pendingDraftAction && (
+        <ConfirmationDialog
+          title="Discard unsaved test scenario?"
+          message="This scenario has not been created yet. Discard it to leave, or continue editing to keep your changes."
+          confirmLabel="Discard"
+          cancelLabel="Continue editing"
+          tone="danger"
+          onCancel={() => setPendingDraftAction(null)}
+          onConfirm={() => {
+            discardingScenarioDraft.current = true;
+            removeScenarioRecovery();
+            setDraftChanged(false);
+            setShowScenarioDraft(false);
+            setScenarioName(
+              `${evaluationTarget?.name || 'Persona'} evaluation`,
+            );
+            setScenarioQuestion('');
+            setScenarioScoring(newScenarioScoring());
+            setScenarioParams('{}');
+            setSeedDescription('');
+            setSeedGroups([newCohortGroup()]);
+            setHitlComparisonEnabled(false);
+            setHitlRefineInstruction('');
+            setHitlApplyToCount(10);
+            setHitlGoldSets('');
+            setTestSettings(
+              Object.fromEntries(
+                (evaluationDetail?.params ?? [])
+                  .filter((param) => param.default !== undefined)
+                  .map((param) => [param.id, param.default]),
+              ),
+            );
+            setPendingDraftAction(null);
+            pendingDraftAction();
+            discardingScenarioDraft.current = false;
+          }}
+        />
+      )}
+      {recoveredDraft && view !== 'evaluations' && !hasUnsavedScenario && (
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-950">
+          Unsaved test scenario: {recoveredDraft.name}{' '}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => setView('evaluations')}
+          >
+            Review draft
+          </button>
+        </div>
+      )}
       <div
         className={`flex ${isFocusedAuthoring ? 'h-full min-h-0' : 'min-h-[calc(100vh-4rem)]'}`}
       >
@@ -1454,7 +1650,9 @@ const AgentBuilderPage: React.FC = () => {
                 <span className="hidden rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 sm:inline-flex">
                   AGENTBUILDER ACCESS
                 </span>
-                <Button onClick={() => navigate('/')}>
+                <Button
+                  onClick={() => guardScenarioAction(() => navigate('/'))}
+                >
                   <Icon name="arrow" className="h-3.5 w-3.5 rotate-180" />
                   Exit portal
                 </Button>
@@ -2283,6 +2481,48 @@ const AgentBuilderPage: React.FC = () => {
 
             {view === 'evaluations' && (
               <section className="space-y-5">
+                {recoveredDraft && !hasUnsavedScenario && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-950">
+                      Unsaved scenario: {recoveredDraft.name}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => {
+                          restoringScenarioDraft.current =
+                            evaluationTarget?.personaId !==
+                              recoveredDraft.target.personaId ||
+                            evaluationTarget?.version !==
+                              recoveredDraft.target.version;
+                          setEvaluationTarget(recoveredDraft.target);
+                          setScenarioName(recoveredDraft.name);
+                          setScenarioQuestion(recoveredDraft.question);
+                          setScenarioScoring(recoveredDraft.scoring);
+                          setTestSettings(recoveredDraft.settings);
+                          setScenarioParams(recoveredDraft.params);
+                          setSeedDescription(recoveredDraft.description);
+                          setSeedGroups(recoveredDraft.groups);
+                          setHitlComparisonEnabled(recoveredDraft.hitlEnabled);
+                          setHitlRefineInstruction(
+                            recoveredDraft.hitlInstruction,
+                          );
+                          setHitlApplyToCount(recoveredDraft.hitlCount);
+                          setHitlGoldSets(recoveredDraft.goldSets);
+                          setScenarioId(null);
+                          setSeedJob(null);
+                          setEvalRun(null);
+                          setShowScenarioDraft(true);
+                          setDraftChanged(true);
+                        }}
+                      >
+                        Resume draft
+                      </Button>
+                      <Button onClick={removeScenarioRecovery}>
+                        Discard draft
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {evaluationTarget && (
                   <LifecycleProgress state={evaluationTarget.lifecycleState} />
                 )}
@@ -2377,14 +2617,16 @@ const AgentBuilderPage: React.FC = () => {
                       ) ||
                       ['PENDING', 'RUNNING'].includes(evalRun?.runStatus ?? '')
                     }
-                    onSelect={(scenario) => {
-                      setSavedScenario(scenario);
-                      setScenarioId(scenario.scenarioId);
-                      setScenarioError(null);
-                      setSeedJob(null);
-                      setEvalRun(null);
-                      setShowScenarioDraft(false);
-                    }}
+                    onSelect={(scenario) =>
+                      guardScenarioAction(() => {
+                        setSavedScenario(scenario);
+                        setScenarioId(scenario.scenarioId);
+                        setScenarioError(null);
+                        setSeedJob(null);
+                        setEvalRun(null);
+                        setShowScenarioDraft(false);
+                      })
+                    }
                   />
                 )}
                 {evaluationTarget && scenarioError && (
@@ -2456,6 +2698,20 @@ const AgentBuilderPage: React.FC = () => {
                 !scenarioId ? (
                   <form
                     onSubmit={beginEvaluation}
+                    onChangeCapture={() => setDraftChanged(true)}
+                    onClickCapture={(event) => {
+                      const button = (event.target as HTMLElement).closest(
+                        'button',
+                      );
+                      if (
+                        button &&
+                        button.type !== 'submit' &&
+                        button.textContent?.trim() !== 'Cancel' &&
+                        button.getAttribute('aria-label') !==
+                          'Close scenario draft'
+                      )
+                        setDraftChanged(true);
+                    }}
                     className="grid gap-4 rounded-2xl border-2 border-slate-300 bg-white p-5 shadow-md shadow-slate-900/[0.04] xl:grid-cols-2"
                   >
                     <div className="xl:col-span-2 flex items-start justify-between">
@@ -2470,7 +2726,10 @@ const AgentBuilderPage: React.FC = () => {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setShowScenarioDraft(false)}
+                        onClick={() =>
+                          guardScenarioAction(() => setShowScenarioDraft(false))
+                        }
+                        aria-label="Close scenario draft"
                         className="text-slate-400 hover:text-slate-700"
                       >
                         <Icon name="close" />
@@ -2783,7 +3042,9 @@ const AgentBuilderPage: React.FC = () => {
                     <div className="flex items-end justify-end gap-2 xl:col-span-2">
                       <Button
                         type="button"
-                        onClick={() => setShowScenarioDraft(false)}
+                        onClick={() =>
+                          guardScenarioAction(() => setShowScenarioDraft(false))
+                        }
                       >
                         Cancel
                       </Button>

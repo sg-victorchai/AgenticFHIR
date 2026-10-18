@@ -350,8 +350,7 @@ const TerminologyCodeSearch: React.FC<{
           aria-label={ariaLabel}
           value={searchOpen ? query : value}
           onFocus={() => {
-            setSearchOpen(true);
-            setQuery('');
+            setQuery(value);
           }}
           onChange={(event) => {
             setSearchOpen(true);
@@ -400,7 +399,7 @@ const TerminologyCodeSearch: React.FC<{
             <button
               type="button"
               className="w-full px-3 py-2 text-left text-xs font-medium text-cyan-800 hover:bg-cyan-50"
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={(event) => event.preventDefault()}
               onClick={() => addCode(query)}
             >
               Use entered code “{query.trim()}”
@@ -414,7 +413,7 @@ const TerminologyCodeSearch: React.FC<{
                     type="button"
                     role="option"
                     aria-selected="false"
-                    onMouseDown={(event) => event.preventDefault()}
+                    onPointerDown={(event) => event.preventDefault()}
                     onClick={() => addCode(option.code)}
                     className="w-full px-3 py-2 text-left text-xs hover:bg-cyan-50"
                   >
@@ -505,7 +504,7 @@ const EvaluationCohortEditor: React.FC<{
                 className={inputClass}
               />
             </label>
-            <label className="text-xs font-medium text-slate-600">
+            <div className="text-xs font-medium text-slate-600">
               Conditions (optional)
               <TerminologyCodeSearch
                 resourceType="Condition"
@@ -515,7 +514,7 @@ const EvaluationCohortEditor: React.FC<{
                 ariaLabel={`Condition codes for group ${index + 1}`}
                 multiple
               />
-            </label>
+            </div>
           </div>
           <details className="rounded-md border border-slate-200 bg-white px-3 py-2">
             <summary className="cursor-pointer text-xs font-semibold text-slate-700">
@@ -677,7 +676,7 @@ const EvaluationCohortEditor: React.FC<{
                     key={ruleIndex}
                     className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.65fr)_auto]"
                   >
-                    <label className="text-xs text-slate-600">
+                    <div className="text-xs text-slate-600">
                       Lab test LOINC code
                       <TerminologyCodeSearch
                         resourceType="Observation"
@@ -686,7 +685,7 @@ const EvaluationCohortEditor: React.FC<{
                         placeholder="Search lab test or enter LOINC code"
                         ariaLabel={`Lab test code for group ${index + 1}, criterion ${ruleIndex + 1}`}
                       />
-                    </label>
+                    </div>
                     <label className="text-xs text-slate-600">
                       Within the last (days)
                       <input
@@ -800,7 +799,7 @@ const EvaluationCohortEditor: React.FC<{
                   key={medicationIndex}
                   className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
                 >
-                  <label className="text-xs text-slate-600">
+                  <div className="text-xs text-slate-600">
                     Medication
                     <TerminologyCodeSearch
                       resourceType="MedicationRequest"
@@ -811,7 +810,7 @@ const EvaluationCohortEditor: React.FC<{
                       placeholder="Search medication or enter RxNorm code"
                       ariaLabel={`Medication code for group ${index + 1}, medication ${medicationIndex + 1}`}
                     />
-                  </label>
+                  </div>
                   <label className="text-xs text-slate-600">
                     Order status
                     <select
