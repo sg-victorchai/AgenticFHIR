@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import Phase0Authoring, {
   AuthoringTheme,
@@ -372,6 +378,8 @@ const AgentBuilderPage: React.FC = () => {
   const [authoringTheme, setAuthoringTheme] =
     useState<AuthoringTheme>('professional');
   const [chatInput, setChatInput] = useState('');
+  const [chatInputHeight, setChatInputHeight] = useState(112);
+  const chatResizeOrigin = useRef({ pointerY: 0, height: 112 });
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [evaluationTarget, setEvaluationTarget] =
@@ -1950,7 +1958,7 @@ const AgentBuilderPage: React.FC = () => {
                       </div>
                       {!sessionReadOnly && (
                         <div
-                          className={`shrink-0 border-t-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(15,23,42,0.08)] ${chatTheme.composer}`}
+                          className={`relative shrink-0 border-t-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(15,23,42,0.08)] ${chatTheme.composer}`}
                         >
                           {chatError && (
                             <div
@@ -2009,9 +2017,10 @@ const AgentBuilderPage: React.FC = () => {
                                   onChange={(event) =>
                                     setChatInput(event.target.value)
                                   }
-                                  rows={3}
+                                  rows={1}
+                                  style={{ height: chatInputHeight }}
                                   placeholder="Describe the persona, its users, workflow, tools, and success criteria…"
-                                  className={`w-full resize-y rounded-xl border p-3 pr-12 text-sm outline-none focus:ring-2 ${chatTheme.input}`}
+                                  className={`block w-full resize-none rounded-xl border p-3 pb-16 text-sm outline-none focus:ring-2 ${chatTheme.input}`}
                                 />
                                 <AuthoringSendButton
                                   type="submit"
@@ -2023,66 +2032,140 @@ const AgentBuilderPage: React.FC = () => {
                                   disabled={chatBusy || !chatInput.trim()}
                                   theme={authoringTheme}
                                 />
-                              </div>
-                              <div className="mt-2 flex items-center justify-between gap-2">
-                                {conversationModels &&
-                                conversationModels.models.length > 1 ? (
-                                  <label className="min-w-0 text-xs text-slate-600">
-                                    <span className="sr-only">
-                                      Model for this session
-                                    </span>
-                                    <select
-                                      aria-label="Model for this session"
-                                      title="Switch the model for this authoring session"
-                                      disabled={
-                                        modelSwitchBusy ||
-                                        chatBusy ||
-                                        busy ||
-                                        sessionReadOnly ||
-                                        !editableSession(
-                                          activeSession?.status ?? '',
-                                        )
-                                      }
-                                      value={
-                                        activeModelId &&
-                                        conversationModels.models.some(
+                                <div className="absolute bottom-[14px] right-14 max-w-[calc(100%-4.5rem)]">
+                                  {conversationModels &&
+                                  conversationModels.models.length > 1 ? (
+                                    <label className="min-w-0 text-xs text-slate-600">
+                                      <span className="sr-only">
+                                        Model for this session
+                                      </span>
+                                      <select
+                                        aria-label="Model for this session"
+                                        title="Switch the model for this authoring session"
+                                        disabled={
+                                          modelSwitchBusy ||
+                                          chatBusy ||
+                                          busy ||
+                                          sessionReadOnly ||
+                                          !editableSession(
+                                            activeSession?.status ?? '',
+                                          )
+                                        }
+                                        value={
+                                          activeModelId &&
+                                          conversationModels.models.some(
+                                            (model) =>
+                                              model.id === activeModelId,
+                                          )
+                                            ? activeModelId
+                                            : ''
+                                        }
+                                        onChange={(event) => {
+                                          void switchSessionModel(
+                                            event.target.value,
+                                          );
+                                        }}
+                                        className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                                      >
+                                        {!conversationModels.models.some(
                                           (model) => model.id === activeModelId,
-                                        )
-                                          ? activeModelId
-                                          : ''
-                                      }
-                                      onChange={(event) => {
-                                        void switchSessionModel(
-                                          event.target.value,
-                                        );
-                                      }}
-                                      className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
-                                    >
-                                      {!conversationModels.models.some(
-                                        (model) => model.id === activeModelId,
-                                      ) && (
-                                        <option value="">Server default</option>
-                                      )}
-                                      {conversationModels.models.map(
-                                        (model) => (
-                                          <option
-                                            key={model.id}
-                                            value={model.id}
-                                          >
-                                            {model.displayName}
+                                        ) && (
+                                          <option value="">
+                                            Server default
                                           </option>
-                                        ),
-                                      )}
-                                    </select>
-                                  </label>
-                                ) : (
-                                  <span
-                                    className="truncate text-xs text-slate-600"
-                                    title={activeModelId}
-                                  >
-                                    {activeModelName}
-                                  </span>
-                                )}
+                                        )}
+                                        {conversationModels.models.map(
+                                          (model) => (
+                                            <option
+                                              key={model.id}
+                                              value={model.id}
+                                            >
+                                              {model.displayName}
+                                            </option>
+                                          ),
+                                        )}
+                                      </select>
+                                    </label>
+                                  ) : (
+                                    <span
+                                      className="truncate text-xs text-slate-600"
+                                      title={activeModelId}
+                                    >
+                                      {activeModelName}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div
+                                role="separator"
+                                aria-label="Resize message input"
+                                aria-orientation="horizontal"
+                                aria-valuemin={96}
+                                aria-valuemax={480}
+                                aria-valuenow={chatInputHeight}
+                                tabIndex={0}
+                                title="Drag to resize message input"
+                                className="absolute inset-x-3 top-0 flex h-3 touch-none cursor-ns-resize items-center justify-center rounded focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                onPointerDown={(event) => {
+                                  if (event.button !== 0) return;
+                                  chatResizeOrigin.current = {
+                                    pointerY: event.clientY,
+                                    height: chatInputHeight,
+                                  };
+                                  event.currentTarget.setPointerCapture(
+                                    event.pointerId,
+                                  );
+                                  event.preventDefault();
+                                }}
+                                onPointerMove={(event) => {
+                                  if (
+                                    !event.currentTarget.hasPointerCapture(
+                                      event.pointerId,
+                                    )
+                                  )
+                                    return;
+                                  setChatInputHeight(
+                                    Math.min(
+                                      480,
+                                      Math.max(
+                                        96,
+                                        chatResizeOrigin.current.height +
+                                          chatResizeOrigin.current.pointerY -
+                                          event.clientY,
+                                      ),
+                                    ),
+                                  );
+                                }}
+                                onPointerUp={(event) => {
+                                  if (
+                                    event.currentTarget.hasPointerCapture(
+                                      event.pointerId,
+                                    )
+                                  )
+                                    event.currentTarget.releasePointerCapture(
+                                      event.pointerId,
+                                    );
+                                }}
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key !== 'ArrowUp' &&
+                                    event.key !== 'ArrowDown'
+                                  )
+                                    return;
+                                  event.preventDefault();
+                                  setChatInputHeight((height) =>
+                                    Math.min(
+                                      480,
+                                      Math.max(
+                                        96,
+                                        height +
+                                          (event.key === 'ArrowUp' ? 16 : -16),
+                                      ),
+                                    ),
+                                  );
+                                }}
+                              >
+                                <span className="h-0.5 w-10 rounded-full bg-slate-300" />
                               </div>
                             </form>
                           )}
