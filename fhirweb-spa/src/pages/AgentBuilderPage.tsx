@@ -4120,7 +4120,7 @@ const SystemPromptWorkbench: React.FC<{
   );
 };
 
-const PersonaDrawer: React.FC<{
+export const PersonaDrawer: React.FC<{
   persona: PersonaSummary;
   detail: PersonaDetail | null;
   loading: boolean;
@@ -4148,274 +4148,343 @@ const PersonaDrawer: React.FC<{
   onSaveSystemPrompt,
   onEvaluate,
   onLifecycle,
-}) => (
-  <div
-    className="fixed inset-0 z-40 flex justify-end bg-slate-950/30"
-    onClick={onClose}
-  >
-    <aside
-      className="h-full w-full max-w-xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl"
-      onClick={(event) => event.stopPropagation()}
+}) => {
+  const [headerHeight, setHeaderHeight] = useState<number | null>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const resizeOrigin = useRef({ pointerY: 0, height: 0 });
+  const constrainHeight = (height: number) =>
+    Math.min(Math.max(80, window.innerHeight * 0.6), Math.max(80, height));
+
+  useEffect(() => setHeaderHeight(null), [persona.personaId, persona.version]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-slate-950/30"
+      onClick={onClose}
     >
-      <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white/95 p-5 backdrop-blur">
-        <div>
-          <p className="font-mono text-[10px] text-cyan-700">
-            {persona.personaId} · {persona.version}
-          </p>
-          <h2 className="mt-1 text-xl font-semibold">{persona.name}</h2>
-          <p className="mt-1 text-sm text-slate-500">{persona.description}</p>
-        </div>
-        <button
-          onClick={onClose}
-          className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+      <aside
+        className="flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          ref={headerRef}
+          style={{ height: headerHeight ?? undefined, maxHeight: '60dvh' }}
+          className="relative min-h-20 shrink-0 overflow-hidden bg-white"
         >
-          <Icon name="close" />
-        </button>
-      </div>
-      <div className="space-y-5 p-5">
-        {loading ? (
-          <p className="text-sm text-slate-500">Loading persona detail…</p>
-        ) : (
-          detail && (
-            <>
-              <div className="flex flex-wrap gap-2">
-                <StatusBadge value={detail.lifecycleState} />
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">
-                  {detail.personaType}
-                </span>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">
-                  {detail.scope} scope
-                </span>
-                {detail.intendedUserRole && (
-                  <span className="rounded-full bg-cyan-50 px-2 py-1 text-[10px] text-cyan-700">
-                    {detail.intendedUserRole}
+          <div className="flex h-full max-h-[60dvh] items-start gap-3 overflow-y-auto p-5 pr-14">
+            <div className="min-w-0">
+              <p className="break-words font-mono text-[10px] text-cyan-700">
+                {persona.personaId} · {persona.version}
+              </p>
+              <h2 className="mt-1 text-xl font-semibold">{persona.name}</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {persona.description}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close persona details"
+            className="absolute right-3 top-3 rounded-lg bg-white p-2 text-slate-400 hover:bg-slate-100"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+        <div
+          role="separator"
+          aria-label="Resize persona description panel"
+          aria-orientation="horizontal"
+          aria-valuemin={80}
+          aria-valuemax={Math.max(80, Math.round(window.innerHeight * 0.6))}
+          aria-valuenow={headerHeight ?? undefined}
+          tabIndex={0}
+          title="Drag up to shrink the description panel; drag down to expand"
+          className="flex h-5 shrink-0 touch-none cursor-ns-resize items-center justify-center border-y border-slate-200 bg-slate-50 hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-cyan-500"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            resizeOrigin.current = {
+              pointerY: event.clientY,
+              height: headerRef.current?.getBoundingClientRect().height ?? 80,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            event.preventDefault();
+          }}
+          onPointerMove={(event) => {
+            if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+            setHeaderHeight(
+              constrainHeight(
+                resizeOrigin.current.height +
+                  event.clientY -
+                  resizeOrigin.current.pointerY,
+              ),
+            );
+          }}
+          onPointerUp={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId))
+              event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            setHeaderHeight(
+              constrainHeight(
+                (headerHeight ??
+                  headerRef.current?.getBoundingClientRect().height ??
+                  80) + (event.key === 'ArrowDown' ? 24 : -24),
+              ),
+            );
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="h-1 w-12 rounded-full bg-slate-400"
+          />
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-5">
+          {loading ? (
+            <p className="text-sm text-slate-500">Loading persona detail…</p>
+          ) : (
+            detail && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge value={detail.lifecycleState} />
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">
+                    {detail.personaType}
                   </span>
-                )}
-              </div>
-              <LifecycleProgress state={detail.lifecycleState} />
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  ['Authoring source', detail.authoringSource],
-                  ['Updated', dateTime(detail.updatedAt)],
-                  ['Model', detail.model?.modelId],
-                  ['Reasoning', detail.reasoningStrategy],
-                  ['Confidence threshold', detail.confidenceThreshold],
-                  [
-                    'Timeout',
-                    detail.budget?.timeoutSeconds
-                      ? `${detail.budget.timeoutSeconds}s`
-                      : null,
-                  ],
-                ]
-                  .filter(([, value]) => value)
-                  .map(([label, value]) => (
-                    <div
-                      key={String(label)}
-                      className="rounded-lg bg-slate-50 p-3"
-                    >
-                      <p className="text-[10px] text-slate-400">{label}</p>
-                      <p className="mt-1 text-xs font-medium text-slate-700">
-                        {String(value)}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-              {detail.personaType === 'DATA_PIPELINE' ? (
-                <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Pipeline steps ({detail.pipelineSteps?.length ?? 0})
-                  </h3>
-                  {detail.pipelineSteps?.length ? (
-                    <ol className="mt-3 space-y-3">
-                      {[...detail.pipelineSteps]
-                        .sort(
-                          (first, second) =>
-                            Number(first.sequence) - Number(second.sequence),
-                        )
-                        .map((step) => (
-                          <li
-                            key={String(step.stepId)}
-                            className="rounded-lg border border-slate-200 bg-white p-3"
-                          >
-                            <div className="flex items-start gap-3">
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-xs font-semibold text-cyan-800">
-                                {String(step.sequence)}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="break-words text-sm font-semibold text-slate-900">
-                                    {String(step.stepId)}
-                                  </p>
-                                  <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-[10px] text-indigo-700">
-                                    {String(step.type)}
-                                  </span>
-                                </div>
-                                {step.description && (
-                                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                                    {String(step.description)}
-                                  </p>
-                                )}
-                                {(step.inputVar || step.outputVar) && (
-                                  <p className="mt-2 break-words font-mono text-[11px] text-slate-500">
-                                    {step.inputVar
-                                      ? String(step.inputVar)
-                                      : 'Input'}{' '}
-                                    →{' '}
-                                    {step.outputVar
-                                      ? String(step.outputVar)
-                                      : 'Output'}
-                                  </p>
-                                )}
-                                {step.type === 'review-gate' &&
-                                  detail.policies?.review && (
-                                    <p className="mt-2 text-xs font-medium text-amber-800">
-                                      Clinical review required
-                                      {detail.policies.review.expiresAfter
-                                        ? ` · Expires after ${String(detail.policies.review.expiresAfter)}`
-                                        : ''}
-                                    </p>
-                                  )}
-                                {step.type === 'dedup-check' &&
-                                  detail.policies?.dedup
-                                    ?.possibleDuplicateWindowDays && (
-                                    <p className="mt-2 text-xs text-slate-500">
-                                      Duplicate window:{' '}
-                                      {String(
-                                        detail.policies.dedup
-                                          .possibleDuplicateWindowDays,
-                                      )}{' '}
-                                      days
-                                    </p>
-                                  )}
-                                {(step.config ||
-                                  step.retryPolicy ||
-                                  step.persistence) && (
-                                  <details className="mt-2">
-                                    <summary className="cursor-pointer text-xs font-medium text-cyan-700">
-                                      Step configuration
-                                    </summary>
-                                    <pre className="mt-2 max-h-60 overflow-auto rounded-md bg-slate-950 p-3 text-[11px] text-slate-100">
-                                      {JSON.stringify(
-                                        {
-                                          config: step.config,
-                                          retryPolicy: step.retryPolicy,
-                                          persistence: step.persistence,
-                                        },
-                                        null,
-                                        2,
-                                      )}
-                                    </pre>
-                                  </details>
-                                )}
-                              </div>
-                            </div>
-                          </li>
-                        ))}
-                    </ol>
-                  ) : (
-                    <p className="mt-2 text-xs text-slate-500">
-                      No pipeline steps available.
-                    </p>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">
+                    {detail.scope} scope
+                  </span>
+                  {detail.intendedUserRole && (
+                    <span className="rounded-full bg-cyan-50 px-2 py-1 text-[10px] text-cyan-700">
+                      {detail.intendedUserRole}
+                    </span>
                   )}
-                </section>
-              ) : null}
-              {detail.params?.length ? (
-                <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Parameters
-                  </h3>
-                  <div className="mt-2">
-                    <ParameterList params={detail.params} />
-                  </div>
-                </section>
-              ) : null}
-              <PersonaDetailSections detail={detail} />
-              {detail.personaType === 'AGENT' && (
-                <SystemPromptWorkbench
-                  key={`${detail.personaId}:${detail.version}`}
-                  persona={detail}
-                  sessionId={promptSessionId}
-                  onSaved={onSaveSystemPrompt}
-                />
-              )}
-            </>
-          )
-        )}
-      </div>
-      <div className="sticky bottom-0 flex flex-wrap gap-2 border-t border-slate-200 bg-white p-4">
-        {onEditDraft && (
-          <Button disabled={busy} onClick={onEditDraft}>
-            Edit draft
+                </div>
+                <LifecycleProgress state={detail.lifecycleState} />
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ['Authoring source', detail.authoringSource],
+                    ['Updated', dateTime(detail.updatedAt)],
+                    ['Model', detail.model?.modelId],
+                    ['Reasoning', detail.reasoningStrategy],
+                    ['Confidence threshold', detail.confidenceThreshold],
+                    [
+                      'Timeout',
+                      detail.budget?.timeoutSeconds
+                        ? `${detail.budget.timeoutSeconds}s`
+                        : null,
+                    ],
+                  ]
+                    .filter(([, value]) => value)
+                    .map(([label, value]) => (
+                      <div
+                        key={String(label)}
+                        className="rounded-lg bg-slate-50 p-3"
+                      >
+                        <p className="text-[10px] text-slate-400">{label}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-700">
+                          {String(value)}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+                {detail.personaType === 'DATA_PIPELINE' ? (
+                  <section>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Pipeline steps ({detail.pipelineSteps?.length ?? 0})
+                    </h3>
+                    {detail.pipelineSteps?.length ? (
+                      <ol className="mt-3 space-y-3">
+                        {[...detail.pipelineSteps]
+                          .sort(
+                            (first, second) =>
+                              Number(first.sequence) - Number(second.sequence),
+                          )
+                          .map((step) => (
+                            <li
+                              key={String(step.stepId)}
+                              className="rounded-lg border border-slate-200 bg-white p-3"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-xs font-semibold text-cyan-800">
+                                  {String(step.sequence)}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="break-words text-sm font-semibold text-slate-900">
+                                      {String(step.stepId)}
+                                    </p>
+                                    <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-[10px] text-indigo-700">
+                                      {String(step.type)}
+                                    </span>
+                                  </div>
+                                  {step.description && (
+                                    <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                                      {String(step.description)}
+                                    </p>
+                                  )}
+                                  {(step.inputVar || step.outputVar) && (
+                                    <p className="mt-2 break-words font-mono text-[11px] text-slate-500">
+                                      {step.inputVar
+                                        ? String(step.inputVar)
+                                        : 'Input'}{' '}
+                                      →{' '}
+                                      {step.outputVar
+                                        ? String(step.outputVar)
+                                        : 'Output'}
+                                    </p>
+                                  )}
+                                  {step.type === 'review-gate' &&
+                                    detail.policies?.review && (
+                                      <p className="mt-2 text-xs font-medium text-amber-800">
+                                        Clinical review required
+                                        {detail.policies.review.expiresAfter
+                                          ? ` · Expires after ${String(detail.policies.review.expiresAfter)}`
+                                          : ''}
+                                      </p>
+                                    )}
+                                  {step.type === 'dedup-check' &&
+                                    detail.policies?.dedup
+                                      ?.possibleDuplicateWindowDays && (
+                                      <p className="mt-2 text-xs text-slate-500">
+                                        Duplicate window:{' '}
+                                        {String(
+                                          detail.policies.dedup
+                                            .possibleDuplicateWindowDays,
+                                        )}{' '}
+                                        days
+                                      </p>
+                                    )}
+                                  {(step.config ||
+                                    step.retryPolicy ||
+                                    step.persistence) && (
+                                    <details className="mt-2">
+                                      <summary className="cursor-pointer text-xs font-medium text-cyan-700">
+                                        Step configuration
+                                      </summary>
+                                      <pre className="mt-2 max-h-60 overflow-auto rounded-md bg-slate-950 p-3 text-[11px] text-slate-100">
+                                        {JSON.stringify(
+                                          {
+                                            config: step.config,
+                                            retryPolicy: step.retryPolicy,
+                                            persistence: step.persistence,
+                                          },
+                                          null,
+                                          2,
+                                        )}
+                                      </pre>
+                                    </details>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                      </ol>
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-500">
+                        No pipeline steps available.
+                      </p>
+                    )}
+                  </section>
+                ) : null}
+                {detail.params?.length ? (
+                  <section>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Parameters
+                    </h3>
+                    <div className="mt-2">
+                      <ParameterList params={detail.params} />
+                    </div>
+                  </section>
+                ) : null}
+                <PersonaDetailSections detail={detail} />
+                {detail.personaType === 'AGENT' && (
+                  <SystemPromptWorkbench
+                    key={`${detail.personaId}:${detail.version}`}
+                    persona={detail}
+                    sessionId={promptSessionId}
+                    onSaved={onSaveSystemPrompt}
+                  />
+                )}
+              </>
+            )
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-200 bg-white p-4">
+          {onEditDraft && (
+            <Button disabled={busy} onClick={onEditDraft}>
+              Edit draft
+            </Button>
+          )}
+          {onRequestRevisions && (
+            <Button disabled={busy} tone="danger" onClick={onRequestRevisions}>
+              Request revisions
+            </Button>
+          )}
+          <Button disabled={busy} onClick={onAdapt}>
+            Adapt persona
           </Button>
-        )}
-        {onRequestRevisions && (
-          <Button disabled={busy} tone="danger" onClick={onRequestRevisions}>
-            Request revisions
+          <Button disabled={busy} onClick={onFork}>
+            Fork version
           </Button>
-        )}
-        <Button disabled={busy} onClick={onAdapt}>
-          Adapt persona
-        </Button>
-        <Button disabled={busy} onClick={onFork}>
-          Fork version
-        </Button>
-        {persona.lifecycleState === 'UAT_TRAINING' && (
-          <Button disabled={busy} onClick={onEvaluate}>
-            Evaluate
-          </Button>
-        )}
-        {persona.lifecycleState === 'DRAFT' && (
-          <Button
-            disabled={busy}
-            tone="accent"
-            onClick={() => onLifecycle('promote')}
-          >
-            Submit for review
-          </Button>
-        )}
-        {persona.lifecycleState === 'QUALITY_GATE_PENDING' && (
-          <Button
-            disabled={busy}
-            tone="accent"
-            onClick={() => onLifecycle('quality-approve')}
-          >
-            Approve quality gate
-          </Button>
-        )}
-        {persona.lifecycleState === 'QUALITY_GATE_APPROVED' && (
-          <Button
-            disabled={busy}
-            tone="accent"
-            onClick={() => onLifecycle('enter-sandbox')}
-          >
-            Enter sandbox
-          </Button>
-        )}
-        {persona.lifecycleState === 'MONITORING' && (
-          <Button
-            disabled={busy}
-            onClick={() => onLifecycle('flag-for-improvement')}
-          >
-            Flag for improvement
-          </Button>
-        )}
-        {persona.lifecycleState !== 'RETIRED' && (
-          <Button
-            disabled={busy || persona.authoringSource === 'platform'}
-            title={
-              persona.authoringSource === 'platform'
-                ? 'Platform personas cannot be retired from this portal'
-                : undefined
-            }
-            tone="danger"
-            onClick={() => onLifecycle('retire')}
-          >
-            Retire
-          </Button>
-        )}
-      </div>
-    </aside>
-  </div>
-);
+          {persona.lifecycleState === 'UAT_TRAINING' && (
+            <Button disabled={busy} onClick={onEvaluate}>
+              Evaluate
+            </Button>
+          )}
+          {persona.lifecycleState === 'DRAFT' && (
+            <Button
+              disabled={busy}
+              tone="accent"
+              onClick={() => onLifecycle('promote')}
+            >
+              Submit for review
+            </Button>
+          )}
+          {persona.lifecycleState === 'QUALITY_GATE_PENDING' && (
+            <Button
+              disabled={busy}
+              tone="accent"
+              onClick={() => onLifecycle('quality-approve')}
+            >
+              Approve quality gate
+            </Button>
+          )}
+          {persona.lifecycleState === 'QUALITY_GATE_APPROVED' && (
+            <Button
+              disabled={busy}
+              tone="accent"
+              onClick={() => onLifecycle('enter-sandbox')}
+            >
+              Enter sandbox
+            </Button>
+          )}
+          {persona.lifecycleState === 'MONITORING' && (
+            <Button
+              disabled={busy}
+              onClick={() => onLifecycle('flag-for-improvement')}
+            >
+              Flag for improvement
+            </Button>
+          )}
+          {persona.lifecycleState !== 'RETIRED' && (
+            <Button
+              disabled={busy || persona.authoringSource === 'platform'}
+              title={
+                persona.authoringSource === 'platform'
+                  ? 'Platform personas cannot be retired from this portal'
+                  : undefined
+              }
+              tone="danger"
+              onClick={() => onLifecycle('retire')}
+            >
+              Retire
+            </Button>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+};
 
 export default AgentBuilderPage;

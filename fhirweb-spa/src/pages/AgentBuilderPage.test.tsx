@@ -12,6 +12,7 @@ import { buildCohortGroups } from '../components/clinician/EvaluationCohortEdito
 import { ScoreExplanation } from '../components/clinician/EvalRunInsights';
 import AgentBuilderPage, {
   LifecycleProgress,
+  PersonaDrawer,
   qualityScoreToPercent,
   scenarioSeedGroups,
   sessionDisplayName,
@@ -73,6 +74,69 @@ const openScenarioDraft = async () => {
 };
 
 describe('evaluation navigation', () => {
+  it('resizes the persona description with pointer dragging and keyboard arrows', () => {
+    render(
+      <PersonaDrawer
+        persona={{
+          personaId: 'persona-1',
+          version: 'v1',
+          name: 'Test persona',
+          personaType: 'AGENT',
+          authoringSource: 'portal',
+          lifecycleState: 'UAT_TRAINING',
+        }}
+        detail={null}
+        loading={false}
+        busy={false}
+        onClose={vi.fn()}
+        onAdapt={vi.fn()}
+        onFork={vi.fn()}
+        onSaveSystemPrompt={vi.fn(async () => undefined)}
+        onEvaluate={vi.fn()}
+        onLifecycle={vi.fn()}
+      />,
+    );
+    const handle = screen.getByRole('separator', {
+      name: 'Resize persona description panel',
+    });
+    const header = handle.previousElementSibling as HTMLDivElement;
+    vi.spyOn(header, 'getBoundingClientRect').mockReturnValue({
+      height: 240,
+    } as DOMRect);
+    Object.defineProperty(handle, 'setPointerCapture', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(handle, 'hasPointerCapture', {
+      configurable: true,
+      value: () => true,
+    });
+    Object.defineProperty(handle, 'releasePointerCapture', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const pointer = (type: string, clientY: number) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(event, {
+        clientY: { value: clientY },
+        button: { value: 0 },
+        pointerId: { value: 1 },
+        pointerType: { value: 'touch' },
+      });
+      fireEvent(handle, event);
+    };
+    pointer('pointerdown', 240);
+    pointer('pointermove', 140);
+    pointer('pointerup', 140);
+    expect(header.style.height).toBe('140px');
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    expect(header.style.height).toBe('164px');
+    pointer('pointerdown', 240);
+    pointer('pointermove', -500);
+    expect(header.style.height).toBe('80px');
+    expect(screen.getByRole('button', { name: 'Evaluate' })).toBeTruthy();
+  });
+
   it('shows only the current lifecycle state until expanded', () => {
     render(<LifecycleProgress state="UAT_TRAINING" />);
     const summary = screen.getByText('Current state: Sandbox evaluation');
