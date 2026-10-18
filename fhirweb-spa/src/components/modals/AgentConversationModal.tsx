@@ -16,6 +16,8 @@ import { extractOperationOutcomeText } from '../../utils/fhirError';
 import { getAuthenticatedHeaders } from '../../services/auth/oidc';
 import { useSSESubscription } from '../../hooks/useSSESubscription';
 import { fhirApi } from '../../services/fhir/client';
+import { useSttConfig } from '../../hooks/useSttConfig';
+import { useRealtimeSpeechToText } from '../../hooks/useRealtimeSpeechToText';
 
 const PATIENT_RECORD_TAGS = [
   'Encounter',
@@ -126,11 +128,20 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   const sessionStartedAtRef = useRef(
     new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   );
-  const speechSupported = Boolean(getSpeechRecognition());
+  const sttConfig = useSttConfig(isOpen, tenantId, accessToken);
+  const realtimeProvider = sttConfig.provider === 'realtime-api';
+  const realtimeSpeech = useRealtimeSpeechToText(
+    isOpen && realtimeProvider && !loading && !pendingIntervention,
+    setInput,
+    tenantId,
+    accessToken,
+  );
+  const speechSupported = realtimeProvider || Boolean(getSpeechRecognition());
   const dispatch = useDispatch();
   // Set when the clinician approves a write; updates are not listed in createdResourceIds.
   const approvedWriteRef = useRef(false);
-  const [isListening, setIsListening] = useState(false);
+  const [browserIsListening, setIsListening] = useState(false);
+  const isListening = browserIsListening || realtimeSpeech.isListening;
   // Hands-free mode: listening pauses while the AI works and resumes after it replies.
   const [voiceMode, setVoiceMode] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -743,6 +754,12 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   });
 
   const toggleVoiceInput = () => {
+    if (sttConfig.loading || sttConfig.error) return;
+    if (realtimeProvider) {
+      if (realtimeSpeech.isListening) realtimeSpeech.stop();
+      else realtimeSpeech.start(input);
+      return;
+    }
     if (voiceMode) {
       setVoiceMode(false);
       recognitionRef.current?.stop();
@@ -757,7 +774,10 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
     const Recognition = getSpeechRecognition();
     if (!Recognition) return;
     const recognition = new Recognition();
-    recognition.lang = navigator.language || 'en-US';
+    recognition.lang =
+      sttConfig.language === 'auto'
+        ? navigator.language || 'en-US'
+        : sttConfig.language;
     // Mobile engines repeat earlier words in continuous mode; use one utterance per session
     // there and let hands-free mode restart listening after each pause.
     recognition.continuous = !isMobileDevice();
@@ -843,14 +863,30 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   };
 
   useEffect(() => {
-    if (!voiceMode || isListening || loading || pendingIntervention) return;
+    if (
+      realtimeProvider ||
+      !isOpen ||
+      !voiceMode ||
+      isListening ||
+      loading ||
+      pendingIntervention
+    )
+      return;
     // Also restarts after the browser ends a session on its own (e.g. long silence).
     startListening();
-  }, [voiceMode, isListening, loading, pendingIntervention]);
+  }, [
+    voiceMode,
+    isListening,
+    loading,
+    pendingIntervention,
+    realtimeProvider,
+    isOpen,
+  ]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     recognitionRef.current?.stop();
+    realtimeSpeech.stop();
     await sendMessage(input);
   };
 
@@ -1109,7 +1145,9 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                   ? 'Ask about this patient, or type S/O/A/P notes (Shift+Enter for a new line)'
                   : 'Type your question...'
             }
-            disabled={loading || !!pendingIntervention}
+            disabled={
+              loading || !!pendingIntervention || realtimeSpeech.isListening
+            }
             // min-h matches the stacked mic + Send buttons (2 × h-10 + gap-2).
             className="min-h-[5.5rem] flex-1 resize-none px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
           />
@@ -1118,7 +1156,11 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
               <button
                 type="button"
                 onClick={toggleVoiceInput}
-                disabled={!voiceMode && (loading || !!pendingIntervention)}
+                disabled={
+                  sttConfig.loading ||
+                  Boolean(sttConfig.error) ||
+                  (!voiceMode && (loading || !!pendingIntervention))
+                }
                 className={`flex h-10 w-full items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
                   isListening
                     ? 'animate-pulse border-red-300 bg-red-600 text-white hover:bg-red-700'
@@ -1126,9 +1168,25 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                       ? 'border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200'
                       : 'border-gray-300 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600'
                 }`}
-                title={voiceMode ? 'End voice mode' : 'Start voice input'}
-                aria-label={voiceMode ? 'End voice mode' : 'Start voice input'}
-                aria-pressed={voiceMode}
+                title={
+                  realtimeProvider
+                    ? isListening
+                      ? 'Stop voice input'
+                      : 'Start voice input'
+                    : voiceMode
+                      ? 'End voice mode'
+                      : 'Start voice input'
+                }
+                aria-label={
+                  realtimeProvider
+                    ? isListening
+                      ? 'Stop voice input'
+                      : 'Start voice input'
+                    : voiceMode
+                      ? 'End voice mode'
+                      : 'Start voice input'
+                }
+                aria-pressed={realtimeProvider ? isListening : voiceMode}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1157,7 +1215,26 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
           </div>
         </form>
 
-        {isListening ? (
+        {(sttConfig.error || realtimeSpeech.error) && (
+          <p role="alert" className="mt-2 text-xs text-red-700">
+            {sttConfig.error || realtimeSpeech.error}
+            {sttConfig.error && (
+              <button
+                type="button"
+                onClick={sttConfig.retry}
+                className="ml-2 font-semibold underline"
+              >
+                Retry voice configuration
+              </button>
+            )}
+          </p>
+        )}
+        {isListening && realtimeProvider ? (
+          <p className="mt-2 text-xs font-medium text-red-600">
+            Listening... Tap the microphone to stop. Review the transcript, then
+            press Send.
+          </p>
+        ) : isListening ? (
           <p className="mt-2 text-xs font-medium text-red-600">
             Listening… say “{ASSISTANT_NAME}, over to you” to send. Tap the
             microphone to end voice mode and review the text first.

@@ -29,6 +29,36 @@ Transform FHIR metadata into production-ready healthcare applications automatica
 
 ## 🏗️ Project Structure
 
+### Ask AI Voice Input
+
+Patient Records' Ask AI supports browser recognition and backend-relayed GPT-4o
+realtime transcription. Set `VITE_STT_PROVIDER` before building the frontend:
+
+| Value          | Behavior                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `browser`      | Existing browser speech recognition, including the existing hands-free flow. No STT config request is needed. |
+| `realtime-api` | Microphone audio goes to `/ws/agentbuilder/stt`; transcripts populate the input for review before Send.       |
+| `auto`         | Read provider and language from authenticated `GET /api/agentbuilder/config/stt`.                             |
+
+Without an explicit flag, localhost uses browser recognition, `azure` and
+`azure-staging` builds use realtime transcription, and other deployments use
+backend configuration. The flag is build-time: changing it requires rebuilding
+the frontend. `browser` can override either Azure mode for rollback/testing.
+
+Both STT endpoints resolve against `VITE_AGENT_API_BASE_URL`. Realtime input
+requires HTTPS (localhost is allowed), microphone permission, AudioWorklet support,
+and a gateway that forwards WebSocket upgrades. Before each connection, the client
+POSTs to `/api/agentbuilder/ws-ticket` with the OAuth bearer token and `X-Tenant-ID`,
+then appends the returned single-use, 30-second ticket to the WebSocket URL. The
+ticket is requested immediately before connecting and is never cached; reconnects
+must request a new one. Gateways and access logs must not record ticket query values.
+Azure OpenAI credentials remain backend-only.
+
+The client emits mono, little-endian PCM16 at 16 kHz in 20 ms frames. It stops
+capture on final transcription, manual stop, panel close, or page backgrounding.
+Permission/configuration/connection failures are shown inline rather than silently
+falling back to a different speech provider.
+
 ```
 AgenticFHIR/
 ├── 📁 .copilot/              # AI prompt instructions (self-generated!)
