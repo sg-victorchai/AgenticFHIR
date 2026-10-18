@@ -42,6 +42,109 @@ afterEach(() => {
 beforeEach(() => vi.resetAllMocks());
 
 describe('EvaluationCohortEditor medication and terminology', () => {
+  it('serializes between bounds without a single value and rejects invalid ranges', () => {
+    const rule = {
+      loincCode: '4548-4',
+      daysBack: 180,
+      comparator: 'between',
+      value: '8',
+      lowValue: '5.7%',
+      highValue: '8%',
+      unit: '',
+    };
+    const group = {
+      ...newCohortGroup(),
+      label: 'HbA1c range',
+      observationConstraints: [rule],
+    };
+    expect(buildCohortGroups([group])[0]).toEqual(
+      expect.objectContaining({
+        observationConstraints: [
+          {
+            loincCode: '4548-4',
+            daysBack: 180,
+            comparator: 'between',
+            lowValue: 5.7,
+            highValue: 8,
+            unit: '%',
+          },
+        ],
+      }),
+    );
+    for (const highValue of ['5.7', '4', '', 'invalid']) {
+      expect(() =>
+        buildCohortGroups([
+          { ...group, observationConstraints: [{ ...rule, highValue }] },
+        ]),
+      ).toThrow('lower value less than');
+    }
+  });
+
+  it('shows editable lower and upper bounds when Between is selected', () => {
+    const { onChange } = renderEditor();
+    fireEvent.click(
+      screen.getByRole('button', { name: '+ Add lab criterion' }),
+    );
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Result comparison' }),
+      { target: { value: 'between' } },
+    );
+    expect(
+      screen.queryByRole('textbox', {
+        name: 'Result value for group 1, criterion 1',
+      }),
+    ).toBeNull();
+    fireEvent.change(
+      screen.getByRole('textbox', {
+        name: 'Lower result value for group 1, criterion 1',
+      }),
+      { target: { value: '5.7' } },
+    );
+    fireEvent.change(
+      screen.getByRole('textbox', {
+        name: 'Upper result value for group 1, criterion 1',
+      }),
+      { target: { value: '8' } },
+    );
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        observationConstraints: [
+          expect.objectContaining({
+            comparator: 'between',
+            lowValue: '5.7',
+            highValue: '8',
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('steps patient counts with mobile controls and disables buttons at the limits', () => {
+    const { onChange } = renderEditor();
+    const input = screen.getByLabelText(
+      'Number of patients',
+    ) as HTMLInputElement;
+    const decrease = screen.getByRole('button', {
+      name: 'Decrease patients for group 1',
+    }) as HTMLButtonElement;
+    const increase = screen.getByRole('button', {
+      name: 'Increase patients for group 1',
+    }) as HTMLButtonElement;
+    expect(decrease.disabled).toBe(true);
+    fireEvent.click(increase);
+    expect(input.value).toBe('2');
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ count: 2 }),
+    ]);
+    fireEvent.click(decrease);
+    expect(input.value).toBe('1');
+    fireEvent.change(input, { target: { value: '1000' } });
+    expect(increase.disabled).toBe(true);
+    fireEvent.click(decrease);
+    expect(input.value).toBe('999');
+    expect(increase.disabled).toBe(false);
+  });
+
   it('includes medication requests in seed groups and validates code and lookback', () => {
     const group = {
       ...newCohortGroup(),

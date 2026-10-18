@@ -1,4 +1,91 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { agentBuilderService } from '../../services/agentBuilderService';
+
+const SearchParameterSelect: React.FC<{
+  resourceType: string;
+  value: string;
+  onChange: (value: string) => void;
+  className: string;
+}> = ({ resourceType, value, onChange, className }) => {
+  const [parameters, setParameters] = useState<
+    Array<{ code: string; description?: string }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setParameters([]);
+    setError(null);
+    void agentBuilderService
+      .getSearchParameters(resourceType)
+      .then(
+        (result) => {
+          if (active) setParameters(result);
+        },
+        (failure: unknown) => {
+          if (active)
+            setError(
+              failure instanceof Error
+                ? failure.message
+                : 'Unable to load search parameters.',
+            );
+        },
+      )
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [resourceType, retry]);
+  return (
+    <>
+      <select
+        required
+        value={value}
+        disabled={loading || Boolean(error)}
+        className={className}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">
+          {loading
+            ? 'Loading parameters...'
+            : error
+              ? 'Parameters unavailable'
+              : parameters.length
+                ? 'Select parameter'
+                : 'No parameters available'}
+        </option>
+        {value && !parameters.some((parameter) => parameter.code === value) && (
+          <option value={value}>{value} (saved)</option>
+        )}
+        {parameters.map((parameter) => (
+          <option
+            key={parameter.code}
+            value={parameter.code}
+            title={parameter.description}
+          >
+            {parameter.code}
+          </option>
+        ))}
+      </select>
+      {error && (
+        <span role="alert" className="mt-1 block text-xs text-rose-700">
+          {error}{' '}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => setRetry((current) => current + 1)}
+          >
+            Retry
+          </button>
+        </span>
+      )}
+    </>
+  );
+};
 
 export interface QueryPatternDraft {
   resourceType: string;
@@ -279,7 +366,7 @@ const ScenarioScoringEditor: React.FC<{
         </details>
         {value.queries.map((query, index) => (
           <div key={index} className="space-y-3 border-b border-slate-200 pb-3">
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-end gap-2">
               <label className="min-w-0 flex-1 text-xs font-medium text-slate-700">
                 Expected data source {index + 1}
                 <select
@@ -288,20 +375,24 @@ const ScenarioScoringEditor: React.FC<{
                     changeQuery(index, {
                       ...query,
                       resourceType: event.target.value,
+                      filters: query.filters.map((filter) => ({
+                        ...filter,
+                        name: '',
+                      })),
                     })
                   }
                   className={inputClass}
                 >
-                  {resourceTypes.map(([type, label]) => (
+                  {resourceTypes.map(([type]) => (
                     <option key={type} value={type}>
-                      {label} ({type})
+                      {type}
                     </option>
                   ))}
                 </select>
               </label>
               <button
                 type="button"
-                className={buttonClass}
+                className={`${buttonClass} shrink-0`}
                 onClick={() =>
                   onChange({
                     ...value,
@@ -311,24 +402,26 @@ const ScenarioScoringEditor: React.FC<{
                   })
                 }
               >
-                Remove data source
+                Remove
               </button>
             </div>
             {query.filters.map((filter, filterIndex) => (
-              <div key={filterIndex} className="flex flex-wrap items-end gap-2">
-                <label className="min-w-0 flex-1 text-xs text-slate-700">
+              <div
+                key={filterIndex}
+                className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+              >
+                <label className="min-w-0 text-xs text-slate-700">
                   Search parameter
-                  <input
-                    required
+                  <SearchParameterSelect
+                    resourceType={query.resourceType}
                     value={filter.name}
-                    placeholder="e.g. code"
                     className={inputClass}
-                    onChange={(event) =>
+                    onChange={(name) =>
                       changeQuery(index, {
                         ...query,
                         filters: query.filters.map((current, position) =>
                           position === filterIndex
-                            ? { ...current, name: event.target.value }
+                            ? { ...current, name }
                             : current,
                         ),
                       })

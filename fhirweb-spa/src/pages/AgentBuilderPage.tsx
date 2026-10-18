@@ -307,6 +307,14 @@ const scenarioSeedGroups = (scenario: ScenarioDetail): CohortGroupDraft[] => {
           daysBack: Number(rule.daysBack || 180),
           comparator: String(rule.comparator || 'le'),
           value: `${rule.value ?? 0}${rule.unit === '%' ? '%' : ''}`,
+          lowValue:
+            rule.lowValue == null
+              ? ''
+              : `${rule.lowValue}${rule.unit === '%' ? '%' : ''}`,
+          highValue:
+            rule.highValue == null
+              ? ''
+              : `${rule.highValue}${rule.unit === '%' ? '%' : ''}`,
           unit: rule.unit === '%' ? '' : String(rule.unit || ''),
         }))
       : [],
@@ -439,7 +447,9 @@ const AgentBuilderPage: React.FC = () => {
   }>(() => {
     try {
       const stored = JSON.parse(
-        sessionStorage.getItem(scenarioDraftKey) || 'null',
+        localStorage.getItem(scenarioDraftKey) ||
+          sessionStorage.getItem(scenarioDraftKey) ||
+          'null',
       );
       return stored?.target?.personaId && Array.isArray(stored.groups)
         ? stored
@@ -457,6 +467,9 @@ const AgentBuilderPage: React.FC = () => {
   const hasUnsavedScenario = showScenarioDraft && !scenarioId && draftChanged;
   const removeScenarioRecovery = () => {
     try {
+      localStorage.removeItem(scenarioDraftKey);
+    } catch {}
+    try {
       sessionStorage.removeItem(scenarioDraftKey);
     } catch {}
     setRecoveredDraft(null);
@@ -469,25 +482,40 @@ const AgentBuilderPage: React.FC = () => {
 
   useEffect(() => {
     if (!hasUnsavedScenario || !evaluationTarget) return;
-    try {
-      sessionStorage.setItem(
-        scenarioDraftKey,
-        JSON.stringify({
-          target: evaluationTarget,
-          name: scenarioName,
-          question: scenarioQuestion,
-          scoring: scenarioScoring,
-          settings: testSettings,
-          params: scenarioParams,
-          description: seedDescription,
-          groups: seedGroups,
-          hitlEnabled: hitlComparisonEnabled,
-          hitlInstruction: hitlRefineInstruction,
-          hitlCount: hitlApplyToCount,
-          goldSets: hitlGoldSets,
-        }),
-      );
-    } catch {}
+    const persistDraft = () => {
+      const draft = {
+        target: evaluationTarget,
+        name: scenarioName,
+        question: scenarioQuestion,
+        scoring: scenarioScoring,
+        settings: testSettings,
+        params: scenarioParams,
+        description: seedDescription,
+        groups: seedGroups,
+        hitlEnabled: hitlComparisonEnabled,
+        hitlInstruction: hitlRefineInstruction,
+        hitlCount: hitlApplyToCount,
+        goldSets: hitlGoldSets,
+      };
+      const serialized = JSON.stringify(draft);
+      try {
+        localStorage.setItem(scenarioDraftKey, serialized);
+      } catch {}
+      try {
+        sessionStorage.setItem(scenarioDraftKey, serialized);
+      } catch {}
+      setRecoveredDraft(draft);
+    };
+    const saveWhenHidden = () => {
+      if (document.visibilityState === 'hidden') persistDraft();
+    };
+    persistDraft();
+    document.addEventListener('visibilitychange', saveWhenHidden);
+    window.addEventListener('pagehide', persistDraft);
+    return () => {
+      document.removeEventListener('visibilitychange', saveWhenHidden);
+      window.removeEventListener('pagehide', persistDraft);
+    };
   }, [
     hasUnsavedScenario,
     evaluationTarget,
@@ -2774,7 +2802,7 @@ const AgentBuilderPage: React.FC = () => {
                     ) : evaluationDetail.params?.length ? (
                       <fieldset className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
                         <legend className="mb-2 text-sm font-semibold text-slate-800">
-                          Agent test settings
+                          Persona parameter test value
                         </legend>
                         {evaluationDetail.params
                           .filter(

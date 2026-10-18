@@ -1,6 +1,13 @@
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { agentBuilderService } from '../../services/agentBuilderService';
 import ScenarioScoringEditor, {
   buildScenarioScoring,
   newScenarioScoring,
@@ -8,6 +15,16 @@ import ScenarioScoringEditor, {
 } from './ScenarioScoringEditor';
 
 afterEach(cleanup);
+vi.mock('../../services/agentBuilderService', () => ({
+  agentBuilderService: { getSearchParameters: vi.fn() },
+}));
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(agentBuilderService.getSearchParameters).mockResolvedValue([
+    { code: 'code' },
+    { code: 'status' },
+  ]);
+});
 
 const Harness = () => {
   const [value, setValue] = useState(newScenarioScoring);
@@ -15,6 +32,68 @@ const Harness = () => {
 };
 
 describe('scenario scoring', () => {
+  it('loads parameters for the selected resource and clears only names when it changes', async () => {
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add expected data source' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
+    const parameter = screen.getByRole('combobox', {
+      name: 'Search parameter',
+    }) as HTMLSelectElement;
+    await waitFor(() => expect(parameter.disabled).toBe(false));
+    expect(agentBuilderService.getSearchParameters).toHaveBeenCalledWith(
+      'Patient',
+    );
+    fireEvent.change(parameter, { target: { value: 'code' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Expected value' }), {
+      target: { value: '4548-4' },
+    });
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Expected data source 1' }),
+      { target: { value: 'Observation' } },
+    );
+    await waitFor(() =>
+      expect(agentBuilderService.getSearchParameters).toHaveBeenCalledWith(
+        'Observation',
+      ),
+    );
+    await waitFor(() => expect(parameter.disabled).toBe(false));
+    expect(parameter.value).toBe('');
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: 'Expected value',
+        }) as HTMLInputElement
+      ).value,
+    ).toBe('4548-4');
+    fireEvent.change(parameter, { target: { value: 'code' } });
+    expect(parameter.value).toBe('code');
+  });
+
+  it('lets users retry a failed parameter lookup', async () => {
+    vi.mocked(agentBuilderService.getSearchParameters).mockRejectedValueOnce(
+      new Error('Lookup failed'),
+    );
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add expected data source' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole('combobox', {
+            name: 'Search parameter',
+          }) as HTMLSelectElement
+        ).disabled,
+      ).toBe(false),
+    );
+    expect(screen.getByRole('option', { name: 'code' })).toBeTruthy();
+  });
+
   it('defaults to automatic baseline criteria with no expected queries', () => {
     expect(buildScenarioScoring(newScenarioScoring())).toEqual({
       generateRubric: true,
@@ -106,7 +185,7 @@ describe('scenario scoring', () => {
     ).toThrow('repeated');
   });
 
-  it('warns inline when a data source repeats code and explains how to fix it', () => {
+  it('warns inline when a data source repeats code and explains how to fix it', async () => {
     render(<Harness />);
     fireEvent.click(
       screen.getByRole('button', { name: 'Add expected data source' }),
@@ -115,17 +194,29 @@ describe('scenario scoring', () => {
       target: { value: 'Observation' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
-    const parameterFields = screen.getAllByRole('textbox', {
+    const parameterFields = screen.getAllByRole('combobox', {
       name: 'Search parameter',
     });
+    await waitFor(() =>
+      expect((parameterFields[0] as HTMLSelectElement).disabled).toBe(false),
+    );
     fireEvent.change(parameterFields[0], { target: { value: 'code' } });
     fireEvent.change(
       screen.getAllByRole('textbox', { name: 'Expected value' })[0],
       { target: { value: '4548-4' } },
     );
     fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getAllByRole('combobox', {
+            name: 'Search parameter',
+          })[1] as HTMLSelectElement
+        ).disabled,
+      ).toBe(false),
+    );
     fireEvent.change(
-      screen.getAllByRole('textbox', { name: 'Search parameter' })[1],
+      screen.getAllByRole('combobox', { name: 'Search parameter' })[1],
       { target: { value: 'code' } },
     );
     fireEvent.change(
@@ -185,14 +276,14 @@ describe('scenario scoring', () => {
   it('separates the three inputs and reveals info boxes only when opened', () => {
     render(<Harness />);
     expect(
-      screen.getByRole('heading', { name: '1. Auto-generated baseline' }),
+      screen.getByRole('heading', { name: 'Automatic response baseline' }),
     ).toBeTruthy();
     expect(
-      screen.getByRole('heading', { name: '2. What makes a good response?' }),
+      screen.getByRole('heading', { name: 'Response quality criteria' }),
     ).toBeTruthy();
     expect(
       screen.getByRole('heading', {
-        name: '3. Did the agent query the right data?',
+        name: 'Query correctness',
       }),
     ).toBeTruthy();
     expect(screen.queryByText('generateRubric')).toBeNull();
@@ -212,7 +303,7 @@ describe('scenario scoring', () => {
     expect(screen.getByRole('textbox').className).toContain('font-normal');
   });
 
-  it('lets users add and remove data sources and filters without JSON', () => {
+  it('lets users add and remove data sources and filters without JSON', async () => {
     render(<Harness />);
     fireEvent.click(
       screen.getByRole('button', { name: 'Add expected data source' }),
@@ -221,8 +312,17 @@ describe('scenario scoring', () => {
       target: { value: 'Observation' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add query filter' }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole('combobox', {
+            name: 'Search parameter',
+          }) as HTMLSelectElement
+        ).disabled,
+      ).toBe(false),
+    );
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Search parameter' }),
+      screen.getByRole('combobox', { name: 'Search parameter' }),
       { target: { value: 'code' } },
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Expected value' }), {
@@ -230,12 +330,12 @@ describe('scenario scoring', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Remove filter' }));
     expect(
-      screen.queryByRole('textbox', { name: 'Search parameter' }),
+      screen.queryByRole('combobox', { name: 'Search parameter' }),
     ).toBeNull();
     expect(
       screen.queryByRole('textbox', { name: 'Expected value' }),
     ).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove data source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(screen.queryByRole('combobox')).toBeNull();
   });
 });

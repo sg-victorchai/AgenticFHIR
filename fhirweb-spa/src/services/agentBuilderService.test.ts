@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { listDataAssets } from './fhir/dataAssetsService';
 import {
   agentBuilderService,
   normalizeSeedStatus,
@@ -7,6 +8,8 @@ import {
 vi.mock('./auth/oidc', () => ({
   getAuthenticatedHeaders: vi.fn(async (headers) => headers),
 }));
+vi.mock('./fhir/dataAssetsService', () => ({ listDataAssets: vi.fn() }));
+beforeEach(() => vi.mocked(listDataAssets).mockReset().mockResolvedValue([]));
 
 const mockStream = (chunks: string[]) => {
   const encoder = new TextEncoder();
@@ -27,6 +30,87 @@ const mockStream = (chunks: string[]) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('persisted evaluation data endpoints', () => {
+  it('includes Observation code declared by the Data Assets capability source', async () => {
+    vi.mocked(listDataAssets).mockResolvedValue([
+      {
+        type: 'Observation',
+        searchParam: [
+          { name: 'code', documentation: 'Observation coding' },
+          { name: 'status' },
+        ],
+      },
+      { type: 'Patient', searchParam: [{ name: 'birthdate' }] },
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              entry: [
+                {
+                  resource: { resourceType: 'SearchParameter', code: 'status' },
+                },
+              ],
+            }),
+          ),
+      ),
+    );
+    expect(
+      await agentBuilderService.getSearchParameters('Observation'),
+    ).toEqual([
+      { code: 'code', description: 'Observation coding' },
+      { code: 'status', description: undefined },
+    ]);
+  });
+
+  it('uses capability parameters if the SearchParameter request fails', async () => {
+    vi.mocked(listDataAssets).mockResolvedValue([
+      { type: 'Observation', searchParam: [{ name: 'code' }] },
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 500 })),
+    );
+    expect(
+      await agentBuilderService.getSearchParameters('Observation'),
+    ).toEqual([{ code: 'code', description: undefined }]);
+  });
+
+  it('loads resource search parameters from the FHIR Bundle endpoint', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            resourceType: 'Bundle',
+            entry: [
+              {
+                resource: {
+                  resourceType: 'SearchParameter',
+                  code: 'status',
+                  description: 'Status filter',
+                },
+              },
+              { resource: { resourceType: 'SearchParameter', code: 'code' } },
+              { resource: { resourceType: 'SearchParameter', code: 'code' } },
+              { resource: { resourceType: 'OperationOutcome' } },
+            ],
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    expect(
+      await agentBuilderService.getSearchParameters('Observation'),
+    ).toEqual([
+      { code: 'code', description: undefined },
+      { code: 'status', description: 'Status filter' },
+    ]);
+    const url = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+    expect(url.pathname).toBe('/fhir/SearchParameter');
+    expect(url.searchParams.get('base')).toBe('Observation');
+    expect(fetchMock.mock.calls[0][1]?.headers).toBeTruthy();
+  });
+
   it('forks a persona version through the experimental fork endpoint', async () => {
     const response = { newVersion: 'v1-exp-1728032401234' };
     const fetchMock = vi.fn(

@@ -24,6 +24,8 @@ export interface CohortGroupDraft {
     daysBack: number;
     comparator: string;
     value: string;
+    lowValue?: string;
+    highValue?: string;
     unit: string;
   }>;
   medicationRequests: Array<{
@@ -77,20 +79,32 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
     if (
       !group.noObservations &&
       group.observationConstraints.some((rule) => {
-        const parsedValue = parseObservationValue(rule.value);
+        const values =
+          rule.comparator === 'between'
+            ? [
+                parseObservationValue(rule.lowValue ?? ''),
+                parseObservationValue(rule.highValue ?? ''),
+              ]
+            : [parseObservationValue(rule.value)];
         return (
           !rule.loincCode.trim() ||
           !Number.isInteger(rule.daysBack) ||
           rule.daysBack < 1 ||
-          !parsedValue ||
-          (parsedValue.hasPercent &&
-            Boolean(rule.unit.trim()) &&
-            rule.unit.trim() !== '%')
+          values.some(
+            (parsedValue) =>
+              !parsedValue ||
+              (parsedValue.hasPercent &&
+                Boolean(rule.unit.trim()) &&
+                rule.unit.trim() !== '%'),
+          ) ||
+          (rule.comparator === 'between' && values[0] && values[1]
+            ? values[0].value >= values[1].value
+            : false)
         );
       })
     )
       throw new Error(
-        'Each lab criterion needs a LOINC code, a positive lookback, and a numeric value such as 7.5 or 5.7%.',
+        'Each lab criterion needs a LOINC code, a positive lookback, and a numeric value such as 7.5 or 5.7%. Between requires a lower value less than the upper value, with compatible units.',
       );
     if (
       group.medicationRequests.some(
@@ -143,13 +157,27 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
           ? {
               observationConstraints: group.observationConstraints.map(
                 (rule) => {
-                  const parsedValue = parseObservationValue(rule.value)!;
-                  const unit = parsedValue.hasPercent ? '%' : rule.unit.trim();
+                  const lower =
+                    rule.comparator === 'between'
+                      ? parseObservationValue(rule.lowValue ?? '')!
+                      : undefined;
+                  const upper =
+                    rule.comparator === 'between'
+                      ? parseObservationValue(rule.highValue ?? '')!
+                      : undefined;
+                  const parsedValue =
+                    lower ?? parseObservationValue(rule.value)!;
+                  const unit =
+                    parsedValue.hasPercent || upper?.hasPercent
+                      ? '%'
+                      : rule.unit.trim();
                   return {
                     loincCode: rule.loincCode.trim(),
                     daysBack: rule.daysBack,
                     comparator: rule.comparator,
-                    value: parsedValue.value,
+                    ...(lower && upper
+                      ? { lowValue: lower.value, highValue: upper.value }
+                      : { value: parsedValue.value }),
                     ...(unit ? { unit } : {}),
                   };
                 },
@@ -489,21 +517,51 @@ const EvaluationCohortEditor: React.FC<{
                 className={inputClass}
               />
             </label>
-            <label className="text-xs font-medium text-slate-600">
-              Number of patients
-              <input
-                required
-                type="number"
-                min={1}
-                max={1000}
-                step={1}
-                value={group.count}
-                onChange={(event) =>
-                  update(index, { count: Number(event.target.value) })
-                }
-                className={inputClass}
-              />
-            </label>
+            <div className="text-xs font-medium text-slate-600">
+              <label htmlFor={`patient-count-${index}`}>
+                Number of patients
+              </label>
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={`Decrease patients for group ${index + 1}`}
+                  title="Decrease number of patients"
+                  disabled={group.count <= 1}
+                  onClick={() =>
+                    update(index, { count: Math.max(1, group.count - 1) })
+                  }
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 text-xl text-cyan-800 disabled:opacity-40 sm:hidden"
+                >
+                  <span aria-hidden="true">-</span>
+                </button>
+                <input
+                  id={`patient-count-${index}`}
+                  required
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={1000}
+                  step={1}
+                  value={group.count}
+                  onChange={(event) =>
+                    update(index, { count: Number(event.target.value) })
+                  }
+                  className="h-11 w-full min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  aria-label={`Increase patients for group ${index + 1}`}
+                  title="Increase number of patients"
+                  disabled={group.count >= 1000}
+                  onClick={() =>
+                    update(index, { count: Math.min(1000, group.count + 1) })
+                  }
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 text-xl text-cyan-800 disabled:opacity-40 sm:hidden"
+                >
+                  <span aria-hidden="true">+</span>
+                </button>
+              </div>
+            </div>
             <div className="text-xs font-medium text-slate-600">
               Conditions (optional)
               <TerminologyCodeSearch
@@ -674,7 +732,7 @@ const EvaluationCohortEditor: React.FC<{
                 return (
                   <div
                     key={ruleIndex}
-                    className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.65fr)_auto]"
+                    className={`grid items-start gap-3 sm:grid-cols-2 ${rule.comparator === 'between' ? 'lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,0.8fr)_auto]' : 'lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.65fr)_auto]'}`}
                   >
                     <div className="text-xs text-slate-600">
                       Lab test LOINC code
@@ -714,23 +772,65 @@ const EvaluationCohortEditor: React.FC<{
                         <option value="eq">Equal to</option>
                         <option value="ge">At least</option>
                         <option value="gt">Above</option>
+                        <option value="between">Between</option>
                       </select>
                     </label>
-                    <label className="text-xs text-slate-600">
-                      Result value
-                      <input
-                        required
-                        type="text"
-                        inputMode="decimal"
-                        value={rule.value}
-                        onChange={(event) =>
-                          updateRule({ value: event.target.value })
-                        }
-                        placeholder="e.g. 7.5 or 5.7%"
-                        aria-label={`Result value for group ${index + 1}, criterion ${ruleIndex + 1}`}
-                        className={inputClass}
-                      />
-                    </label>
+                    {rule.comparator === 'between' ? (
+                      <div className="grid min-w-0 grid-cols-2 gap-2">
+                        <label
+                          title="Lower value (inclusive)"
+                          className="flex min-w-0 flex-col text-xs text-slate-600"
+                        >
+                          Lower value
+                          <input
+                            required
+                            type="text"
+                            inputMode="decimal"
+                            value={rule.lowValue ?? ''}
+                            onChange={(event) =>
+                              updateRule({ lowValue: event.target.value })
+                            }
+                            aria-label={`Lower result value for group ${index + 1}, criterion ${ruleIndex + 1}`}
+                            title="Inclusive lower bound"
+                            className={inputClass}
+                          />
+                        </label>
+                        <label
+                          title="Upper value (exclusive)"
+                          className="flex min-w-0 flex-col text-xs text-slate-600"
+                        >
+                          Upper value
+                          <input
+                            required
+                            type="text"
+                            inputMode="decimal"
+                            value={rule.highValue ?? ''}
+                            onChange={(event) =>
+                              updateRule({ highValue: event.target.value })
+                            }
+                            aria-label={`Upper result value for group ${index + 1}, criterion ${ruleIndex + 1}`}
+                            title="Exclusive upper bound"
+                            className={inputClass}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="text-xs text-slate-600">
+                        Result value
+                        <input
+                          required
+                          type="text"
+                          inputMode="decimal"
+                          value={rule.value}
+                          onChange={(event) =>
+                            updateRule({ value: event.target.value })
+                          }
+                          placeholder="e.g. 7.5 or 5.7%"
+                          aria-label={`Result value for group ${index + 1}, criterion ${ruleIndex + 1}`}
+                          className={inputClass}
+                        />
+                      </label>
+                    )}
                     <label className="text-xs text-slate-600">
                       Unit (optional)
                       <input
@@ -754,9 +854,9 @@ const EvaluationCohortEditor: React.FC<{
                             ),
                         })
                       }
-                      className="min-h-9 self-end py-2 text-left text-xs text-rose-700"
+                      className="min-h-9 self-start whitespace-nowrap py-2 text-left text-xs text-rose-700 lg:mt-5"
                     >
-                      Remove criterion
+                      Remove
                     </button>
                   </div>
                 );
@@ -874,11 +974,11 @@ const EvaluationCohortEditor: React.FC<{
           </div>
         </div>
       ))}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-4">
         <button
           type="button"
           onClick={() => onChange([...groups, newCohortGroup()])}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium"
+          className="rounded-md border border-cyan-700 bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
         >
           + Add patient group
         </button>

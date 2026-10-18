@@ -1,4 +1,5 @@
 import { getAuthenticatedHeaders } from './auth/oidc';
+import { listDataAssets } from './fhir/dataAssetsService';
 
 const API_BASE = (import.meta.env.VITE_AGENT_API_BASE_URL || '').replace(
   /\/+$/,
@@ -363,6 +364,52 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
 };
 
 export const agentBuilderService = {
+  getSearchParameters: async (
+    resourceType: string,
+  ): Promise<Array<{ code: string; description?: string }>> => {
+    type SearchParameterBundle = {
+      entry?: Array<{
+        resource?: {
+          resourceType?: string;
+          code?: string;
+          description?: string;
+        };
+      }>;
+    };
+    const [definitions, capabilities] = await Promise.allSettled([
+      request<SearchParameterBundle>(
+        `/fhir/SearchParameter?${new URLSearchParams({ base: resourceType })}`,
+      ),
+      listDataAssets(),
+    ]);
+    if (definitions.status === 'rejected' && capabilities.status === 'rejected')
+      throw definitions.reason;
+    const declared =
+      capabilities.status === 'fulfilled'
+        ? capabilities.value
+            .filter((resource) => resource.type === resourceType)
+            .flatMap((resource) => resource.searchParam ?? [])
+            .map((parameter) => ({
+              code: parameter.name,
+              description: parameter.documentation,
+            }))
+        : [];
+    const bundle = definitions.status === 'fulfilled' ? definitions.value : {};
+    const registered = (bundle.entry ?? []).flatMap(({ resource }) =>
+      resource?.resourceType === 'SearchParameter' && resource.code
+        ? [{ code: resource.code, description: resource.description }]
+        : [],
+    );
+    return [...registered, ...declared]
+      .filter((parameter) => Boolean(parameter.code))
+      .filter(
+        (parameter, index, parameters) =>
+          parameters.findIndex(
+            (candidate) => candidate.code === parameter.code,
+          ) === index,
+      )
+      .sort((first, second) => first.code.localeCompare(second.code));
+  },
   searchTerminology: async (query: string, resourceType: string) => {
     const params = new URLSearchParams({ q: query, resourceType });
     const result = await request<unknown>(`/api/terminology/search?${params}`);

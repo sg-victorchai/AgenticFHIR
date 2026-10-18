@@ -47,6 +47,7 @@ vi.mock('../services/agentBuilderService', () => {
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -116,6 +117,9 @@ describe('evaluation navigation', () => {
     expect(
       sessionStorage.getItem('agentbuilder:scenario-draft:default'),
     ).toBeNull();
+    expect(
+      localStorage.getItem('agentbuilder:scenario-draft:default'),
+    ).toBeNull();
   });
 
   it('warns on reload only after the draft has changed', async () => {
@@ -136,7 +140,7 @@ describe('evaluation navigation', () => {
     expect(changed.defaultPrevented).toBe(true);
   });
 
-  it('recovers unsaved scenario fields after remounting the portal', async () => {
+  it('recovers unsaved scenario fields after mobile backgrounding and session loss', async () => {
     const first = render(
       <MemoryRouter>
         <AgentBuilderPage />
@@ -155,7 +159,18 @@ describe('evaluation navigation', () => {
         target: { value: 'Identify patients missing HbA1c screening' },
       },
     );
+    localStorage.removeItem('agentbuilder:scenario-draft:default');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(
+      localStorage.getItem('agentbuilder:scenario-draft:default'),
+    ).toBeTruthy();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(
+      localStorage.getItem('agentbuilder:scenario-draft:default'),
+    ).toBeTruthy();
     first.unmount();
+    sessionStorage.clear();
     render(
       <MemoryRouter>
         <AgentBuilderPage />
