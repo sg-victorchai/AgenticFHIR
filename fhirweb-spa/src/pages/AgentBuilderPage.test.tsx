@@ -8,8 +8,12 @@ import {
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { agentBuilderService } from '../services/agentBuilderService';
+import { buildCohortGroups } from '../components/clinician/EvaluationCohortEditor';
+import { ScoreExplanation } from '../components/clinician/EvalRunInsights';
 import AgentBuilderPage, {
+  LifecycleProgress,
   qualityScoreToPercent,
+  scenarioSeedGroups,
   sessionDisplayName,
 } from './AgentBuilderPage';
 
@@ -69,6 +73,66 @@ const openScenarioDraft = async () => {
 };
 
 describe('evaluation navigation', () => {
+  it('shows only the current lifecycle state until expanded', () => {
+    render(<LifecycleProgress state="UAT_TRAINING" />);
+    const summary = screen.getByText('Current state: Sandbox evaluation');
+    const disclosure = summary.closest('details') as HTMLDetailsElement;
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(summary);
+    expect(disclosure.open).toBe(true);
+    expect(screen.getByText('1. Author review')).toBeTruthy();
+    fireEvent.click(summary);
+    expect(disclosure.open).toBe(false);
+  });
+
+  it('preserves explanation text and adds query separator wrap opportunities', () => {
+    const text =
+      'Observation?code=http://loinc.org|4548-4&status=final — fully matched';
+    const { container } = render(<ScoreExplanation text={text} />);
+    expect(container.textContent).toBe(text);
+    expect(container.querySelectorAll('wbr').length).toBeGreaterThan(0);
+    expect(container.querySelector('p')?.className).toContain('break-normal');
+    expect(container.querySelector('p')?.className).not.toContain('break-all');
+  });
+
+  it.each([
+    [45, 75],
+    [0, 10],
+  ])(
+    'round-trips saved numeric age bounds %s to %s when revising a scenario',
+    (minAge, maxAge) => {
+      const groups = scenarioSeedGroups({
+        scenarioId: 'saved-scenario',
+        scenarioName: 'Saved cohort',
+        scenarioType: 'AGENT',
+        seedSpec: {
+          cohortGroups: [
+            {
+              label: 'Age cohort',
+              count: 2,
+              patientProfile: { minAge, maxAge },
+            },
+          ],
+        },
+      });
+      expect(groups[0].patientProfile.minAge).toBe(String(minAge));
+      expect(groups[0].patientProfile.maxAge).toBe(String(maxAge));
+      expect(buildCohortGroups(groups)[0]).toEqual(
+        expect.objectContaining({
+          patientProfile: { minAge, maxAge },
+        }),
+      );
+      const recoveredGroups = JSON.parse(JSON.stringify(groups));
+      recoveredGroups[0].patientProfile.minAge = minAge;
+      recoveredGroups[0].patientProfile.maxAge = maxAge;
+      expect(buildCohortGroups(recoveredGroups)[0]).toEqual(
+        expect.objectContaining({
+          patientProfile: { minAge, maxAge },
+        }),
+      );
+    },
+  );
+
   it('keeps the edited draft when browser Back is cancelled', async () => {
     window.history.replaceState({ idx: 1 }, '', '/agentbuilder');
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);

@@ -135,9 +135,13 @@ const nextStageText: Record<string, string> = {
   IMPROVEMENT_CANDIDATE:
     'Fork a new draft version to begin an improvement cycle.',
 };
-const LifecycleProgress: React.FC<{ state: string }> = ({ state }) => (
-  <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-3">
-    <ol className="flex flex-wrap gap-2">
+export const LifecycleProgress: React.FC<{ state: string }> = ({ state }) => (
+  <details className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2">
+    <summary className="cursor-pointer text-xs font-semibold text-cyan-900">
+      Current state:{' '}
+      {stageLabels[lifecycleStages.indexOf(state)] || state.replace(/_/g, ' ')}
+    </summary>
+    <ol className="mt-3 flex flex-wrap gap-2">
       {lifecycleStages.map((stage, index) => (
         <li
           key={stage}
@@ -151,7 +155,7 @@ const LifecycleProgress: React.FC<{ state: string }> = ({ state }) => (
     <p className="mt-2 text-xs text-slate-700">
       {nextStageText[state] || state.replace(/_/g, ' ')}
     </p>
-  </div>
+  </details>
 );
 
 const Icon: React.FC<{ name: string; className?: string }> = ({
@@ -282,15 +286,17 @@ const StatusBadge: React.FC<{ value?: string }> = ({ value }) => {
 const dateTime = (value?: string) =>
   value ? new Date(value).toLocaleString() : '—';
 
-const scenarioSeedGroups = (scenario: ScenarioDetail): CohortGroupDraft[] => {
+export const scenarioSeedGroups = (
+  scenario: ScenarioDetail,
+): CohortGroupDraft[] => {
   const groups = scenario.seedSpec?.cohortGroups;
   if (!Array.isArray(groups) || !groups.length) return [newCohortGroup()];
   return groups.map((group: any) => ({
     label: String(group.label || ''),
     count: Number(group.count || 1),
     patientProfile: {
-      minAge: group.patientProfile?.minAge ?? '',
-      maxAge: group.patientProfile?.maxAge ?? '',
+      minAge: String(group.patientProfile?.minAge ?? ''),
+      maxAge: String(group.patientProfile?.maxAge ?? ''),
       gender: group.patientProfile?.gender ?? '',
       city: group.patientProfile?.city ?? '',
       state: group.patientProfile?.state ?? '',
@@ -2564,6 +2570,11 @@ const AgentBuilderPage: React.FC = () => {
                         ? evaluationTarget.name
                         : 'Evaluation lab'}
                     </h1>
+                    {evaluationTarget && (
+                      <p className="mt-1 break-all text-xs font-medium text-slate-600">
+                        Version {evaluationTarget.version}
+                      </p>
+                    )}
                     <p className="mt-1 text-sm text-slate-500">
                       Seed controlled FHIR cohorts, replay scenarios, and
                       inspect quality traces before production approval.
@@ -3117,6 +3128,9 @@ const AgentBuilderPage: React.FC = () => {
                             </span>
                             <StatusBadge value={persona.lifecycleState} />
                           </div>
+                          <p className="mt-1 break-all text-xs font-medium text-slate-600">
+                            Version {persona.version}
+                          </p>
                           <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                             {persona.description}
                           </p>

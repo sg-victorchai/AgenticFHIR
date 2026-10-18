@@ -121,8 +121,8 @@ export const buildCohortGroups = (groups: CohortGroupDraft[]) => {
       .split(',')
       .map((code) => code.trim())
       .filter(Boolean);
-    const minAgeText = group.patientProfile.minAge.trim();
-    const maxAgeText = group.patientProfile.maxAge.trim();
+    const minAgeText = String(group.patientProfile.minAge ?? '').trim();
+    const maxAgeText = String(group.patientProfile.maxAge ?? '').trim();
     const minAge = minAgeText === '' ? undefined : Number(minAgeText);
     const maxAge = maxAgeText === '' ? undefined : Number(maxAgeText);
     if (

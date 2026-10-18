@@ -71,6 +71,17 @@ const Raw: React.FC<{ value: unknown }> = ({ value }) => (
 const asPercent = (score: number) =>
   Math.round((score >= 0 && score <= 1 ? score * 100 : score) * 10) / 10;
 
+export const ScoreExplanation: React.FC<{ text: string }> = ({ text }) => (
+  <p className="mt-1 min-w-0 whitespace-pre-wrap break-normal text-xs leading-relaxed text-slate-600 [overflow-wrap:normal]">
+    {text.split(/([/?&=:|])/).map((part, index) => (
+      <React.Fragment key={index}>
+        {part}
+        {/^[/?&=:|]$/.test(part) && <wbr />}
+      </React.Fragment>
+    ))}
+  </p>
+);
+
 export const QualityDimensionsView: React.FC<{
   value: unknown;
   overallScore?: number;
@@ -107,7 +118,7 @@ export const QualityDimensionsView: React.FC<{
   const displayedOverall =
     overallScore === undefined ? undefined : asPercent(overallScore);
   return (
-    <section className="mt-2 rounded border border-slate-200 bg-white p-3">
+    <section className="mt-2 min-w-0 max-w-full rounded border border-slate-200 bg-white p-3">
       <div>
         <h4 className="text-xs font-semibold">Score breakdown</h4>
         <p className="mt-1 text-xs leading-relaxed text-slate-600">
@@ -186,11 +197,7 @@ export const QualityDimensionsView: React.FC<{
                   style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
                 />
               </div>
-              {explanation && (
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  {explanation}
-                </p>
-              )}
+              {explanation && <ScoreExplanation text={explanation} />}
               {key === 'responseQuality' &&
                 dimensions.responseQualityCriteria?.length && (
                   <ul className="mt-2 space-y-1 border-l-2 border-slate-100 pl-3">
@@ -203,7 +210,9 @@ export const QualityDimensionsView: React.FC<{
                             key={`${index}-${criterion}`}
                             className="flex items-start justify-between gap-3 text-[11px] text-slate-600"
                           >
-                            <span>{criterion}</span>
+                            <span className="min-w-0 whitespace-normal break-normal">
+                              {criterion}
+                            </span>
                             {typeof criterionScore === 'number' && (
                               <span className="shrink-0 font-semibold tabular-nums text-slate-800">
                                 {asPercent(criterionScore)}%
