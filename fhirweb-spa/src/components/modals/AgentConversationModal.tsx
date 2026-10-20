@@ -756,6 +756,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   const toggleVoiceInput = () => {
     if (sttConfig.loading || sttConfig.error) return;
     if (realtimeProvider) {
+      if (realtimeSpeech.isFinalizing) return;
       if (realtimeSpeech.isListening) realtimeSpeech.stop();
       else realtimeSpeech.start(input);
       return;
@@ -886,7 +887,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     recognitionRef.current?.stop();
-    realtimeSpeech.stop();
+    realtimeSpeech.stop(false);
     await sendMessage(input);
   };
 
@@ -1146,7 +1147,10 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                   : 'Type your question...'
             }
             disabled={
-              loading || !!pendingIntervention || realtimeSpeech.isListening
+              loading ||
+              !!pendingIntervention ||
+              realtimeSpeech.isListening ||
+              realtimeSpeech.isFinalizing
             }
             // min-h matches the stacked mic + Send buttons (2 × h-10 + gap-2).
             className="min-h-[5.5rem] flex-1 resize-none px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm"
@@ -1159,6 +1163,7 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                 disabled={
                   sttConfig.loading ||
                   Boolean(sttConfig.error) ||
+                  realtimeSpeech.isFinalizing ||
                   (!voiceMode && (loading || !!pendingIntervention))
                 }
                 className={`flex h-10 w-full items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
@@ -1170,39 +1175,71 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
                 }`}
                 title={
                   realtimeProvider
-                    ? isListening
-                      ? 'Stop voice input'
-                      : 'Start voice input'
+                    ? realtimeSpeech.isConnecting
+                      ? 'Connecting to voice input'
+                      : realtimeSpeech.isFinalizing
+                        ? 'Finishing voice transcription'
+                        : isListening
+                          ? 'Stop voice input'
+                          : 'Start voice input'
                     : voiceMode
                       ? 'End voice mode'
                       : 'Start voice input'
                 }
                 aria-label={
                   realtimeProvider
-                    ? isListening
-                      ? 'Stop voice input'
-                      : 'Start voice input'
+                    ? realtimeSpeech.isConnecting
+                      ? 'Connecting to voice input'
+                      : realtimeSpeech.isFinalizing
+                        ? 'Finishing voice transcription'
+                        : isListening
+                          ? 'Stop voice input'
+                          : 'Start voice input'
                     : voiceMode
                       ? 'End voice mode'
                       : 'Start voice input'
                 }
                 aria-pressed={realtimeProvider ? isListening : voiceMode}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.8}
-                  stroke="currentColor"
-                  className="h-5 w-5"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
-                  />
-                </svg>
+                {realtimeSpeech.isConnecting || realtimeSpeech.isFinalizing ? (
+                  <svg
+                    className="h-5 w-5 animate-spin"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4Z"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.8}
+                    stroke="currentColor"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
+                    />
+                  </svg>
+                )}
               </button>
             )}
             <button
@@ -1229,7 +1266,15 @@ export const AgentConversationModal: React.FC<AgentConversationModalProps> = ({
             )}
           </p>
         )}
-        {isListening && realtimeProvider ? (
+        {realtimeSpeech.isConnecting && realtimeProvider ? (
+          <p role="status" className="mt-2 text-xs font-medium text-blue-700">
+            Connecting to voice transcription…
+          </p>
+        ) : realtimeSpeech.isFinalizing && realtimeProvider ? (
+          <p role="status" className="mt-2 text-xs font-medium text-blue-700">
+            Finishing voice transcription…
+          </p>
+        ) : isListening && realtimeProvider ? (
           <p className="mt-2 text-xs font-medium text-red-600">
             Listening... Tap the microphone to stop. Review the transcript, then
             press Send.

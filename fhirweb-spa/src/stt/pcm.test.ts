@@ -12,12 +12,12 @@ describe('PCM audio framing', () => {
     'resamples %s Hz into 20 ms little-endian frames without dropping worklet remainders',
     (rate) => {
       const framer = new PcmFramer(rate);
-      const samples = new Float32Array(rate).fill(0.5);
+      const samples = new Float32Array(rate + 1).fill(0.5);
       const frames: ArrayBuffer[] = [];
       for (let offset = 0; offset < samples.length; offset += 128)
         frames.push(...framer.push(samples.slice(offset, offset + 128)));
       expect(frames.length).toBe(50);
-      expect(frames.every((frame) => frame.byteLength === 640)).toBe(true);
+      expect(frames.every((frame) => frame.byteLength === 960)).toBe(true);
       expect(new DataView(frames[0]).getInt16(0, true)).toBe(16384);
     },
   );

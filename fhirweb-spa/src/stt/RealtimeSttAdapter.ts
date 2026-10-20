@@ -1,11 +1,19 @@
 import workletUrl from './pcm-processor.worklet.ts?worker&url';
+import { SAMPLE_RATE } from './pcm';
 
 export interface SttCallbacks {
   onDelta: (text: string) => void;
   onFinal: (text: string) => void;
+  onConnected: () => void;
   onError: (message: string) => void;
   onEnd: () => void;
 }
+
+const SETUP_TIMEOUT_MS = 20000;
+const CONNECTION_TIMEOUT_MS = 10000;
+const FINAL_WAIT_MS = 5000;
+const SILENCE_FRAME_COUNT = 30;
+const SILENCE_FRAME_BYTES = SAMPLE_RATE * 0.02 * 2;
 
 export class RealtimeSttAdapter {
   private socket: WebSocket | null = null;
@@ -13,41 +21,47 @@ export class RealtimeSttAdapter {
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private worklet: AudioWorkletNode | null = null;
-  private stopped = false;
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private silentDestination: MediaStreamAudioDestinationNode | null = null;
+  private ended = false;
+  private micStopped = false;
+  private _stopped = false;
+  private setupTimer: ReturnType<typeof setTimeout> | undefined;
+  private connectionTimer: ReturnType<typeof setTimeout> | undefined;
+  private finalTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly getSocketUrl: () => Promise<string>,
     private readonly callbacks: SttCallbacks,
+    private readonly waitForFinalTranscript = false,
   ) {}
 
   async start(): Promise<void> {
-    if (this.stopped) return;
+    if (this.ended) return;
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
         throw new Error(
           'Voice input requires HTTPS (or localhost) and microphone access.',
         );
-      this.timer = setTimeout(
+      this.setupTimer = setTimeout(
         () =>
           this.fail(
             'Voice input timed out. Check microphone permission and the voice service connection.',
           ),
-        20000,
+        SETUP_TIMEOUT_MS,
       );
-      const context = new AudioContext({ sampleRate: 16000 });
+      const context = new AudioContext({ sampleRate: SAMPLE_RATE });
       this.context = context;
       await context.resume();
-      if (this.stopped) return;
+      if (this.ended) return;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
+          sampleRate: SAMPLE_RATE,
           echoCancellation: true,
           noiseSuppression: true,
         },
       });
-      if (this.stopped) {
+      if (this.ended) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -59,13 +73,20 @@ export class RealtimeSttAdapter {
           );
       }
       await context.audioWorklet.addModule(workletUrl);
-      if (this.stopped) return;
+      if (this.ended) return;
       const socketUrl = await this.getSocketUrl();
-      if (this.stopped) return;
+      if (this.ended) return;
+      clearTimeout(this.setupTimer);
       const socket = new WebSocket(socketUrl);
       this.socket = socket;
+      this.connectionTimer = setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN)
+          this.fail(
+            'Voice transcription did not connect in time. Please try again.',
+          );
+      }, CONNECTION_TIMEOUT_MS);
       socket.onmessage = (event: MessageEvent) => {
-        if (this.stopped || typeof event.data !== 'string') return;
+        if (this.ended || typeof event.data !== 'string') return;
         let message: { type?: string; delta?: unknown; text?: unknown };
         try {
           message = JSON.parse(event.data);
@@ -83,9 +104,12 @@ export class RealtimeSttAdapter {
           typeof message.text === 'string'
         ) {
           this.callbacks.onFinal(message.text);
-          this.stop();
+          if (!this.waitForFinalTranscript || this._stopped) {
+            clearTimeout(this.finalTimer);
+            this.finish();
+          }
         }
-        if (message.type === 'error')
+        if (message.type === 'transcript.error' || message.type === 'error')
           this.fail(
             'The voice transcription service could not process the audio. Please try again.',
           );
@@ -98,14 +122,22 @@ export class RealtimeSttAdapter {
         this.fail(
           'The voice transcription connection closed. Please try again.',
         );
-      socket.onopen = () => {
-        if (this.stopped) return;
+      socket.onopen = async () => {
+        if (this.ended || this.micStopped) return;
+        clearTimeout(this.connectionTimer);
+        this.callbacks.onConnected();
         try {
-          clearTimeout(this.timer);
+          if (context.state === 'suspended') await context.resume();
+          if (this.ended || this.micStopped) return;
           this.source = context.createMediaStreamSource(stream);
           this.worklet = new AudioWorkletNode(context, 'pcm-processor');
           this.worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-            if (this.stopped || socket.readyState !== WebSocket.OPEN) return;
+            if (
+              this.ended ||
+              this.micStopped ||
+              socket.readyState !== WebSocket.OPEN
+            )
+              return;
             if (socket.bufferedAmount > 64000) {
               this.fail(
                 'The connection is too slow for voice input. Please try again.',
@@ -115,13 +147,14 @@ export class RealtimeSttAdapter {
             socket.send(event.data);
           };
           this.source.connect(this.worklet);
-          this.worklet.connect(context.destination);
+          this.silentDestination = context.createMediaStreamDestination();
+          this.worklet.connect(this.silentDestination);
         } catch {
           this.fail('Unable to capture microphone audio. Please try again.');
         }
       };
     } catch (failure) {
-      if (this.stopped) return;
+      if (this.ended) return;
       const denied =
         failure instanceof DOMException && failure.name === 'NotAllowedError';
       this.fail(
@@ -135,15 +168,49 @@ export class RealtimeSttAdapter {
   }
 
   private fail(message: string): void {
-    if (this.stopped) return;
+    if (this.ended) return;
     this.callbacks.onError(message);
-    this.stop();
+    this.finish();
   }
 
-  stop(): void {
-    if (this.stopped) return;
-    this.stopped = true;
-    clearTimeout(this.timer);
+  stop(waitForFinalTranscript = this.waitForFinalTranscript): void {
+    if (this.ended) return;
+    if (this.micStopped) {
+      if (!waitForFinalTranscript) this.finish();
+      return;
+    }
+    this._stopped = true;
+    this.micStopped = true;
+    clearTimeout(this.setupTimer);
+    clearTimeout(this.connectionTimer);
+    this.cleanupMic();
+    if (waitForFinalTranscript && this.socket?.readyState === WebSocket.OPEN) {
+      const silenceFrame = new ArrayBuffer(SILENCE_FRAME_BYTES);
+      try {
+        for (let index = 0; index < SILENCE_FRAME_COUNT; index += 1) {
+          if (this.socket?.readyState !== WebSocket.OPEN) break;
+          this.socket.send(silenceFrame);
+        }
+        if (this.socket?.readyState === WebSocket.OPEN)
+          this.socket.send(JSON.stringify({ type: 'commit' }));
+      } catch {
+        this.finish();
+        return;
+      }
+      this.finalTimer = setTimeout(() => this.finish(), FINAL_WAIT_MS);
+      return;
+    }
+    this.finish();
+  }
+
+  private finish(): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.micStopped = true;
+    clearTimeout(this.setupTimer);
+    clearTimeout(this.connectionTimer);
+    clearTimeout(this.finalTimer);
+    this.cleanupMic();
     if (this.socket) {
       this.socket.onopen = null;
       this.socket.onmessage = null;
@@ -151,19 +218,24 @@ export class RealtimeSttAdapter {
       this.socket.onclose = null;
       this.socket.close();
     }
+    this.socket = null;
+    this.callbacks.onEnd();
+  }
+
+  private cleanupMic(): void {
     if (this.worklet) this.worklet.port.onmessage = null;
     this.worklet?.disconnect();
     this.source?.disconnect();
+    this.silentDestination?.disconnect();
     this.stream?.getTracks().forEach((track) => {
       track.onended = null;
       track.stop();
     });
     if (this.context) void this.context.close().catch(() => undefined);
-    this.socket = null;
     this.context = null;
     this.stream = null;
     this.source = null;
     this.worklet = null;
-    this.callbacks.onEnd();
+    this.silentDestination = null;
   }
 }

@@ -97,7 +97,14 @@ beforeEach(() => {
     error: null,
     retry: vi.fn(),
   };
-  realtime = { start: vi.fn(), stop: vi.fn(), isListening: false, error: null };
+  realtime = {
+    start: vi.fn(),
+    stop: vi.fn(),
+    isListening: false,
+    isConnecting: false,
+    isFinalizing: false,
+    error: null,
+  };
   configMock.mockImplementation(() => config);
   realtimeMock.mockImplementation(() => realtime);
   vi.stubGlobal('SpeechRecognition', undefined);
@@ -171,6 +178,37 @@ describe('AgentConversationModal STT integration', () => {
 
     expect(realtime.stop).toHaveBeenCalledOnce();
     expect(realtime.start).not.toHaveBeenCalled();
+  });
+
+  it('shows connection progress while realtime voice connects', () => {
+    config.provider = 'realtime-api';
+    realtime.isListening = true;
+    realtime.isConnecting = true;
+    render(<AgentConversationModal {...props} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Connecting to voice input' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Connecting');
+    expect(
+      screen
+        .getByRole('button', { name: 'Connecting to voice input' })
+        .querySelector('.animate-spin'),
+    ).toBeTruthy();
+  });
+
+  it('shows final-transcript progress after Azure realtime capture stops', () => {
+    config.provider = 'realtime-api';
+    realtime.isFinalizing = true;
+    render(<AgentConversationModal {...props} />);
+
+    expect(
+      screen
+        .getByRole('button', { name: 'Finishing voice transcription' })
+        .hasAttribute('disabled'),
+    ).toBe(true);
+    expect(screen.getByRole('status').textContent).toContain('Finishing');
+    expect(screen.getByRole('textbox').hasAttribute('disabled')).toBe(true);
   });
 
   it.each(['browser', 'realtime-api'] as const)(

@@ -3,11 +3,13 @@ export const float32ToInt16 = (sample: number): number => {
   return Math.round(clamped * (clamped < 0 ? 32768 : 32767));
 };
 
+export const SAMPLE_RATE = 24000;
+
 export class PcmFramer {
   private previous = 0;
   private inputIndex = 0;
   private nextSample = 0;
-  private frame = new ArrayBuffer(640);
+  private frame = new ArrayBuffer(SAMPLE_RATE * 0.02 * 2);
   private frameIndex = 0;
 
   constructor(private readonly inputRate: number) {}
@@ -25,12 +27,12 @@ export class PcmFramer {
           true,
         );
         this.frameIndex += 1;
-        if (this.frameIndex === 320) {
+        if (this.frameIndex === SAMPLE_RATE * 0.02) {
           frames.push(this.frame);
-          this.frame = new ArrayBuffer(640);
+          this.frame = new ArrayBuffer(SAMPLE_RATE * 0.02 * 2);
           this.frameIndex = 0;
         }
-        this.nextSample += this.inputRate / 16000;
+        this.nextSample += this.inputRate / SAMPLE_RATE;
       }
       this.previous = sample;
       this.inputIndex += 1;
