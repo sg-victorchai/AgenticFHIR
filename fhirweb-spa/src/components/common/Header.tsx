@@ -53,14 +53,16 @@ const Header: React.FC = () => {
                   Home
                 </Link>
               </li>
-              <li>
-                <Link
-                  to="/data-assets"
-                  className="hover:text-blue-200 transition-colors"
-                >
-                  Service Catalogue
-                </Link>
-              </li>
+              {canUseAgentBuilder && (
+                <li>
+                  <Link
+                    to="/data-assets"
+                    className="hover:text-blue-200 transition-colors"
+                  >
+                    Service Catalogue
+                  </Link>
+                </li>
+              )}
               {canUseAgentBuilder && (
                 <li>
                   <Link
@@ -169,13 +171,15 @@ const Header: React.FC = () => {
                     >
                       Home
                     </Link>
-                    <Link
-                      to="/data-assets"
-                      onClick={() => setMenuOpen(false)}
-                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
-                    >
-                      Service Catalogue
-                    </Link>
+                    {canUseAgentBuilder && (
+                      <Link
+                        to="/data-assets"
+                        onClick={() => setMenuOpen(false)}
+                        className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                      >
+                        Service Catalogue
+                      </Link>
+                    )}
                     {canUseAgentBuilder && (
                       <Link
                         to="/agent-builder"

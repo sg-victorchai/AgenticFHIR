@@ -38,12 +38,14 @@ import AgentBuilderPage from './pages/AgentBuilderPage';
 import InformationPage from './pages/InformationPage';
 import DataAssetsPage from './pages/DataAssetsPage';
 
-const AgentBuilderRoute: React.FC = () => {
+export const AgentBuilderRoute: React.FC<{ children?: React.ReactNode }> = ({
+  children,
+}) => {
   const { isAuthenticated, token } = useSelector(
     (state: RootState) => state.auth,
   );
   return isAuthenticated && hasRealmRole(token, 'agentbuilder') ? (
-    <AgentBuilderPage />
+    <>{children ?? <AgentBuilderPage />}</>
   ) : (
     <Navigate to="/" replace />
   );
@@ -92,7 +94,14 @@ const AppRoutes: React.FC = () => {
 
           {/* Shared */}
           <Route path="/queue" element={<PatientQueuePage />} />
-          <Route path="/data-assets" element={<DataAssetsPage />} />
+          <Route
+            path="/data-assets"
+            element={
+              <AgentBuilderRoute>
+                <DataAssetsPage />
+              </AgentBuilderRoute>
+            }
+          />
           <Route path="/agent-builder" element={<AgentBuilderRoute />} />
           <Route path="/about" element={<InformationPage kind="about" />} />
           <Route path="/privacy" element={<InformationPage kind="privacy" />} />

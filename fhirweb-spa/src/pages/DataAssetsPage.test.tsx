@@ -18,6 +18,12 @@ vi.mock('../services/fhir/dataAssetsService', () => ({
   getDataAssetDetails: serviceMocks.getDataAssetDetails,
 }));
 
+vi.mock('../services/configuredAssetsService', () => ({
+  listConfiguredAssets: vi.fn(async () => []),
+  getConfiguredAsset: vi.fn(),
+  getAssetBusinessRules: vi.fn(),
+}));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -109,6 +115,18 @@ describe('DataAssetsPage', () => {
       }),
     ).toBeTruthy();
     expect(await screen.findAllByText('Read')).toHaveLength(3);
+    const resourceTab = screen.getByRole('tab', { name: 'Resource Catalog' });
+    expect(resourceTab.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(resourceTab, { key: 'ArrowRight' });
+    expect(
+      screen
+        .getByRole('tab', { name: 'Rules & Workflows' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Rules & Workflows' }), {
+      key: 'Home',
+    });
+    expect(resourceTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getAllByText('Supported Interactions')).toHaveLength(3);
     expect(screen.getAllByAltText('HL7 FHIR')).toHaveLength(2);
     expect(screen.getByText('3 available resource types')).toBeTruthy();
@@ -141,6 +159,14 @@ describe('DataAssetsPage', () => {
       .closest('section');
     expect(structureSection).toBeTruthy();
     const structure = within(structureSection as HTMLElement);
+    const structureTable = structure.getByRole('table');
+    const columns = structureTable.querySelectorAll('colgroup col');
+    expect(structureTable.classList.contains('table-fixed')).toBe(true);
+    expect(columns).toHaveLength(5);
+    expect(columns[4].getAttribute('style')).toContain('50%');
+    expect(
+      structure.getByRole('columnheader', { name: 'Name' }).className,
+    ).toContain('py-1.5');
     expect(structure.getAllByText('Patient').length).toBeGreaterThanOrEqual(2);
     expect(structure.getByRole('columnheader', { name: 'Name' })).toBeTruthy();
     expect(structure.getByRole('columnheader', { name: 'Flags' })).toBeTruthy();
