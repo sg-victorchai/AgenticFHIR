@@ -7,6 +7,11 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DataAssetsPage, { buildStructureTree } from './DataAssetsPage';
+import {
+  listConfiguredAssets,
+  getConfiguredAsset,
+  getAssetBusinessRules,
+} from '../services/configuredAssetsService';
 
 const serviceMocks = vi.hoisted(() => ({
   listDataAssets: vi.fn(),
@@ -111,7 +116,7 @@ describe('DataAssetsPage', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: 'Data Assets (Including HL7 FHIR Resources and Custom Resources)',
+        name: 'Data Assets (Data Model, Ontology Services, Sources, APIs, Business Rules & Workflow)',
       }),
     ).toBeTruthy();
     expect(await screen.findAllByText('Read')).toHaveLength(3);
@@ -197,6 +202,61 @@ describe('DataAssetsPage', () => {
     expect(
       screen.getByRole('button', { name: 'View Patient resource details' }),
     ).toBeTruthy();
+  });
+
+  it('returns from the resource catalog to the same configured asset detail', async () => {
+    const asset = {
+      resourceType: 'Encounter',
+      authoringSource: 'platform',
+      enabled: true,
+      fhirVersions: ['R5'],
+      businessRuleCount: 1,
+      workflowName: 'patient-visit',
+    };
+    serviceMocks.listDataAssets.mockResolvedValue([{ type: 'Encounter' }]);
+    serviceMocks.getDataAssetDetails.mockResolvedValue({ operations: [] });
+    vi.mocked(listConfiguredAssets).mockResolvedValueOnce([asset]);
+    vi.mocked(getConfiguredAsset).mockResolvedValueOnce({
+      ...asset,
+      interactions: {},
+      profileUrls: [],
+      eventTriggerCount: 0,
+      nlSearchSynonyms: [],
+      embeddingEnabled: false,
+    });
+    vi.mocked(getAssetBusinessRules).mockResolvedValueOnce([]);
+    render(<DataAssetsPage />);
+    await screen.findByText('1 available resource types');
+    fireEvent.click(screen.getByRole('tab', { name: 'Rules & Workflows' }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View Encounter configuration',
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'View in Resource Catalog' }),
+    );
+    expect(
+      screen
+        .getByRole('tab', { name: 'Resource Catalog' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(await screen.findByText('Structure definition')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Back to Encounter Rules & Workflows',
+      }),
+    );
+    expect(
+      screen
+        .getByRole('tab', { name: 'Rules & Workflows' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(screen.getByRole('heading', { name: 'Encounter' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'View Business Rules' }),
+    ).toBeTruthy();
+    expect(getConfiguredAsset).toHaveBeenCalledTimes(1);
   });
 
   it('builds a nested structure tree from differential elements when snapshot is absent', () => {

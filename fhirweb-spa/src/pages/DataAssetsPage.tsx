@@ -322,6 +322,7 @@ const StructureDefinitionTable: React.FC<{ tree: StructureTreeNode }> = ({
 
 const DataAssetsPage: React.FC = () => {
   const [tab, setTab] = useState<'resources' | 'configured'>('resources');
+  const [returnToAsset, setReturnToAsset] = useState<string | null>(null);
   const [resources, setResources] = useState<CapabilityResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -419,7 +420,8 @@ const DataAssetsPage: React.FC = () => {
             Platform catalog
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            Data Assets (Including HL7 FHIR Resources and Custom Resources)
+            Data Assets (Data Model, Ontology Services, Sources, APIs, Business
+            Rules &amp; Workflow)
           </h1>
         </div>
         {selected && tab === 'resources' && (
@@ -475,14 +477,16 @@ const DataAssetsPage: React.FC = () => {
           </button>
         ))}
       </div>
-      {tab === 'configured' && (
+      {(tab === 'configured' || returnToAsset !== null) && (
         <div
           role="tabpanel"
           id="asset-panel-configured"
           aria-labelledby="asset-tab-configured"
+          hidden={tab !== 'configured'}
         >
           <ConfiguredAssetsCatalog
             onViewResource={(resourceType) => {
+              setReturnToAsset(resourceType);
               setSelected(
                 resources.find((resource) => resource.type === resourceType) ||
                   null,
@@ -499,6 +503,15 @@ const DataAssetsPage: React.FC = () => {
         aria-labelledby="asset-tab-resources"
         hidden={tab !== 'resources'}
       >
+        {returnToAsset && (
+          <button
+            type="button"
+            onClick={() => setTab('configured')}
+            className="mb-4 rounded-md border border-cyan-300 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+          >
+            Back to {returnToAsset} Rules &amp; Workflows
+          </button>
+        )}
         {!selected && (
           <>
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
