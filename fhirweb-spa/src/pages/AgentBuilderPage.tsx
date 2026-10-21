@@ -4112,7 +4112,12 @@ const SystemPromptWorkbench: React.FC<{
             {persona.systemPrompt || 'No system prompt available.'}
           </pre>
           <div className="flex justify-end">
-            <Button onClick={() => setEditing(true)}>Edit</Button>
+            <Button
+              disabled={persona.authoringSource === 'platform'}
+              onClick={() => setEditing(true)}
+            >
+              Edit
+            </Button>
           </div>
         </>
       )}

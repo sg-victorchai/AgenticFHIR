@@ -116,9 +116,12 @@ export default function ConfiguredAssetsCatalog({
     <div>
       {selected && (
         <div className="mb-4 flex flex-wrap items-center gap-3">
+          <h2 className="min-w-0 break-words text-xl font-semibold text-slate-900">
+            {view === 'rules' ? `Business Rules — ${selected}` : selected}
+          </h2>
           <button
             type="button"
-            className={controlClass}
+            className="max-w-full rounded-md border border-cyan-300 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100 hover:text-cyan-950 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             onClick={() => {
               if (view === 'rules') setView('detail');
               else {
@@ -131,9 +134,6 @@ export default function ConfiguredAssetsCatalog({
               ? 'Back to Asset Detail'
               : 'Back to Rules & Workflows'}
           </button>
-          <h2 className="break-words text-xl font-semibold text-slate-900">
-            {view === 'rules' ? `Business Rules — ${selected}` : selected}
-          </h2>
         </div>
       )}
       {loading && (

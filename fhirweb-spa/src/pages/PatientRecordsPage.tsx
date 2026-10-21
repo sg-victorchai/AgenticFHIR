@@ -6097,7 +6097,7 @@ const PatientRecordsPage: React.FC = () => {
                             d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                           />
                         </svg>
-                        Global Search
+                        Semantic Search
                       </button>
                     </div>
                   )}
@@ -6179,7 +6179,7 @@ const PatientRecordsPage: React.FC = () => {
                   </button>
                 )}
 
-                {/* Desktop: Global Search Button */}
+                {/* Desktop: Semantic Search Button */}
                 <button
                   onClick={toggleGlobalSearch}
                   className={`hidden md:flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
@@ -6202,7 +6202,7 @@ const PatientRecordsPage: React.FC = () => {
                       d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                     />
                   </svg>
-                  Global Search
+                  Semantic Search
                 </button>
 
                 {/* Mobile: More Menu Button */}
@@ -6248,7 +6248,7 @@ const PatientRecordsPage: React.FC = () => {
                             d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                           />
                         </svg>
-                        Global Search
+                        Semantic Search
                       </button>
                     </div>
                   )}

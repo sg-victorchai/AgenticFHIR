@@ -137,6 +137,48 @@ describe('evaluation navigation', () => {
     expect(screen.getByRole('button', { name: 'Evaluate' })).toBeTruthy();
   });
 
+  it.each([
+    ['platform', true],
+    ['portal', false],
+  ] as const)(
+    'disables system prompt editing for %s personas',
+    (authoringSource, disabled) => {
+      render(
+        <PersonaDrawer
+          persona={{
+            personaId: 'persona-1',
+            version: 'v1',
+            name: 'Test persona',
+            personaType: 'AGENT',
+            authoringSource,
+            lifecycleState: 'UAT_TRAINING',
+          }}
+          detail={{
+            personaId: 'persona-1',
+            version: 'v1',
+            name: 'Test persona',
+            personaType: 'AGENT',
+            authoringSource,
+            lifecycleState: 'UAT_TRAINING',
+            systemPrompt: 'Example prompt',
+          }}
+          loading={false}
+          busy={false}
+          onClose={vi.fn()}
+          onAdapt={vi.fn()}
+          onFork={vi.fn()}
+          onSaveSystemPrompt={vi.fn(async () => undefined)}
+          onEvaluate={vi.fn()}
+          onLifecycle={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+      ).toBe(disabled);
+    },
+  );
+
   it('shows only the current lifecycle state until expanded', () => {
     render(<LifecycleProgress state="UAT_TRAINING" />);
     const summary = screen.getByText('Current state: Sandbox evaluation');
