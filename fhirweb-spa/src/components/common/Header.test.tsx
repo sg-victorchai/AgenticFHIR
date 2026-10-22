@@ -32,7 +32,7 @@ describe('catalog navigation authorization', () => {
       );
       fireEvent.click(screen.getByTitle('Menu'));
       expect(
-        screen.queryAllByRole('link', { name: 'Service Catalogue' }),
+        screen.queryAllByRole('link', { name: 'Data Foundry Service' }),
       ).toHaveLength(canUse ? 2 : 0);
     },
   );

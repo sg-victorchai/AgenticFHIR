@@ -332,6 +332,14 @@ const DataAssetsPage: React.FC = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Data Foundry Service | AgentiFHIR Platform';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     setLoading(true);
     void listDataAssets().then(
@@ -413,15 +421,14 @@ const DataAssetsPage: React.FC = () => {
   const selectedProfileOrigin = profileOrigin(selectedProfile);
 
   return (
-    <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-7 sm:py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <main className="mx-auto max-w-[1440px] px-4 py-4 sm:px-7 sm:py-5">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-700">
             Platform catalog
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            Data Assets (Data Model, Ontology Services, Sources, APIs, Business
-            Rules &amp; Workflow)
+            Data Foundry Service
           </h1>
         </div>
         {selected && tab === 'resources' && (
@@ -439,11 +446,11 @@ const DataAssetsPage: React.FC = () => {
       <div
         role="tablist"
         aria-label="Data asset views"
-        className="mb-5 flex gap-5 border-b border-slate-200"
+        className="mb-3 flex gap-5 border-b border-slate-200"
       >
         {[
           ['resources', 'Resource Catalog'],
-          ['configured', 'Rules & Workflows'],
+          ['configured', 'Data Assets'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -509,7 +516,7 @@ const DataAssetsPage: React.FC = () => {
             onClick={() => setTab('configured')}
             className="mb-4 rounded-md border border-cyan-300 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
           >
-            Back to {returnToAsset} Rules &amp; Workflows
+            Back to {returnToAsset} Data Assets
           </button>
         )}
         {!selected && (

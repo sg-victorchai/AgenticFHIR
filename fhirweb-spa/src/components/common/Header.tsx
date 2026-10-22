@@ -59,7 +59,7 @@ const Header: React.FC = () => {
                     to="/data-assets"
                     className="hover:text-blue-200 transition-colors"
                   >
-                    Service Catalogue
+                    Data Foundry Service
                   </Link>
                 </li>
               )}
@@ -177,7 +177,7 @@ const Header: React.FC = () => {
                         onClick={() => setMenuOpen(false)}
                         className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
                       >
-                        Service Catalogue
+                        Data Foundry Service
                       </Link>
                     )}
                     {canUseAgentBuilder && (

@@ -116,19 +116,20 @@ describe('DataAssetsPage', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: 'Data Assets (Data Model, Ontology Services, Sources, APIs, Business Rules & Workflow)',
+        name: 'Data Foundry Service',
       }),
     ).toBeTruthy();
+    expect(document.title).toBe('Data Foundry Service | AgentiFHIR Platform');
     expect(await screen.findAllByText('Read')).toHaveLength(3);
     const resourceTab = screen.getByRole('tab', { name: 'Resource Catalog' });
     expect(resourceTab.getAttribute('aria-selected')).toBe('true');
     fireEvent.keyDown(resourceTab, { key: 'ArrowRight' });
     expect(
       screen
-        .getByRole('tab', { name: 'Rules & Workflows' })
+        .getByRole('tab', { name: 'Data Assets' })
         .getAttribute('aria-selected'),
     ).toBe('true');
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Rules & Workflows' }), {
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Data Assets' }), {
       key: 'Home',
     });
     expect(resourceTab.getAttribute('aria-selected')).toBe('true');
@@ -227,7 +228,7 @@ describe('DataAssetsPage', () => {
     vi.mocked(getAssetBusinessRules).mockResolvedValueOnce([]);
     render(<DataAssetsPage />);
     await screen.findByText('1 available resource types');
-    fireEvent.click(screen.getByRole('tab', { name: 'Rules & Workflows' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Data Assets' }));
     fireEvent.click(
       await screen.findByRole('button', {
         name: 'View Encounter configuration',
@@ -244,12 +245,12 @@ describe('DataAssetsPage', () => {
     expect(await screen.findByText('Structure definition')).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Back to Encounter Rules & Workflows',
+        name: 'Back to Encounter Data Assets',
       }),
     );
     expect(
       screen
-        .getByRole('tab', { name: 'Rules & Workflows' })
+        .getByRole('tab', { name: 'Data Assets' })
         .getAttribute('aria-selected'),
     ).toBe('true');
     expect(screen.getByRole('heading', { name: 'Encounter' })).toBeTruthy();

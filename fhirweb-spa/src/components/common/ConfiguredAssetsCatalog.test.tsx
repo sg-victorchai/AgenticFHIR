@@ -8,17 +8,41 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfiguredAssetsCatalog from './ConfiguredAssetsCatalog';
 import {
+  abandonOnboardingSession,
+  assignConfiguredAssetWorkflow,
+  createOnboardingSession,
   getAssetBusinessRules,
   getConfiguredAsset,
   getConfiguredAssetWorkflow,
+  getOnboardingSession,
+  findWorkflowDefinition,
   listConfiguredAssets,
+  listOnboardingSessions,
+  listWorkflowDefinitions,
+  removeConfiguredAssetWorkflow,
+  sendOnboardingMessage,
 } from '../../services/configuredAssetsService';
+import { getOidcUser, hasRealmRole } from '../../services/auth/oidc';
 
 vi.mock('../../services/configuredAssetsService', () => ({
+  abandonOnboardingSession: vi.fn(),
   listConfiguredAssets: vi.fn(),
   getConfiguredAsset: vi.fn(),
   getAssetBusinessRules: vi.fn(),
   getConfiguredAssetWorkflow: vi.fn(),
+  assignConfiguredAssetWorkflow: vi.fn(),
+  removeConfiguredAssetWorkflow: vi.fn(),
+  listWorkflowDefinitions: vi.fn(),
+  findWorkflowDefinition: vi.fn(),
+  listOnboardingSessions: vi.fn(),
+  getOnboardingSession: vi.fn(),
+  createOnboardingSession: vi.fn(),
+  sendOnboardingMessage: vi.fn(),
+  streamOnboardingSession: vi.fn(() => new Promise<void>(() => {})),
+}));
+vi.mock('../../services/auth/oidc', () => ({
+  getOidcUser: vi.fn().mockResolvedValue({ access_token: 'power-user-token' }),
+  hasRealmRole: vi.fn((_token: string, role: string) => role === 'POWER_USER'),
 }));
 const encounter = {
   resourceType: 'Encounter',
@@ -29,6 +53,19 @@ const encounter = {
   workflowName: 'patient-visit',
 };
 beforeEach(() => {
+  vi.mocked(getOidcUser).mockResolvedValue({
+    access_token: 'power-user-token',
+  } as never);
+  vi.mocked(hasRealmRole).mockImplementation(
+    (_token, role) => role === 'POWER_USER',
+  );
+  vi.mocked(listOnboardingSessions).mockResolvedValue([]);
+  vi.mocked(abandonOnboardingSession).mockResolvedValue(undefined);
+  vi.mocked(createOnboardingSession).mockResolvedValue({
+    sessionId: 'new-onboarding-session',
+    status: 'ACTIVE',
+    entrySkill: 'fhir4java-model-business-workflow',
+  });
   vi.mocked(listConfiguredAssets).mockResolvedValue([
     encounter,
     {
@@ -299,6 +336,43 @@ beforeEach(() => {
       },
     ],
   });
+  vi.mocked(listWorkflowDefinitions).mockResolvedValue({
+    resourceType: 'Bundle',
+    entry: [
+      {
+        resource: {
+          resourceType: 'WorkflowDefinition',
+          id: 'patient-visit',
+          identifier: [{ value: 'patient-visit' }],
+          name: 'patient-visit',
+          title: 'Patient Visit Workflow',
+          stage: [{ stageId: 'registration' }],
+        },
+      },
+    ],
+  });
+  vi.mocked(findWorkflowDefinition).mockResolvedValue({
+    resourceType: 'Bundle',
+    entry: [
+      {
+        resource: {
+          resourceType: 'WorkflowDefinition',
+          id: 'patient-visit',
+          identifier: [{ value: 'patient-visit' }],
+          name: 'patient-visit',
+          title: 'Patient Visit Workflow',
+          stage: [{ stageId: 'registration' }],
+        },
+      },
+    ],
+  });
+  vi.mocked(assignConfiguredAssetWorkflow).mockResolvedValue({
+    resourceType: 'Patient',
+    workflowDefinitionIdentifier: 'patient-visit',
+    ruleId: 'patient-workflow-bootstrap',
+    authoringSource: 'portal',
+  });
+  vi.mocked(removeConfiguredAssetWorkflow).mockResolvedValue(undefined);
   vi.mocked(getAssetBusinessRules).mockResolvedValue([
     {
       ruleId: 'later',
@@ -342,7 +416,315 @@ afterEach(() => {
 });
 
 describe('configured assets catalog', () => {
+  it('hides asset authoring entry points for users without an authoring role', async () => {
+    vi.mocked(hasRealmRole).mockReturnValue(false);
+    render(<ConfiguredAssetsCatalog />);
+    await screen.findByRole('button', { name: 'View Encounter configuration' });
+    expect(screen.queryByRole('button', { name: '+ New Asset' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'My Sessions' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View Encounter configuration' }),
+    );
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { name: 'Workflow' }),
+    ).toBeTruthy();
+  });
+
+  it('shows asset authoring entry points to users with the route access role', async () => {
+    vi.mocked(hasRealmRole).mockImplementation(
+      (_token, role) => role === 'agentbuilder',
+    );
+    render(<ConfiguredAssetsCatalog />);
+    expect(
+      await screen.findByRole('button', { name: '+ New Asset' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'My Sessions' })).toBeTruthy();
+  });
+
+  it('returns from session history to the asset list using the prominent back action', async () => {
+    render(<ConfiguredAssetsCatalog />);
+    await screen.findByRole('button', { name: 'View Encounter configuration' });
+    fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
+    const backButton = await screen.findByRole('button', {
+      name: 'Back to Asset List',
+    });
+    expect(backButton.className).toContain('bg-cyan-50');
+    fireEvent.click(backButton);
+    expect(
+      await screen.findByRole('button', {
+        name: 'View Encounter configuration',
+      }),
+    ).toBeTruthy();
+  });
+
+  it('shows the inferred entity name for unnamed phase-one history summaries', async () => {
+    vi.mocked(listOnboardingSessions).mockResolvedValue([
+      {
+        sessionId: 'business-application-session',
+        status: 'IN_PROGRESS',
+        currentPhase: 1,
+      },
+    ]);
+    vi.mocked(getOnboardingSession).mockResolvedValue({
+      sessionId: 'business-application-session',
+      status: 'IN_PROGRESS',
+      entityName: 'BusinessApplication',
+      currentPhase: 1,
+    });
+    render(<ConfiguredAssetsCatalog />);
+    await screen.findByRole('button', { name: 'View Encounter configuration' });
+    fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
+
+    expect(await screen.findByText('BusinessApplication')).toBeTruthy();
+    expect(screen.queryByText('Untitled')).toBeNull();
+    expect(getOnboardingSession).toHaveBeenCalledWith(
+      'business-application-session',
+    );
+  });
+
+  it('creates a new asset session only after the first message is submitted', async () => {
+    render(<ConfiguredAssetsCatalog />);
+    fireEvent.click(await screen.findByRole('button', { name: '+ New Asset' }));
+    expect(
+      await screen.findByRole('heading', { name: 'AI-assisted Setup' }),
+    ).toBeTruthy();
+    expect(createOnboardingSession).not.toHaveBeenCalled();
+    const resizeHandle = screen.getByRole('separator', {
+      name: 'Resize message input',
+    });
+    expect(resizeHandle.getAttribute('aria-valuenow')).toBe('112');
+    fireEvent.keyDown(resizeHandle, { key: 'ArrowUp' });
+    expect(resizeHandle.getAttribute('aria-valuenow')).toBe('128');
+
+    const messageInput = screen.getByRole('textbox', {
+      name: 'Type your message',
+    });
+    fireEvent.change(messageInput, {
+      target: { value: 'Create a ClaimRequest asset' },
+    });
+    fireEvent.keyDown(messageInput, { key: 'Enter', code: 'Enter' });
+    expect(createOnboardingSession).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await vi.waitFor(() => {
+      expect(createOnboardingSession).toHaveBeenCalledOnce();
+      expect(sendOnboardingMessage).toHaveBeenCalledWith(
+        'new-onboarding-session',
+        'Create a ClaimRequest asset',
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
+  it('formats assistant Markdown and hides internal tool call/results', async () => {
+    vi.mocked(getOnboardingSession).mockResolvedValue({
+      sessionId: 'new-onboarding-session',
+      status: 'IN_PROGRESS',
+      currentPhase: 1,
+    });
+    vi.mocked(sendOnboardingMessage).mockImplementation(
+      async (_sessionId, _message, onEvent) => {
+        onEvent({
+          type: 'token',
+          data: '[{"id":"call_123","name":"list_resource_types","input":{}},{"id":"call_456","name":"write_service_spec","input":{"content":"# BusinessApplication\\n\\n## Fields"}}]',
+        });
+        onEvent({
+          type: 'token',
+          data: '[call_123] AbacPolicy, AdverseEvent, BusinessApplication',
+        });
+        onEvent({
+          type: 'token',
+          data: '## Phase 1: Model\n\n- **Entity:** BusinessApplication\n- **Status:** Ready',
+        });
+        onEvent({ type: 'done', data: '' });
+      },
+    );
+    render(<ConfiguredAssetsCatalog />);
+    fireEvent.click(await screen.findByRole('button', { name: '+ New Asset' }));
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Type your message' }),
+      {
+        target: { value: 'Create a BusinessApplication resource' },
+      },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Phase 1: Model' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Entity:')).toBeTruthy();
+    expect(screen.getByText('Status:')).toBeTruthy();
+    expect(screen.queryByText(/call_123|AbacPolicy, AdverseEvent/)).toBeNull();
+  });
+
+  it('requires typed session-name confirmation before abandoning a session', async () => {
+    vi.mocked(listOnboardingSessions).mockResolvedValue([
+      {
+        sessionId: 'session-claim-request-1',
+        entityName: 'ClaimRequest',
+        status: 'IN_PROGRESS',
+        currentPhase: 1,
+      },
+    ]);
+    render(<ConfiguredAssetsCatalog />);
+    await screen.findByRole('button', { name: 'View Encounter configuration' });
+    fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abandon' }));
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Abandon this onboarding session?',
+    });
+    const confirmButton = within(dialog).getByRole('button', {
+      name: 'Yes, abandon this session',
+    });
+    expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(
+      within(dialog).getByRole('textbox', {
+        name: 'Type session name to confirm',
+      }),
+      { target: { value: 'ClaimRequest' } },
+    );
+    expect((confirmButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(confirmButton);
+    await vi.waitFor(() =>
+      expect(abandonOnboardingSession).toHaveBeenCalledWith(
+        'session-claim-request-1',
+      ),
+    );
+  });
+
+  it('verifies a workflow definition and assigns it from an unassigned asset', async () => {
+    vi.mocked(hasRealmRole).mockImplementation(
+      (_token, role) => role === 'agentbuilder',
+    );
+    vi.mocked(getConfiguredAsset).mockResolvedValueOnce({
+      ...encounter,
+      resourceType: 'Patient',
+      authoringSource: 'platform',
+      workflowName: null,
+      interactions: { read: true },
+      profileUrls: [],
+      eventTriggerCount: 0,
+      nlSearchSynonyms: [],
+      embeddingEnabled: false,
+    });
+    vi.mocked(getAssetBusinessRules).mockResolvedValueOnce([]);
+    render(<ConfiguredAssetsCatalog />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View Patient configuration',
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Assign Workflow' }),
+    );
+    const dialog = screen.getByRole('dialog', {
+      name: /Assign workflow · Patient/,
+    });
+    fireEvent.change(
+      within(dialog).getByLabelText('WorkflowDefinition identifier'),
+      {
+        target: { value: 'patient-visit' },
+      },
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Verify' }));
+    expect(
+      await within(dialog).findByText(/Verified identifier: patient-visit/),
+    ).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() =>
+      expect(assignConfiguredAssetWorkflow).toHaveBeenCalledWith(
+        'Patient',
+        'patient-visit',
+      ),
+    );
+  });
+
+  it('opens the add-rule form directly from the asset detail section', async () => {
+    render(<ConfiguredAssetsCatalog />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View Encounter configuration',
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Add Rule$/ }));
+
+    expect(
+      await screen.findByRole('form', { name: 'Add business rule' }),
+    ).toBeTruthy();
+  });
+
+  it('opens workflow AI authoring directly from asset detail', async () => {
+    vi.mocked(hasRealmRole).mockImplementation(
+      (_token, role) => role === 'agentbuilder',
+    );
+    vi.mocked(getConfiguredAsset).mockResolvedValueOnce({
+      ...encounter,
+      workflowName: null,
+      interactions: { create: true },
+      profileUrls: [],
+      eventTriggerCount: 0,
+      nlSearchSynonyms: [],
+      embeddingEnabled: false,
+    });
+    vi.mocked(getAssetBusinessRules).mockResolvedValueOnce([]);
+    render(<ConfiguredAssetsCatalog />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View Encounter configuration',
+      }),
+    );
+    const aiButtons = await screen.findAllByRole('button', {
+      name: 'Author with AI',
+    });
+    const workflowButton = aiButtons.find((button) =>
+      button.closest('#configured-Workflow'),
+    );
+    expect(workflowButton).toBeTruthy();
+    fireEvent.click(workflowButton as HTMLElement);
+
+    expect(
+      await screen.findByText(
+        'I found the existing Encounter asset. This session will update Workflow. What would you like to change?',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: /Message/i })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Encounter' })).toBeNull();
+  });
+
+  it('opens rule AI authoring directly from asset detail', async () => {
+    vi.mocked(hasRealmRole).mockImplementation(
+      (_token, role) => role === 'agentbuilder',
+    );
+    render(<ConfiguredAssetsCatalog />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View Encounter configuration',
+      }),
+    );
+    const ruleButton = await screen.findByRole('button', {
+      name: 'Author with AI',
+    });
+    fireEvent.click(ruleButton);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Author Business Rules' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "What should a rule do for Encounter? Describe the behavior in plain English and I'll help author it.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Encounter' })).toBeNull();
+  });
+
   it('filters all asset cards and opens detail and manageable rules', async () => {
+    vi.mocked(hasRealmRole).mockImplementation(
+      (_token, role) => role === 'agentbuilder',
+    );
     render(<ConfiguredAssetsCatalog />);
     expect(
       await screen.findByRole('button', {
@@ -370,8 +752,11 @@ describe('configured assets catalog', () => {
       screen.getByText(/Patient Visit Workflow \(patient-visit\)/),
     ).toBeTruthy();
     expect(screen.getByText('9 stages')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Remove' }).hasAttribute('disabled'),
+    ).toBe(true);
     const workflowDetailsToggle = screen.getByRole('button', {
-      name: 'Show details',
+      name: 'View workflow definition',
     });
     expect(workflowDetailsToggle.getAttribute('aria-expanded')).toBe('false');
     const workflowSummary = workflowDetailsToggle.closest('div.border');
@@ -392,7 +777,7 @@ describe('configured assets catalog', () => {
     fireEvent.click(workflowDetailsToggle);
     expect(
       screen
-        .getByRole('button', { name: 'Hide details' })
+        .getByRole('button', { name: 'Hide definition' })
         .getAttribute('aria-expanded'),
     ).toBe('true');
     expect(screen.getByText('9 stages · 10 transitions · active')).toBeTruthy();

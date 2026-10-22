@@ -48,9 +48,11 @@ const actionText = (trigger: EventTrigger, key: string) =>
 export default function EventTriggerManager({
   resourceType,
   onChanged,
+  canManage = true,
 }: {
   resourceType: string;
   onChanged: () => void;
+  canManage?: boolean;
 }) {
   const [triggers, setTriggers] = useState<EventTrigger[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,13 +201,15 @@ export default function EventTriggerManager({
         <h3 className="text-lg font-semibold text-slate-900">
           Event Triggers · {resourceType}
         </h3>
-        <button
-          type="button"
-          onClick={() => openEditor()}
-          className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold text-white"
-        >
-          + Add Trigger
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => openEditor()}
+            className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold text-white"
+          >
+            + Add Trigger
+          </button>
+        )}
       </div>
       {loadError && (
         <div
@@ -269,7 +273,7 @@ export default function EventTriggerManager({
                     <td className="px-3 py-3">
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={!canManage || busy}
                         onClick={() => void toggle(trigger)}
                         className={`text-xs font-semibold ${trigger.enabled ? 'text-emerald-700' : 'text-slate-500'}`}
                       >
@@ -278,21 +282,27 @@ export default function EventTriggerManager({
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-3 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => openEditor(trigger)}
-                          className="text-cyan-800 underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void remove(trigger)}
-                          className="text-rose-700 underline"
-                        >
-                          Disable
-                        </button>
+                        {canManage ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditor(trigger)}
+                              className="text-cyan-800 underline"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void remove(trigger)}
+                              className="text-rose-700 underline"
+                            >
+                              Disable
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-slate-400">Read only</span>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -16,6 +16,20 @@ export interface ConfiguredAssetDetail extends ConfiguredAsset {
   nlSearchSynonyms: string[];
   embeddingEnabled: boolean;
   embeddingModel?: string;
+  storageDesign?: StorageDesign | null;
+}
+
+export interface StorageDesign {
+  branch?: 'A1' | 'A2' | 'B1' | 'B2' | string | null;
+  artifactsGenerated?: boolean;
+  configuredAt?: string | null;
+  sessionId?: string | null;
+  artifacts?: Array<{ fileName?: string; filename?: string; type?: string }>;
+}
+
+export interface StorageArtifact {
+  fileName: string;
+  content: string;
 }
 
 export interface WorkflowAction {
@@ -78,6 +92,18 @@ export interface WorkflowDefinition {
   stage: WorkflowStage[];
 }
 
+export interface WorkflowDefinitionBundle {
+  resourceType: 'Bundle';
+  entry?: Array<{ resource?: WorkflowDefinition }>;
+}
+
+export interface WorkflowAssignmentResult {
+  resourceType: string;
+  workflowDefinitionIdentifier: string;
+  ruleId: string;
+  authoringSource: string;
+}
+
 export interface AssetBusinessRule {
   ruleId: string;
   targetResourceType: string;
@@ -124,8 +150,20 @@ export interface OnboardingSessionSummary {
   currentPhase?: number | null;
   phaseStatus?: Record<string, string>;
   updatedAt?: string;
+  specMarkdown?: string | null;
+  entrySkill?: string | null;
   conversation?: Array<{ role?: string; content?: string; message?: string }>;
 }
+
+type OnboardingSessionDto = OnboardingSessionSummary & {
+  session_id?: string;
+  entity_name?: string | null;
+  current_phase?: number | null;
+  phase_status?: Record<string, string>;
+  updated_at?: string;
+  spec_markdown?: string | null;
+  entry_skill?: string | null;
+};
 
 const get = async <Result>(
   path: string,
@@ -204,6 +242,28 @@ export const getConfiguredAssetWorkflow = (resourceType: string) =>
     `/${encodeURIComponent(resourceType)}/workflow`,
     'No workflow definition was found for this resource type.',
   );
+export const assignConfiguredAssetWorkflow = (
+  resourceType: string,
+  workflowDefinitionIdentifier: string,
+) =>
+  request<WorkflowAssignmentResult>(
+    `/api/admin/data-assets/${encodeURIComponent(resourceType)}/workflow`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ workflowDefinitionIdentifier }),
+    },
+  );
+export const removeConfiguredAssetWorkflow = (resourceType: string) =>
+  request<void>(
+    `/api/admin/data-assets/${encodeURIComponent(resourceType)}/workflow`,
+    { method: 'DELETE' },
+  );
+export const listWorkflowDefinitions = () =>
+  request<WorkflowDefinitionBundle>('/fhir/r5/WorkflowDefinition?_count=50');
+export const findWorkflowDefinition = (identifier: string) =>
+  request<WorkflowDefinitionBundle>(
+    `/fhir/r5/WorkflowDefinition?${new URLSearchParams({ identifier })}`,
+  );
 export const getAssetBusinessRules = (resourceType: string) =>
   get<AssetBusinessRule[]>(`/${encodeURIComponent(resourceType)}/rules`);
 export const disableConfiguredAsset = (resourceType: string) =>
@@ -250,29 +310,153 @@ export const deleteEventTrigger = (triggerId: string) =>
   });
 
 export const listOnboardingSessions = () =>
-  request<OnboardingSessionSummary[]>('/api/sessions/service-onboarding');
+  request<OnboardingSessionDto[]>('/api/sessions/service-onboarding').then(
+    (sessions) => sessions.map(normalizeOnboardingSession),
+  );
 
-export const createOnboardingSession = () =>
-  request<{ sessionId: string; status: string }>(
+const inferOnboardingEntityName = (session: OnboardingSessionDto) => {
+  const specMarkdown = session.specMarkdown ?? session.spec_markdown ?? '';
+  const specHeading = specMarkdown.match(/^#\s+([A-Z][A-Za-z0-9]*)\b/m)?.[1];
+  if (specHeading && !['DataAsset', 'Entity', 'Resource'].includes(specHeading))
+    return specHeading;
+
+  const assistantText = (session.conversation || [])
+    .filter((message) => message.role?.toLowerCase() === 'assistant')
+    .map((message) => message.content || message.message || '')
+    .reverse()
+    .join('\n');
+  return (
+    assistantText.match(
+      /(?:sounds like|model(?:ing|led)?(?:\s+this\s+as)?)\s+(?:an?\s+)?\*{0,2}([A-Z][A-Za-z0-9]*)\*{0,2}(?=\s+(?:entity|resource)\b|[.,\s])/i,
+    )?.[1] ||
+    assistantText.match(/\*\*([A-Z][A-Za-z0-9]*)\*\*\s+entity\b/i)?.[1]
+  );
+};
+
+const normalizeOnboardingSession = (
+  session: OnboardingSessionDto,
+): OnboardingSessionSummary => {
+  const entityName =
+    session.entityName ||
+    session.entity_name ||
+    inferOnboardingEntityName(session);
+  return {
+    ...session,
+    sessionId: session.sessionId || session.session_id || '',
+    entityName,
+    currentPhase: session.currentPhase ?? session.current_phase,
+    phaseStatus: session.phaseStatus ?? session.phase_status,
+    updatedAt: session.updatedAt ?? session.updated_at,
+    specMarkdown: session.specMarkdown ?? session.spec_markdown,
+    entrySkill: session.entrySkill ?? session.entry_skill,
+  };
+};
+
+export const createOnboardingSession = (
+  options: {
+    entityName?: string;
+    entrySkill?: string;
+  } = {},
+) =>
+  request<{ sessionId: string; status: string; entrySkill?: string }>(
     '/api/sessions/service-onboarding',
     {
       method: 'POST',
-      body: JSON.stringify({
-        tenantId: import.meta.env.VITE_TENANT_ID || 'default',
-      }),
+      body: JSON.stringify(options),
     },
   );
 
-export const getOnboardingSession = (sessionId: string) =>
-  request<OnboardingSessionSummary>(
-    `/api/sessions/service-onboarding/${encodeURIComponent(sessionId)}`,
-  );
+const sessionStorageArtifacts = new Map<
+  string,
+  { entityName: string; artifacts: StorageArtifact[] }
+>();
 
-export const sendOnboardingMessage = (sessionId: string, content: string) =>
-  request<void>(
-    `/api/sessions/service-onboarding/${encodeURIComponent(sessionId)}/messages`,
-    { method: 'POST', body: JSON.stringify({ content }) },
+export const rememberStorageArtifacts = (
+  sessionId: string,
+  entityName: string,
+  artifacts: StorageArtifact[],
+) => {
+  if (!artifacts.length) return;
+  sessionStorageArtifacts.set(sessionId, { entityName, artifacts });
+};
+
+export const getStorageArtifactsForSession = (sessionId: string) =>
+  sessionStorageArtifacts.get(sessionId)?.artifacts || null;
+
+export const getStorageArtifacts = (entityName: string) =>
+  [...sessionStorageArtifacts.entries()]
+    .reverse()
+    .find(([, saved]) => saved.entityName === entityName) || null;
+
+export const getOnboardingSession = (sessionId: string) =>
+  request<OnboardingSessionDto>(
+    `/api/sessions/service-onboarding/${encodeURIComponent(sessionId)}`,
+  ).then(normalizeOnboardingSession);
+
+const readSseResponse = async (
+  response: Response,
+  onEvent: (event: { type: string; data: string }) => void,
+  signal?: AbortSignal,
+) => {
+  if (!response.ok || !response.body) {
+    const body = await response.text().catch(() => '');
+    throw new Error(body || `Onboarding stream failed (${response.status}).`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let eventName = 'message';
+  let dataLines: string[] = [];
+  const dispatch = () => {
+    onEvent({ type: eventName, data: dataLines.join('\n') });
+    eventName = 'message';
+    dataLines = [];
+  };
+  while (!signal?.aborted) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line) dispatch();
+      else if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:'))
+        dataLines.push(line.slice(5).replace(/^ /, ''));
+    }
+  }
+  if (buffer.startsWith('data:'))
+    dataLines.push(buffer.slice(5).replace(/^ /, ''));
+  if (dataLines.length) dispatch();
+};
+
+export const sendOnboardingMessage = async (
+  sessionId: string,
+  message: string,
+  onEvent: (event: { type: string; data: string }) => void,
+  signal?: AbortSignal,
+) => {
+  const base = (import.meta.env.VITE_AGENT_API_BASE_URL || '').replace(
+    /\/+$/,
+    '',
   );
+  const headers = await getAuthenticatedHeaders({
+    'X-Tenant-ID': import.meta.env.VITE_TENANT_ID || 'default',
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  });
+  const response = await fetch(
+    `${base}/api/sessions/service-onboarding/${encodeURIComponent(sessionId)}/messages`,
+    {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      signal: signal || AbortSignal.timeout(120000),
+      body: JSON.stringify({ message }),
+    },
+  );
+  await readSseResponse(response, onEvent, signal);
+};
 
 export const pauseOnboardingSession = (sessionId: string) =>
   request<void>(
@@ -288,9 +472,8 @@ export const abandonOnboardingSession = (sessionId: string) =>
 
 export const streamOnboardingSession = async (
   sessionId: string,
-  onEvent: (event: { type: string; [key: string]: unknown }) => void,
+  onEvent: (event: { type: string; data: string }) => void,
   signal: AbortSignal,
-  lastEventId?: string,
 ) => {
   const base = (import.meta.env.VITE_AGENT_API_BASE_URL || '').replace(
     /\/+$/,
@@ -299,59 +482,10 @@ export const streamOnboardingSession = async (
   const headers = await getAuthenticatedHeaders({
     'X-Tenant-ID': import.meta.env.VITE_TENANT_ID || 'default',
     Accept: 'text/event-stream',
-    ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
   });
   const response = await fetch(
     `${base}/api/sessions/service-onboarding/${encodeURIComponent(sessionId)}/stream`,
     { headers, credentials: 'include', signal },
   );
-  if (!response.ok || !response.body)
-    throw new Error(`Onboarding stream failed (${response.status}).`);
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let eventName = 'message';
-  let eventId = '';
-  let dataLines: string[] = [];
-  const dispatch = () => {
-    if (!dataLines.length) {
-      eventName = 'message';
-      eventId = '';
-      return;
-    }
-    let payload: Record<string, unknown> = {};
-    const data = dataLines.join('\n');
-    try {
-      payload = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      payload = { content: data };
-    }
-    onEvent({
-      ...payload,
-      type: String(payload.type || eventName),
-      id: eventId,
-    });
-    eventName = 'message';
-    eventId = '';
-    dataLines = [];
-  };
-
-  while (!signal.aborted) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      if (!line) dispatch();
-      else if (line.startsWith('event:')) eventName = line.slice(6).trim();
-      else if (line.startsWith('id:')) eventId = line.slice(3).trim();
-      else if (line.startsWith('data:'))
-        dataLines.push(line.slice(5).replace(/^ /, ''));
-    }
-  }
-  if (buffer.startsWith('data:'))
-    dataLines.push(buffer.slice(5).replace(/^ /, ''));
-  dispatch();
+  await readSseResponse(response, onEvent, signal);
 };

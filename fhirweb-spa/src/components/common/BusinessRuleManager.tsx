@@ -599,13 +599,17 @@ export default function BusinessRuleManager({
   resourceType,
   rules,
   onChanged,
+  canManage = true,
+  openAddForm = false,
 }: {
   resourceType: string;
   rules: AssetBusinessRule[];
   onChanged: () => void;
+  canManage?: boolean;
+  openAddForm?: boolean;
 }) {
   const [editing, setEditing] = useState<AssetBusinessRule | null | false>(
-    false,
+    openAddForm ? null : false,
   );
   const [busyRule, setBusyRule] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -659,13 +663,15 @@ export default function BusinessRuleManager({
         <h3 className="text-lg font-semibold text-slate-900">
           Business Rules · {resourceType}
         </h3>
-        <button
-          type="button"
-          onClick={() => setEditing(null)}
-          className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold text-white"
-        >
-          + Add Rule
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => setEditing(null)}
+            className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold text-white"
+          >
+            + Add Rule
+          </button>
+        )}
       </div>
       <details className="mb-4 border-l-4 border-cyan-500 bg-cyan-50 p-3 text-sm text-slate-700">
         <summary className="cursor-pointer font-semibold">
@@ -760,7 +766,9 @@ export default function BusinessRuleManager({
                         <td className="px-2 py-3">
                           <button
                             type="button"
-                            disabled={!portal || busyRule === rule.ruleId}
+                            disabled={
+                              !portal || !canManage || busyRule === rule.ruleId
+                            }
                             onClick={() => void toggle(rule)}
                             aria-label={`Toggle ${rule.ruleId}`}
                             title={
@@ -775,7 +783,7 @@ export default function BusinessRuleManager({
                         </td>
                         <td className="px-2 py-3">
                           <div className="flex gap-2 text-xs">
-                            {portal ? (
+                            {portal && canManage ? (
                               <>
                                 <button
                                   type="button"

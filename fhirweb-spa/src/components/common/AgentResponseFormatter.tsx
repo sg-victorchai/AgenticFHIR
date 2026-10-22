@@ -1198,9 +1198,17 @@ const renderMarkdownBlocks = (text: string): React.ReactNode[] => {
  * Markdown renderer — headings, tables, lists, horizontal rules, and fenced
  * code blocks (used for ASCII charts) with inline bold/italic support.
  */
-const MarkdownResponseRenderer: React.FC<{ text: string }> = ({ text }) => (
-  <div className="prose prose-sm max-w-none space-y-3 text-sm">
+export const MarkdownMessageContent: React.FC<{ text: string }> = ({
+  text,
+}) => (
+  <div className="space-y-3 text-sm leading-relaxed">
     {renderMarkdownBlocks(text)}
+  </div>
+);
+
+const MarkdownResponseRenderer: React.FC<{ text: string }> = ({ text }) => (
+  <div className="prose prose-sm max-w-none">
+    <MarkdownMessageContent text={text} />
   </div>
 );
 
