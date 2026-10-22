@@ -254,7 +254,7 @@ describe('DataAssetsPage', () => {
     ).toBe('true');
     expect(screen.getByRole('heading', { name: 'Encounter' })).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: 'View Business Rules' }),
+      screen.getByRole('button', { name: 'Manage Business Rules' }),
     ).toBeTruthy();
     expect(getConfiguredAsset).toHaveBeenCalledTimes(1);
   });

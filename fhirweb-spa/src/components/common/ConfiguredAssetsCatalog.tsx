@@ -3,31 +3,229 @@ import {
   AssetBusinessRule,
   ConfiguredAsset,
   ConfiguredAssetDetail,
+  disableConfiguredAsset,
   getAssetBusinessRules,
   getConfiguredAsset,
+  getConfiguredAssetWorkflow,
   listConfiguredAssets,
+  WorkflowAction,
+  WorkflowConditionalRoute,
+  WorkflowDefinition,
+  WorkflowMutation,
+  WorkflowPrerequisite,
+  WorkflowStage,
 } from '../../services/configuredAssetsService';
+import BusinessRuleManager from './BusinessRuleManager';
+import EventTriggerManager from './EventTriggerManager';
+import ServiceOnboarding from './ServiceOnboarding';
 
 const messageFor = (error: unknown) =>
   error instanceof Error ? error.message : 'Unable to load configured assets.';
 const controlClass =
-  'rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50';
+  'rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100';
 const sourceLabel = (source: string) =>
   source === 'platform' ? 'Platform' : source === 'portal' ? 'Portal' : source;
+
+const workflowPrerequisites = (value: unknown): WorkflowPrerequisite[] => {
+  const entries = Array.isArray(value) ? value : value ? [value] : [];
+  return entries.filter(
+    (entry): entry is WorkflowPrerequisite =>
+      Boolean(entry) && typeof entry === 'object',
+  );
+};
+
+const conditionalRoutes = (value: unknown): WorkflowConditionalRoute[] => {
+  const entries = Array.isArray(value) ? value : value ? [value] : [];
+  return entries.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const route = entry as Record<string, unknown>;
+    const stage = route.toStage ?? route.stage;
+    if (typeof stage !== 'string') return [];
+    return [
+      {
+        ...(typeof route.conditionQuery === 'string'
+          ? { conditionQuery: route.conditionQuery }
+          : typeof route.condition === 'string'
+            ? { conditionQuery: route.condition }
+            : {}),
+        toStage: stage,
+        fhirMutation: Array.isArray(route.fhirMutation)
+          ? (route.fhirMutation as WorkflowMutation[])
+          : undefined,
+      },
+    ];
+  });
+};
+
+const transitionAction = (action: WorkflowAction) =>
+  action.actionType?.toLowerCase() === 'transition';
+
+const transitionTargets = (action: WorkflowAction) => [
+  ...conditionalRoutes(action.conditionalToStage).map((route) => route.toStage),
+  ...(action.toStage ? [action.toStage] : []),
+];
+
+const isTerminalStage = (stage: WorkflowStage) =>
+  stage.uiHint?.terminal === true || !(stage.action?.length ?? 0);
+
+const orderWorkflowStages = (stages: WorkflowStage[]): WorkflowStage[] => {
+  const byId = new Map(stages.map((stage) => [stage.stageId, stage]));
+  const incoming = new Set(
+    stages.flatMap((stage) =>
+      (stage.action ?? []).filter(transitionAction).flatMap(transitionTargets),
+    ),
+  );
+  const ordered: WorkflowStage[] = [];
+  const visited = new Set<string>();
+  const visit = (stageId: string) => {
+    if (visited.has(stageId)) return;
+    visited.add(stageId);
+    const stage = byId.get(stageId);
+    if (!stage) return;
+    if (isTerminalStage(stage)) return;
+    ordered.push(stage);
+    (stage.action ?? [])
+      .filter(transitionAction)
+      .flatMap(transitionTargets)
+      .forEach(visit);
+  };
+
+  stages
+    .filter((stage) => !incoming.has(stage.stageId) && !isTerminalStage(stage))
+    .forEach((stage) => visit(stage.stageId));
+  stages
+    .filter((stage) => !isTerminalStage(stage) && !visited.has(stage.stageId))
+    .forEach((stage) => visit(stage.stageId));
+  return [...ordered, ...stages.filter((stage) => isTerminalStage(stage))];
+};
+
+const workflowPrimaryPath = (stages: WorkflowStage[]): string[] => {
+  const byId = new Map(stages.map((stage) => [stage.stageId, stage]));
+  const incoming = new Set(
+    stages.flatMap((stage) =>
+      (stage.action ?? []).filter(transitionAction).flatMap(transitionTargets),
+    ),
+  );
+  const start = stages.find(
+    (stage) => !incoming.has(stage.stageId) && !isTerminalStage(stage),
+  );
+  if (!start) return [];
+
+  const path: string[] = [];
+  const visited = new Set<string>();
+  let current: WorkflowStage | undefined = start;
+  while (current && !visited.has(current.stageId)) {
+    visited.add(current.stageId);
+    path.push(current.stageId);
+    const destinations = (current.action ?? [])
+      .filter(transitionAction)
+      .flatMap((action) => [
+        ...(action.toStage ? [action.toStage] : []),
+        ...conditionalRoutes(action.conditionalToStage).map(
+          (route) => route.toStage,
+        ),
+      ]);
+    const nextActive = destinations.find((id) => {
+      const candidate = byId.get(id);
+      return candidate && !isTerminalStage(candidate);
+    });
+    if (nextActive) {
+      current = byId.get(nextActive);
+      continue;
+    }
+    const terminal = destinations.find((id) => {
+      const candidate = byId.get(id);
+      return candidate && isTerminalStage(candidate);
+    });
+    if (terminal) path.push(terminal);
+    break;
+  }
+  return path;
+};
+
+const workflowTerminalRoutes = (
+  stages: WorkflowStage[],
+  primaryPath: string[],
+) =>
+  stages.flatMap((stage) =>
+    (stage.action ?? [])
+      .filter(transitionAction)
+      .flatMap((action) => transitionTargets(action))
+      .filter((target) => {
+        const targetStage = stages.find(
+          (candidate) => candidate.stageId === target,
+        );
+        return (
+          targetStage &&
+          isTerminalStage(targetStage) &&
+          !primaryPath.includes(target)
+        );
+      })
+      .map((target) => `${stage.stageId} → ${target}`),
+  );
+
+function WorkflowMutationDetails({
+  mutations,
+  label = 'FHIR mutations',
+}: {
+  mutations?: WorkflowMutation[];
+  label?: string;
+}) {
+  if (!mutations?.length) return null;
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer text-xs text-slate-600">
+        {label} ({mutations.length})
+      </summary>
+      <ol className="mt-1 space-y-1 pl-4">
+        {mutations.map((mutation, index) => (
+          <li
+            key={`${mutation.sequenceNumber ?? index}-${index}`}
+            className="break-words"
+          >
+            <span className="text-slate-500">
+              {mutation.sequenceNumber ?? index + 1}.{' '}
+              {mutation.mutationType || 'mutation'}
+            </span>{' '}
+            <code>{mutation.expression || 'No expression provided'}</code>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
 
 function AssetSection({
   title,
   expanded,
   children,
+  action,
+  summaryContent,
 }: {
   title: string;
   expanded: boolean;
   children: React.ReactNode;
+  action?: React.ReactNode;
+  summaryContent?: React.ReactNode;
 }) {
   return (
-    <details open={expanded} className="border-b border-slate-200 py-4">
-      <summary className="cursor-pointer text-base font-semibold text-slate-900">
-        {title}
+    <details open={expanded} className="group border-b border-slate-200 py-4">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 text-base font-semibold text-slate-900">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="text-slate-500 transition-transform group-open:rotate-90"
+          >
+            ▸
+          </span>
+          <span>{title}</span>
+        </span>
+        {action && (
+          <span onClick={(event) => event.stopPropagation()}>{action}</span>
+        )}
+        {summaryContent && (
+          <div className="basis-full pl-7">{summaryContent}</div>
+        )}
       </summary>
       <div className="mt-3 min-w-0 text-sm text-slate-700">{children}</div>
     </details>
@@ -43,12 +241,19 @@ export default function ConfiguredAssetsCatalog({
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConfiguredAssetDetail | null>(null);
   const [rules, setRules] = useState<AssetBusinessRule[]>([]);
+  const [workflow, setWorkflow] = useState<WorkflowDefinition | null>(null);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [workflowDetailsOpen, setWorkflowDetailsOpen] = useState(false);
   const [rulesError, setRulesError] = useState<string | null>(null);
-  const [view, setView] = useState<'detail' | 'rules'>('detail');
+  const [view, setView] = useState<
+    'detail' | 'rules' | 'triggers' | 'sessions' | 'onboarding'
+  >('detail');
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [assetActionError, setAssetActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -57,16 +262,13 @@ export default function ConfiguredAssetsCatalog({
     setRulesError(null);
     setDetail(null);
     setRules([]);
+    setWorkflow(null);
+    setWorkflowError(null);
+    setWorkflowDetailsOpen(false);
     const load = async () => {
       if (!selected) {
         const result = await listConfiguredAssets();
-        if (active)
-          setAssets(
-            result.filter(
-              (asset) =>
-                asset.businessRuleCount > 0 || Boolean(asset.workflowName),
-            ),
-          );
+        if (active) setAssets(result);
         return;
       }
       const [assetResult, rulesResult] = await Promise.allSettled([
@@ -78,6 +280,21 @@ export default function ConfiguredAssetsCatalog({
       else throw assetResult.reason;
       if (rulesResult.status === 'fulfilled') setRules(rulesResult.value);
       else setRulesError(messageFor(rulesResult.reason));
+      if (assetResult.value.workflowName) {
+        setWorkflowLoading(true);
+        const workflowResult = await getConfiguredAssetWorkflow(selected).then(
+          (value) => ({ status: 'fulfilled' as const, value }),
+          (reason: unknown) => ({ status: 'rejected' as const, reason }),
+        );
+        if (!active) return;
+        if (workflowResult.status === 'fulfilled') {
+          setWorkflow(workflowResult.value);
+          setWorkflowError(null);
+        } else {
+          setWorkflowError(messageFor(workflowResult.reason));
+        }
+        setWorkflowLoading(false);
+      }
     };
     void load()
       .catch((failure) => {
@@ -96,43 +313,82 @@ export default function ConfiguredAssetsCatalog({
       .toLowerCase()
       .includes(filter.trim().toLowerCase()),
   );
-  const operations = [...new Set(rules.map((rule) => rule.triggerOperation))];
   const expanded = detail?.authoringSource === 'platform';
-  const mappings = rules.flatMap((rule) => {
-    const stages = rule.properties?.['conditional-initial-stages'];
-    return Array.isArray(stages)
-      ? stages.filter((stage): stage is { condition: string; stage: string } =>
-          Boolean(
-            stage &&
-            typeof stage === 'object' &&
-            typeof stage.condition === 'string' &&
-            typeof stage.stage === 'string',
-          ),
-        )
-      : [];
-  });
+  const workflowBootstrap = rules.find(
+    (rule) => rule.pluginId === 'workflow-bootstrap',
+  );
+  const stages = workflowBootstrap?.properties?.['conditional-initial-stages'];
+  const resourceArticle =
+    detail && /^[aeiou]/i.test(detail.resourceType) ? 'an' : 'a';
+  const mappings = Array.isArray(stages)
+    ? stages.filter((stage): stage is { condition: string; stage: string } =>
+        Boolean(
+          stage &&
+          typeof stage === 'object' &&
+          typeof stage.condition === 'string' &&
+          typeof stage.stage === 'string',
+        ),
+      )
+    : [];
+  const workflowStages = orderWorkflowStages(workflow?.stage ?? []);
+  const primaryWorkflowPath = workflowPrimaryPath(workflowStages);
+  const conditionalWorkflowRoutes = workflowStages.flatMap((stage) =>
+    (stage.action ?? []).filter(transitionAction).flatMap((action) =>
+      conditionalRoutes(action.conditionalToStage).map((route) => ({
+        from: stage.stageId,
+        condition: route.conditionQuery,
+        to: route.toStage,
+      })),
+    ),
+  );
+  const terminalWorkflowRoutes = workflowTerminalRoutes(
+    workflowStages,
+    primaryWorkflowPath,
+  );
+  const transitionCount = workflowStages.reduce((count, stage) => {
+    const actions = (stage.action ?? []).filter(transitionAction);
+    return (
+      count +
+      actions.reduce(
+        (total, action) =>
+          total +
+          (action.toStage ? 1 : 0) +
+          conditionalRoutes(action.conditionalToStage).length,
+        0,
+      )
+    );
+  }, 0);
 
   return (
     <div>
       {selected && (
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <h2 className="min-w-0 break-words text-xl font-semibold text-slate-900">
-            {view === 'rules' ? `Business Rules — ${selected}` : selected}
+            {view === 'rules'
+              ? `Business Rules — ${selected}`
+              : view === 'triggers'
+                ? `Event Triggers — ${selected}`
+                : view === 'sessions'
+                  ? 'My Sessions'
+                  : selected}
           </h2>
           <button
             type="button"
             className="max-w-full rounded-md border border-cyan-300 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100 hover:text-cyan-950 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             onClick={() => {
-              if (view === 'rules') setView('detail');
-              else {
+              if (view === 'rules' || view === 'triggers') setView('detail');
+              else if (view === 'sessions') {
+                setView('detail');
+                setSelected(null);
+              } else {
                 setSelected(null);
                 setFilter('');
               }
             }}
           >
-            {view === 'rules'
+            {view === 'rules' || view === 'triggers'
               ? 'Back to Asset Detail'
-              : 'Back to Rules & Workflows'}
+              : 'Back to Asset List'}
           </button>
         </div>
       )}
@@ -156,7 +412,7 @@ export default function ConfiguredAssetsCatalog({
           </button>
         </div>
       )}
-      {!selected && !loading && !error && (
+      {!selected && view === 'detail' && !loading && !error && (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <input
@@ -167,50 +423,108 @@ export default function ConfiguredAssetsCatalog({
               className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
             />
             <span className="text-xs text-slate-500">
-              {assets.length} configured assets
+              {assets.length} data assets
             </span>
+            <button
+              type="button"
+              onClick={() => setView('sessions')}
+              className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              My Sessions
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('onboarding')}
+              className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold text-white"
+            >
+              + New Asset
+            </button>
           </div>
+          {assetActionError && (
+            <p role="alert" className="mb-3 text-sm text-rose-700">
+              {assetActionError}
+            </p>
+          )}
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map((asset) => (
-              <button
+              <article
                 key={asset.resourceType}
-                type="button"
-                aria-label={`View ${asset.resourceType} configuration`}
-                onClick={() => {
-                  setSelected(asset.resourceType);
-                  setView('detail');
-                }}
-                className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300"
+                className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
               >
-                <h2 className="break-words text-base font-semibold text-slate-900">
-                  {asset.resourceType}
-                </h2>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded bg-slate-100 px-2 py-1">
-                    {sourceLabel(asset.authoringSource)}
-                  </span>
-                  <span
-                    className={
-                      asset.enabled ? 'text-emerald-700' : 'text-slate-500'
-                    }
+                <button
+                  type="button"
+                  aria-label={`View ${asset.resourceType} configuration`}
+                  onClick={() => {
+                    setSelected(asset.resourceType);
+                    setView('detail');
+                  }}
+                  className="w-full text-left focus:outline-none focus:ring-2 focus:ring-cyan-300"
+                >
+                  <h2 className="break-words text-base font-semibold text-slate-900">
+                    {asset.resourceType}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    <span
+                      className={`rounded px-2 py-1 ${asset.authoringSource === 'portal' ? 'bg-cyan-50 text-cyan-800' : 'bg-slate-100 text-slate-700'}`}
+                    >
+                      {sourceLabel(asset.authoringSource)}
+                    </span>
+                    <span
+                      className={
+                        asset.enabled ? 'text-emerald-700' : 'text-slate-500'
+                      }
+                    >
+                      {asset.enabled ? 'Active' : 'Disabled'}
+                    </span>
+                    <span>{asset.fhirVersions.join(', ')}</span>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">
+                    {asset.businessRuleCount} business rules
+                  </p>
+                  <p className="mt-1 break-words text-xs text-slate-500">
+                    {asset.workflowName || 'No workflow configured'}
+                  </p>
+                </button>
+                {asset.authoringSource === 'portal' && asset.enabled && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Disable ${asset.resourceType}? Existing records are preserved; the resource type will no longer accept new writes.`,
+                        )
+                      )
+                        return;
+                      setAssetActionError(null);
+                      try {
+                        await disableConfiguredAsset(asset.resourceType);
+                        setAssets((current) =>
+                          current.map((item) =>
+                            item.resourceType === asset.resourceType
+                              ? { ...item, enabled: false }
+                              : item,
+                          ),
+                        );
+                      } catch (failure) {
+                        setAssetActionError(
+                          failure instanceof Error
+                            ? failure.message
+                            : 'Unable to disable this data asset.',
+                        );
+                      }
+                    }}
+                    className="mt-3 text-xs font-medium text-rose-700 underline"
                   >
-                    {asset.enabled ? 'Active' : 'Disabled'}
-                  </span>
-                  <span>{asset.fhirVersions.join(', ')}</span>
-                </div>
-                <p className="mt-3 text-sm text-slate-600">
-                  {asset.businessRuleCount} business rules
-                </p>
-                <p className="mt-1 break-words text-xs text-slate-500">
-                  {asset.workflowName || 'No workflow configured'}
-                </p>
-              </button>
+                    Disable asset
+                  </button>
+                )}
+              </article>
             ))}
             {!visible.length && (
               <p className="col-span-full py-8 text-center text-sm text-slate-500">
                 {assets.length
-                  ? 'No configured assets match this filter.'
-                  : 'No resources have business rules or workflows configured.'}
+                  ? 'No data assets match this filter.'
+                  : 'No data assets are configured.'}
               </p>
             )}
           </div>
@@ -287,21 +601,424 @@ export default function ConfiguredAssetsCatalog({
               </div>
             </AssetSection>
           </div>
-          <AssetSection title="Workflow" expanded={expanded}>
-            <p className="break-words font-medium">
-              {detail.workflowName || 'No workflow configured.'}
-            </p>
-            {mappings.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {mappings.map((mapping, index) => (
-                  <li key={index} className="break-words">
-                    <code>{mapping.condition}</code> →{' '}
-                    <strong>{mapping.stage}</strong>
-                  </li>
-                ))}
-              </ul>
+          <section
+            id="configured-Workflow"
+            aria-labelledby="configured-workflow-heading"
+            className="border-b border-slate-200 py-4"
+          >
+            <h3
+              id="configured-workflow-heading"
+              className="mb-3 text-base font-semibold text-slate-900"
+            >
+              Workflow
+            </h3>
+            {detail.workflowName && (
+              <div className="space-y-3">
+                <div className="w-full border border-slate-200 bg-white p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h4 className="break-words font-semibold text-slate-900">
+                      {workflow?.title || workflow?.name || detail.workflowName}
+                      {workflow?.name &&
+                      workflow?.title &&
+                      workflow.name !== workflow.title
+                        ? ` (${workflow.name})`
+                        : ''}
+                    </h4>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-xs font-medium text-slate-500">
+                        {workflowLoading
+                          ? 'Loading steps…'
+                          : workflow
+                            ? `${workflowStages.length} stages`
+                            : 'Workflow details unavailable'}
+                      </span>
+                      <button
+                        type="button"
+                        aria-expanded={workflowDetailsOpen}
+                        aria-controls="configured-workflow-details"
+                        onClick={() => setWorkflowDetailsOpen((open) => !open)}
+                        className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        {workflowDetailsOpen ? 'Hide details' : 'Show details'}
+                      </button>
+                    </div>
+                  </div>
+                  {workflow && (
+                    <div className="mt-3 space-y-3">
+                      {primaryWorkflowPath.length > 0 && (
+                        <div>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            Main path
+                          </p>
+                          <p className="break-words font-mono text-xs leading-relaxed text-slate-800 sm:text-sm">
+                            {primaryWorkflowPath.join(' → ')}
+                          </p>
+                        </div>
+                      )}
+                      {conditionalWorkflowRoutes.map((route, index) => (
+                        <p
+                          key={`conditional-summary-${index}`}
+                          className="break-words text-xs text-slate-600"
+                        >
+                          <span className="font-medium">Conditional:</span>{' '}
+                          {route.from} → {route.to}
+                          {route.condition ? ` · ${route.condition}` : ''}
+                        </p>
+                      ))}
+                      {terminalWorkflowRoutes.length > 0 && (
+                        <p className="break-words text-xs text-slate-600">
+                          <span className="font-medium">Cancellation:</span>{' '}
+                          {terminalWorkflowRoutes.join(' · ')}
+                        </p>
+                      )}
+                      <div className="border-t border-slate-100 pt-2">
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          When you{' '}
+                          {workflowBootstrap?.triggerOperation || 'CREATE'}{' '}
+                          {resourceArticle} {detail.resourceType}
+                        </p>
+                        {mappings.length > 0 ? (
+                          <ul className="grid gap-x-5 gap-y-1 sm:grid-cols-2">
+                            {mappings.map((mapping, index) => (
+                              <li
+                                key={`${mapping.condition}-${mapping.stage}-${index}`}
+                                className="break-words text-xs text-slate-700"
+                              >
+                                <code>{mapping.condition}</code>{' '}
+                                <span aria-hidden="true">→</span>{' '}
+                                <strong>{mapping.stage}</strong>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : rulesError ? (
+                          <p className="text-xs text-amber-800">
+                            Initial-stage routing is unavailable because
+                            business rules could not be loaded.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-500">
+                            No initial-stage mappings are configured.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!workflow && workflowError && (
+                    <p role="alert" className="mt-2 text-xs text-amber-800">
+                      {workflowError}
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
-          </AssetSection>
+            {workflowDetailsOpen && detail.workflowName && (
+              <div
+                id="configured-workflow-details"
+                className="w-full border border-slate-200 bg-white p-4 sm:p-6"
+              >
+                {workflowError && (
+                  <div
+                    role="alert"
+                    className="mb-4 border-l-4 border-amber-400 bg-amber-50 p-3 text-xs text-amber-900"
+                  >
+                    Full workflow details unavailable: {workflowError}{' '}
+                    <button
+                      type="button"
+                      onClick={() => setAttempt((value) => value + 1)}
+                      className="underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {workflow && (
+                  <section className="" aria-label="Full workflow definition">
+                    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                      <h4 className="font-semibold text-slate-900">
+                        {workflow.title ||
+                          workflow.name ||
+                          workflow.id ||
+                          detail.workflowName}
+                      </h4>
+                      <span className="text-xs text-slate-500">
+                        {workflowStages.length} stages · {transitionCount}{' '}
+                        transitions
+                        {workflow.status ? ` · ${workflow.status}` : ''}
+                      </span>
+                    </div>
+                    {(workflow.id ||
+                      workflow.identifier?.length ||
+                      workflow.meta) && (
+                      <details className="mb-3 text-xs text-slate-500">
+                        <summary className="cursor-pointer">
+                          Definition metadata
+                        </summary>
+                        <div className="mt-2 space-y-1 break-words">
+                          {workflow.id && (
+                            <p>FHIR resource ID: {workflow.id}</p>
+                          )}
+                          {workflow.identifier?.map((identifier, index) => (
+                            <p
+                              key={`${identifier.system}-${identifier.value}-${index}`}
+                            >
+                              Identifier: {identifier.value || '—'}
+                              {identifier.system
+                                ? ` · ${identifier.system}`
+                                : ''}
+                            </p>
+                          ))}
+                          {workflow.meta?.versionId && (
+                            <p>Version: {workflow.meta.versionId}</p>
+                          )}
+                          {workflow.meta?.lastUpdated && (
+                            <p>Last updated: {workflow.meta.lastUpdated}</p>
+                          )}
+                          {workflow.meta?.profile?.map((profile) => (
+                            <p key={profile}>Definition profile: {profile}</p>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    {workflow.targetResourceProfile && (
+                      <p className="mb-3 break-all font-mono text-xs text-slate-500">
+                        {workflow.targetResourceProfile}
+                      </p>
+                    )}
+                    {workflowStages.length ? (
+                      <ol className="space-y-3">
+                        {workflowStages.map((stage, index) => {
+                          const actions = stage.action ?? [];
+                          return (
+                            <li
+                              key={stage.stageId}
+                              className="relative border-l-2 border-cyan-200 pb-1 pl-4 last:border-transparent"
+                            >
+                              <span
+                                className="absolute -left-[5px] top-1 h-2 w-2 rounded-full bg-cyan-700"
+                                aria-hidden="true"
+                              />
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <h5 className="font-semibold text-slate-900">
+                                    {stage.label || stage.stageId}
+                                    {isTerminalStage(stage) && (
+                                      <span className="ml-2 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase text-emerald-800">
+                                        Terminal
+                                      </span>
+                                    )}
+                                    {stage.optional && (
+                                      <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-600">
+                                        Optional
+                                      </span>
+                                    )}
+                                  </h5>
+                                  <p className="font-mono text-xs text-slate-500">
+                                    {stage.stageId}
+                                  </p>
+                                  {stage.uiHint?.icon && (
+                                    <p className="mt-1 text-[10px] text-slate-400">
+                                      Icon: {stage.uiHint.icon}
+                                    </p>
+                                  )}
+                                </div>
+                                {stage.actor && (
+                                  <span className="text-xs text-slate-600">
+                                    Actor: {stage.actor}
+                                  </span>
+                                )}
+                              </div>
+                              {stage.description && (
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {stage.description}
+                                </p>
+                              )}
+                              {stage.stageExpression && (
+                                <p className="mt-2 break-words font-mono text-xs text-slate-600">
+                                  Stage condition: {stage.stageExpression}
+                                </p>
+                              )}
+                              {actions.length > 0 && (
+                                <ul className="mt-2 space-y-2 border-l border-slate-200 pl-3">
+                                  {actions.map((action) => {
+                                    if (!transitionAction(action)) {
+                                      return (
+                                        <li
+                                          key={action.actionId}
+                                          className="text-sm"
+                                        >
+                                          <span className="font-medium text-cyan-900">
+                                            {action.label || action.actionId}
+                                          </span>
+                                          <span className="ml-2 text-xs text-slate-500">
+                                            (
+                                            {[
+                                              action.requiredRole?.join(', '),
+                                              action.label || action.actionId,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(': ')}
+                                            )
+                                          </span>
+                                          {action.navigationKey && (
+                                            <span className="block text-xs text-slate-500">
+                                              Navigation: {action.navigationKey}
+                                            </span>
+                                          )}
+                                        </li>
+                                      );
+                                    }
+                                    const conditional = conditionalRoutes(
+                                      action.conditionalToStage,
+                                    );
+                                    const prerequisites = workflowPrerequisites(
+                                      action.prerequisite,
+                                    );
+                                    return (
+                                      <li
+                                        key={action.actionId}
+                                        className="text-sm"
+                                      >
+                                        {action.toStage && (
+                                          <span className="font-medium text-slate-900">
+                                            {stage.stageId} → {action.toStage}
+                                          </span>
+                                        )}
+                                        <span className="ml-2 text-cyan-900">
+                                          (
+                                          {[
+                                            action.requiredRole?.join(', '),
+                                            action.label || action.actionId,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(': ')}
+                                          )
+                                        </span>
+                                        {prerequisites.map(
+                                          (prerequisite, prerequisiteIndex) => (
+                                            <div
+                                              key={`${action.actionId}-prerequisite-${prerequisiteIndex}`}
+                                              className="mt-2 border-l-2 border-amber-300 pl-2 text-xs text-slate-600"
+                                            >
+                                              <p className="font-medium text-slate-700">
+                                                Prerequisite:{' '}
+                                                {prerequisite.label ||
+                                                  'Required check'}
+                                              </p>
+                                              {prerequisite.description && (
+                                                <p className="mt-0.5">
+                                                  {prerequisite.description}
+                                                </p>
+                                              )}
+                                              {prerequisite.checkQuery && (
+                                                <code className="mt-1 block break-all">
+                                                  {prerequisite.checkQuery}
+                                                </code>
+                                              )}
+                                              {prerequisite.minCount !==
+                                                undefined && (
+                                                <p className="mt-0.5">
+                                                  Minimum matching records:{' '}
+                                                  {prerequisite.minCount}
+                                                </p>
+                                              )}
+                                              {prerequisite.onViolation && (
+                                                <p className="mt-0.5">
+                                                  On failure:{' '}
+                                                  {prerequisite.onViolation}
+                                                </p>
+                                              )}
+                                              {prerequisite.navigationKey && (
+                                                <p className="mt-0.5">
+                                                  Navigation:{' '}
+                                                  {prerequisite.navigationKey}
+                                                </p>
+                                              )}
+                                              {prerequisite.profileUrl && (
+                                                <p className="mt-0.5 break-all">
+                                                  Profile:{' '}
+                                                  {prerequisite.profileUrl}
+                                                </p>
+                                              )}
+                                              {prerequisite.resourceTemplate && (
+                                                <details className="mt-1">
+                                                  <summary className="cursor-pointer">
+                                                    Resource template
+                                                  </summary>
+                                                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all bg-slate-50 p-2">
+                                                    {
+                                                      prerequisite.resourceTemplate
+                                                    }
+                                                  </pre>
+                                                </details>
+                                              )}
+                                            </div>
+                                          ),
+                                        )}
+                                        {conditional.map(
+                                          (route, routeIndex) => (
+                                            <div
+                                              key={`${action.actionId}-conditional-${routeIndex}`}
+                                              className="mt-2 break-words text-xs text-slate-600"
+                                            >
+                                              <p>
+                                                {route.conditionQuery
+                                                  ? `When ${route.conditionQuery}: `
+                                                  : 'Conditional route: '}
+                                                {stage.stageId} →{' '}
+                                                {route.toStage}
+                                              </p>
+                                              <WorkflowMutationDetails
+                                                mutations={route.fhirMutation}
+                                                label="Conditional FHIR mutations"
+                                              />
+                                            </div>
+                                          ),
+                                        )}
+                                        {typeof action.guard === 'string' && (
+                                          <span className="block break-words font-mono text-xs text-slate-500">
+                                            Guard: {action.guard}
+                                          </span>
+                                        )}
+                                        {Array.isArray(action.guard) && (
+                                          <span className="block break-words font-mono text-xs text-slate-500">
+                                            Guard: {action.guard.join(' · ')}
+                                          </span>
+                                        )}
+                                        <WorkflowMutationDetails
+                                          mutations={action.fhirMutation}
+                                        />
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                              {!actions.length && !isTerminalStage(stage) && (
+                                <p className="mt-2 text-xs text-slate-500">
+                                  No transition actions declared.
+                                </p>
+                              )}
+                              {index < workflowStages.length - 1 &&
+                                !actions.length &&
+                                !isTerminalStage(stage) && (
+                                  <span className="sr-only">
+                                    No edge to the next listed stage is
+                                    declared.
+                                  </span>
+                                )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        No stages are included in this workflow definition.
+                      </p>
+                    )}
+                  </section>
+                )}
+              </div>
+            )}
+          </section>
           <div id="configured-Business-Rules">
             <AssetSection title="Business Rules" expanded={expanded}>
               <p>
@@ -315,13 +1032,27 @@ export default function ConfiguredAssetsCatalog({
                 className={`${controlClass} mt-3`}
                 onClick={() => setView('rules')}
               >
-                View Business Rules
+                Manage Business Rules
+              </button>
+              <button
+                type="button"
+                className={`${controlClass} ml-2 mt-3`}
+                onClick={() => setView('rules')}
+              >
+                Add Rule
               </button>
             </AssetSection>
           </div>
           <div id="configured-Event-Triggers">
             <AssetSection title="Event Triggers" expanded={expanded}>
               <p>{detail.eventTriggerCount} configured triggers</p>
+              <button
+                type="button"
+                className={`${controlClass} mt-3`}
+                onClick={() => setView('triggers')}
+              >
+                Manage Triggers
+              </button>
             </AssetSection>
           </div>
           <div id="configured-Search-Parameters">
@@ -367,119 +1098,47 @@ export default function ConfiguredAssetsCatalog({
           </AssetSection>
         </>
       )}
-      {detail && !loading && !error && view === 'rules' && (
-        <>
-          {rulesError ? (
-            <div role="alert" className="text-sm text-rose-700">
-              {rulesError}{' '}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => setAttempt((value) => value + 1)}
-              >
-                Retry
-              </button>
-            </div>
-          ) : (
-            <>
-              {!rules.length && (
-                <p className="py-6 text-sm text-slate-500">
-                  No business rules are configured for {selected}.
-                </p>
-              )}
-              {operations.map((operation) => (
-                <section key={operation} className="mb-6">
-                  <h3 className="mb-2 text-sm font-semibold text-slate-800">
-                    {operation === 'ALL' ? 'All operations' : operation}{' '}
-                    pipeline
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[680px] text-left text-sm">
-                      <thead className="border-b border-slate-200 text-xs text-slate-500">
-                        <tr>
-                          {[
-                            'Priority',
-                            'Plugin / Source',
-                            'Phase / Mode',
-                            'Purpose & Configuration',
-                            'Status',
-                          ].map((title) => (
-                            <th key={title} className="px-2 py-2">
-                              {title}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rules
-                          .filter((rule) => rule.triggerOperation === operation)
-                          .sort(
-                            (first, second) => first.priority - second.priority,
-                          )
-                          .map((rule) => (
-                            <tr
-                              key={rule.ruleId}
-                              className="border-b border-slate-100 align-top"
-                            >
-                              <td className="px-2 py-3 font-mono">
-                                {rule.priority}
-                              </td>
-                              <td className="px-2 py-3">
-                                <p className="break-words font-medium">
-                                  {rule.pluginId}
-                                </p>
-                                <p
-                                  className="mt-1 text-xs text-slate-500"
-                                  title={
-                                    rule.authoringSource === 'platform'
-                                      ? 'Defined in platform configuration. Update the codebase to change this rule.'
-                                      : 'Portal-authored rule; this view is read-only.'
-                                  }
-                                >
-                                  {sourceLabel(rule.authoringSource)} ·
-                                  Read-only
-                                </p>
-                                {rule.targetResourceType !== selected && (
-                                  <p className="text-xs text-slate-500">
-                                    Scope: {rule.targetResourceType}
-                                  </p>
-                                )}
-                              </td>
-                              <td className="px-2 py-3 text-xs">
-                                {rule.phase}
-                                <br />
-                                {rule.mode}
-                              </td>
-                              <td className="px-2 py-3">
-                                <p className="break-words">
-                                  {rule.description ||
-                                    'No description provided.'}
-                                </p>
-                                <details className="mt-2">
-                                  <summary className="cursor-pointer text-xs text-cyan-700">
-                                    Configuration
-                                  </summary>
-                                  <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all bg-slate-50 p-2 text-xs">
-                                    {JSON.stringify(rule.properties, null, 2)}
-                                  </pre>
-                                </details>
-                              </td>
-                              <td
-                                className={`px-2 py-3 text-xs ${rule.enabled ? 'text-emerald-700' : 'text-slate-500'}`}
-                              >
-                                {rule.enabled ? 'Enabled' : 'Disabled'}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              ))}
-            </>
-          )}
-        </>
+      {detail &&
+        !loading &&
+        !error &&
+        view === 'rules' &&
+        (rulesError ? (
+          <div role="alert" className="text-sm text-rose-700">
+            {rulesError}{' '}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => setAttempt((value) => value + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <BusinessRuleManager
+            resourceType={selected || ''}
+            rules={rules}
+            onChanged={() => setAttempt((value) => value + 1)}
+          />
+        ))}
+      {detail && !loading && !error && view === 'triggers' && (
+        <EventTriggerManager
+          resourceType={selected || ''}
+          onChanged={() => setAttempt((value) => value + 1)}
+        />
       )}
+      {!selected &&
+        !loading &&
+        !error &&
+        (view === 'sessions' || view === 'onboarding') && (
+          <ServiceOnboarding
+            startImmediately={view === 'onboarding'}
+            onBack={() => setView('sessions')}
+            onViewAsset={(resourceType) => {
+              setView('detail');
+              setSelected(resourceType);
+            }}
+          />
+        )}
     </div>
   );
 }

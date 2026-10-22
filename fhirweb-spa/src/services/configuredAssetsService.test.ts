@@ -3,6 +3,7 @@ import { getAuthenticatedHeaders } from './auth/oidc';
 import {
   getAssetBusinessRules,
   getConfiguredAsset,
+  getConfiguredAssetWorkflow,
   listConfiguredAssets,
 } from './configuredAssetsService';
 
@@ -25,10 +26,12 @@ describe('configured asset API', () => {
     await listConfiguredAssets();
     await getConfiguredAsset('Custom/Type');
     await getAssetBusinessRules('Encounter');
+    await getConfiguredAssetWorkflow('Encounter');
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       expect.stringContaining('/api/admin/data-assets'),
       expect.stringContaining('/api/admin/data-assets/Custom%2FType'),
       expect.stringContaining('/api/admin/data-assets/Encounter/rules'),
+      expect.stringContaining('/api/admin/data-assets/Encounter/workflow'),
     ]);
     expect(getAuthenticatedHeaders).toHaveBeenCalledWith(
       expect.objectContaining({ 'X-Tenant-ID': expect.any(String) }),
@@ -46,6 +49,9 @@ describe('configured asset API', () => {
     );
     await expect(getConfiguredAsset('Missing')).rejects.toThrow(
       'no longer configured',
+    );
+    await expect(getConfiguredAssetWorkflow('Encounter')).rejects.toThrow(
+      'No workflow definition was found',
     );
   });
 });
