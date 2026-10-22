@@ -459,6 +459,29 @@ describe('configured assets catalog', () => {
     ).toBeTruthy();
   });
 
+  it('renders onboarding session history as cards on mobile', async () => {
+    vi.mocked(listOnboardingSessions).mockResolvedValue([
+      {
+        sessionId: 'claim-request-session',
+        entityName: 'ClaimRequest',
+        status: 'IN_PROGRESS',
+        currentPhase: 1,
+        updatedAt: '2026-10-22T10:30:00Z',
+      },
+    ]);
+    render(<ConfiguredAssetsCatalog />);
+    await screen.findByRole('button', { name: 'View Encounter configuration' });
+    fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
+
+    const card = await screen.findByRole('article');
+    expect(card.textContent).toContain('ClaimRequest');
+    expect(card.textContent).toContain('1/3');
+    expect(card.textContent).toContain('In progress');
+    expect(within(card).getByRole('button', { name: 'Resume' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Abandon' })).toBeTruthy();
+    expect(card.parentElement?.className).toContain('sm:hidden');
+  });
+
   it('shows the inferred entity name for unnamed phase-one history summaries', async () => {
     vi.mocked(listOnboardingSessions).mockResolvedValue([
       {
@@ -477,7 +500,7 @@ describe('configured assets catalog', () => {
     await screen.findByRole('button', { name: 'View Encounter configuration' });
     fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
 
-    expect(await screen.findByText('BusinessApplication')).toBeTruthy();
+    expect((await screen.findAllByText('BusinessApplication')).length).toBe(2);
     expect(screen.queryByText('Untitled')).toBeNull();
     expect(getOnboardingSession).toHaveBeenCalledWith(
       'business-application-session',
@@ -572,7 +595,7 @@ describe('configured assets catalog', () => {
     render(<ConfiguredAssetsCatalog />);
     await screen.findByRole('button', { name: 'View Encounter configuration' });
     fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Abandon' }));
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Abandon' }))[0]);
 
     const dialog = await screen.findByRole('dialog', {
       name: 'Abandon this onboarding session?',

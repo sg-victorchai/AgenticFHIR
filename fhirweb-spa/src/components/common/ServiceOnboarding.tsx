@@ -1263,8 +1263,80 @@ export default function ServiceOnboarding({
           No onboarding sessions yet.
         </p>
       ) : (
-        <div className="overflow-x-auto border-y border-slate-200">
-          <table className="w-full min-w-[700px] text-left text-sm">
+        <>
+          <div className="space-y-3 sm:hidden">
+            {sessions.map((item) => (
+              <article
+                key={item.sessionId}
+                className="border border-slate-200 bg-white p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="min-w-0 break-words text-sm font-semibold text-slate-900">
+                    {item.entityName || 'Untitled'}
+                  </h3>
+                  <span className="shrink-0 text-xs text-slate-500">
+                    {item.currentPhase || 1}/3
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                  <span
+                    className={
+                      item.status === 'COMPLETE'
+                        ? 'font-medium text-emerald-700'
+                        : item.status === 'ABANDONED'
+                          ? 'text-slate-500'
+                          : 'font-medium text-amber-700'
+                    }
+                  >
+                    {item.status === 'COMPLETE'
+                      ? '✓ Complete'
+                      : item.status === 'ABANDONED'
+                        ? 'Abandoned'
+                        : '⏸ In progress'}
+                  </span>
+                  <time className="text-slate-500">
+                    {item.updatedAt
+                      ? new Date(item.updatedAt).toLocaleString()
+                      : '—'}
+                  </time>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-t border-slate-100 pt-2 text-sm">
+                  {item.status === 'COMPLETE' ? (
+                    <button
+                      type="button"
+                      onClick={() => onViewAsset(item.entityName || '')}
+                      className="font-medium text-cyan-800 underline"
+                    >
+                      View asset
+                    </button>
+                  ) : item.status !== 'ABANDONED' ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void resume(item.sessionId)}
+                        className="font-medium text-cyan-800 underline disabled:opacity-50"
+                      >
+                        Resume
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => requestAbandon(item)}
+                        className="font-medium text-rose-700 underline disabled:opacity-50"
+                      >
+                        Abandon
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">No actions</span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto border-y border-slate-200 sm:block">
+            <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500">
               <tr>
                 {['Entity', 'Phase', 'Status', 'Last updated', 'Actions'].map(
@@ -1332,8 +1404,9 @@ export default function ServiceOnboarding({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       )}
       {abandoningSession && (
         <div
