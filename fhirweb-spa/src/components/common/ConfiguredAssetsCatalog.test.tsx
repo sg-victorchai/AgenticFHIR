@@ -475,7 +475,7 @@ describe('configured assets catalog', () => {
 
     const card = await screen.findByRole('article');
     expect(card.textContent).toContain('ClaimRequest');
-    expect(card.textContent).toContain('1/3');
+    expect(card.textContent).toContain('1/4');
     expect(card.textContent).toContain('In progress');
     expect(within(card).getByRole('button', { name: 'Resume' })).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Abandon' })).toBeTruthy();

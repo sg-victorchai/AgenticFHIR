@@ -1267,7 +1267,7 @@ export default function ServiceOnboarding({
                     {item.entityName || 'Untitled'}
                   </h3>
                   <span className="shrink-0 text-xs text-slate-500">
-                    {item.currentPhase || 1}/3
+                    {item.currentPhase || 1}/4
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
@@ -1349,7 +1349,7 @@ export default function ServiceOnboarding({
                     <td className="px-3 py-3 font-medium">
                       {item.entityName || 'Untitled'}
                     </td>
-                    <td className="px-3 py-3">{item.currentPhase || 1}/3</td>
+                    <td className="px-3 py-3">{item.currentPhase || 1}/4</td>
                     <td className="px-3 py-3">
                       {item.status === 'COMPLETE'
                         ? '✓ Complete'
