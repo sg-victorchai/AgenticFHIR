@@ -610,13 +610,17 @@ const AiProvenancePanel: React.FC<{ resource: any }> = ({ resource }) => {
   );
 
   return (
-    <div className="mt-3 rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+    <div className="mt-3 w-full min-w-0 rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
       <p className="font-semibold">AI-generated resource provenance</p>
       <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label} className="min-w-0 py-1">
             <dt className="font-medium text-red-800">{label}</dt>
-            <dd className="break-words text-red-900">{String(value)}</dd>
+            <dd
+              className={`${label === 'Mission ID' ? 'break-all' : 'break-words'} min-w-0 text-red-900`}
+            >
+              {String(value)}
+            </dd>
           </div>
         ))}
       </dl>
@@ -4308,7 +4312,6 @@ const PatientRecordsPage: React.FC = () => {
                         <div className="mt-1">
                           <StatusBadge status={obs.status} />
                         </div>
-                        <AiProvenancePanel resource={obs} />
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">
@@ -4392,6 +4395,7 @@ const PatientRecordsPage: React.FC = () => {
                           {obs.note?.[0]?.text || '—'}
                         </div>
                       </div>
+                      <AiProvenancePanel resource={obs} />
                     </div>
                   )}
                 </div>

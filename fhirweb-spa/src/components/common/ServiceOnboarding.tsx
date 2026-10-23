@@ -1337,73 +1337,76 @@ export default function ServiceOnboarding({
           </div>
           <div className="hidden overflow-x-auto border-y border-slate-200 sm:block">
             <table className="w-full min-w-[700px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
-              <tr>
-                {['Entity', 'Phase', 'Status', 'Last updated', 'Actions'].map(
-                  (label) => (
-                    <th key={label} className="px-3 py-2">
-                      {label}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((item) => (
-                <tr key={item.sessionId} className="border-t border-slate-100">
-                  <td className="px-3 py-3 font-medium">
-                    {item.entityName || 'Untitled'}
-                  </td>
-                  <td className="px-3 py-3">{item.currentPhase || 1}/3</td>
-                  <td className="px-3 py-3">
-                    {item.status === 'COMPLETE'
-                      ? '✓ Complete'
-                      : item.status === 'ABANDONED'
-                        ? 'Abandoned'
-                        : '⏸ In progress'}
-                  </td>
-                  <td className="px-3 py-3">
-                    {item.updatedAt
-                      ? new Date(item.updatedAt).toLocaleString()
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex gap-3">
-                      {item.status === 'COMPLETE' ? (
-                        <button
-                          type="button"
-                          onClick={() => onViewAsset(item.entityName || '')}
-                          className="text-cyan-800 underline"
-                        >
-                          View asset
-                        </button>
-                      ) : item.status !== 'ABANDONED' ? (
-                        <>
+              <thead className="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                  {['Entity', 'Phase', 'Status', 'Last updated', 'Actions'].map(
+                    (label) => (
+                      <th key={label} className="px-3 py-2">
+                        {label}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((item) => (
+                  <tr
+                    key={item.sessionId}
+                    className="border-t border-slate-100"
+                  >
+                    <td className="px-3 py-3 font-medium">
+                      {item.entityName || 'Untitled'}
+                    </td>
+                    <td className="px-3 py-3">{item.currentPhase || 1}/3</td>
+                    <td className="px-3 py-3">
+                      {item.status === 'COMPLETE'
+                        ? '✓ Complete'
+                        : item.status === 'ABANDONED'
+                          ? 'Abandoned'
+                          : '⏸ In progress'}
+                    </td>
+                    <td className="px-3 py-3">
+                      {item.updatedAt
+                        ? new Date(item.updatedAt).toLocaleString()
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-3">
+                        {item.status === 'COMPLETE' ? (
                           <button
                             type="button"
-                            disabled={busy}
-                            onClick={() => void resume(item.sessionId)}
+                            onClick={() => onViewAsset(item.entityName || '')}
                             className="text-cyan-800 underline"
                           >
-                            Resume
+                            View asset
                           </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => requestAbandon(item)}
-                            className="text-rose-700 underline"
-                          >
-                            Abandon
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+                        ) : item.status !== 'ABANDONED' ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void resume(item.sessionId)}
+                              className="text-cyan-800 underline"
+                            >
+                              Resume
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => requestAbandon(item)}
+                              className="text-rose-700 underline"
+                            >
+                              Abandon
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </>

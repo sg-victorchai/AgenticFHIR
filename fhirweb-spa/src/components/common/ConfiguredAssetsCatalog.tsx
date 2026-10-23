@@ -697,19 +697,21 @@ export default function ConfiguredAssetsCatalog({
       )}
       {!selected && view === 'detail' && !loading && !error && (
         <>
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <input
-              aria-label="Filter configured assets"
-              placeholder="Filter by resource, source, or workflow..."
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
-            />
-            <span className="text-xs text-slate-500">
-              {assets.length} data assets
-            </span>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+              <input
+                aria-label="Filter configured assets"
+                placeholder="Filter by resource, source, or workflow..."
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
+              />
+              <span className="shrink-0 text-xs text-slate-500">
+                {assets.length} data assets
+              </span>
+            </div>
             {canManage && (
-              <>
+              <div className="flex items-center gap-2 sm:ml-auto">
                 <button
                   type="button"
                   onClick={() => setView('sessions')}
@@ -724,7 +726,7 @@ export default function ConfiguredAssetsCatalog({
                 >
                   + New Asset
                 </button>
-              </>
+              </div>
             )}
           </div>
           {assetActionError && (
@@ -957,8 +959,8 @@ export default function ConfiguredAssetsCatalog({
                         </span>
                       )}
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                      <span className="text-xs font-medium text-slate-500">
+                    <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
+                      <span className="basis-full text-xs font-medium text-slate-500 sm:basis-auto">
                         {workflowLoading
                           ? 'Loading steps…'
                           : workflow
@@ -970,7 +972,7 @@ export default function ConfiguredAssetsCatalog({
                         aria-expanded={workflowDetailsOpen}
                         aria-controls="configured-workflow-details"
                         onClick={() => setWorkflowDetailsOpen((open) => !open)}
-                        className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                        className="max-w-full rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-100"
                       >
                         {workflowDetailsOpen
                           ? 'Hide definition'
@@ -981,7 +983,7 @@ export default function ConfiguredAssetsCatalog({
                           <button
                             type="button"
                             onClick={openWorkflowDialog}
-                            className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            className="max-w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                           >
                             Change
                           </button>
@@ -997,7 +999,7 @@ export default function ConfiguredAssetsCatalog({
                                 : 'Remove workflow assignment'
                             }
                             onClick={() => void removeWorkflowAssignment()}
-                            className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="max-w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Remove
                           </button>

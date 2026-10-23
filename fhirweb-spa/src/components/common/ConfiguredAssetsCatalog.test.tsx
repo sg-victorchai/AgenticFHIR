@@ -595,7 +595,9 @@ describe('configured assets catalog', () => {
     render(<ConfiguredAssetsCatalog />);
     await screen.findByRole('button', { name: 'View Encounter configuration' });
     fireEvent.click(screen.getByRole('button', { name: 'My Sessions' }));
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Abandon' }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: 'Abandon' }))[0],
+    );
 
     const dialog = await screen.findByRole('dialog', {
       name: 'Abandon this onboarding session?',
