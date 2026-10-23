@@ -24,6 +24,7 @@ import BusinessRuleManager from './BusinessRuleManager';
 import EventTriggerManager from './EventTriggerManager';
 import ServiceOnboarding from './ServiceOnboarding';
 import AiBrandIcon from './AiBrandIcon';
+import ExpandableIntro from './ExpandableIntro';
 import { getOidcUser, hasRealmRole } from '../../services/auth/oidc';
 import JSZip from 'jszip';
 
@@ -697,6 +698,19 @@ export default function ConfiguredAssetsCatalog({
       )}
       {!selected && view === 'detail' && !loading && !error && (
         <>
+          <ExpandableIntro>
+            Data Foundry provides a governed foundation for the data your
+            business depends on. Define standard FHIR resources or create custom
+            resources tailored to your domain, then store data within the
+            platform or connect existing databases and APIs. A consistent FHIR
+            interface, combined with configurable workflows, business rules, and
+            reliable event delivery, helps your applications and AI agents work
+            from trusted, interoperable data. The platform normalizes
+            terminology to create a semantic ontology layer that helps AI agents
+            understand how data concepts relate across resources and systems—all
+            without forcing a wholesale migration or custom integration for
+            every system.
+          </ExpandableIntro>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex min-w-0 items-center gap-3 sm:flex-1">
               <input

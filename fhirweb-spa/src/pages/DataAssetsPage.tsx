@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ConfiguredAssetsCatalog from '../components/common/ConfiguredAssetsCatalog';
+import ExpandableIntro from '../components/common/ExpandableIntro';
 import {
   CapabilityResource,
   DataAssetDetails,
@@ -521,6 +522,16 @@ const DataAssetsPage: React.FC = () => {
         )}
         {!selected && (
           <>
+            <ExpandableIntro>
+              The Resource Catalogue gives your organization a clear, current
+              view of its data capabilities. Explore each resource’s data model,
+              search parameters, and operation definitions in one place—ready to
+              use without relying on separate, manually maintained
+              documentation. As your Data Assets are defined, their
+              specifications become a shared enterprise knowledge base that
+              helps teams and AI agents understand, discover, and confidently
+              build on the data your organization depends on.
+            </ExpandableIntro>
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="min-w-0 flex-1">
                 <span className="sr-only">Filter data assets</span>

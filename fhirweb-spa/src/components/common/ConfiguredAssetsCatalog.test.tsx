@@ -761,6 +761,13 @@ describe('configured assets catalog', () => {
         name: 'View Observation configuration',
       }),
     ).toBeTruthy();
+    const dataAssetsIntro = screen.getByText(
+      /Data Foundry provides a governed foundation/,
+    );
+    expect(dataAssetsIntro).toBeTruthy();
+    expect(dataAssetsIntro.textContent).toContain(
+      'The platform normalizes terminology to create a semantic ontology layer',
+    );
     expect(screen.getByText('Disabled')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'patient-visit' },
@@ -771,6 +778,9 @@ describe('configured assets catalog', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'View Encounter configuration' }),
     );
+    expect(
+      screen.queryByText(/Data Foundry provides a governed foundation/),
+    ).toBeNull();
     expect(await screen.findByText('Embedding model: bge-m3')).toBeTruthy();
     expect(screen.queryByText('incorrect-stage')).toBeNull();
     expect(

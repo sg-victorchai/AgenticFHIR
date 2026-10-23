@@ -121,6 +121,9 @@ describe('DataAssetsPage', () => {
     ).toBeTruthy();
     expect(document.title).toBe('Data Foundry Service | AgentiFHIR Platform');
     expect(await screen.findAllByText('Read')).toHaveLength(3);
+    expect(
+      screen.getByText(/The Resource Catalogue gives your organization/),
+    ).toBeTruthy();
     const resourceTab = screen.getByRole('tab', { name: 'Resource Catalog' });
     expect(resourceTab.getAttribute('aria-selected')).toBe('true');
     fireEvent.keyDown(resourceTab, { key: 'ArrowRight' });
@@ -129,6 +132,12 @@ describe('DataAssetsPage', () => {
         .getByRole('tab', { name: 'Data Assets' })
         .getAttribute('aria-selected'),
     ).toBe('true');
+    expect(
+      screen
+        .getByText(/The Resource Catalogue gives your organization/)
+        .closest('[role="tabpanel"]')
+        ?.hasAttribute('hidden'),
+    ).toBe(true);
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Data Assets' }), {
       key: 'Home',
     });
