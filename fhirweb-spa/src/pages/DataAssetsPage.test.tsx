@@ -214,6 +214,45 @@ describe('DataAssetsPage', () => {
     ).toBeTruthy();
   });
 
+  it('opens the Encounter data asset detail from the Resource Catalog intro link', async () => {
+    const encounterAsset = {
+      resourceType: 'Encounter',
+      authoringSource: 'platform',
+      enabled: true,
+      fhirVersions: ['R5'],
+      businessRuleCount: 0,
+      workflowName: null,
+    };
+    serviceMocks.listDataAssets.mockResolvedValue([{ type: 'Encounter' }]);
+    vi.mocked(listConfiguredAssets).mockResolvedValue([encounterAsset]);
+    vi.mocked(getConfiguredAsset).mockResolvedValue({
+      ...encounterAsset,
+      interactions: { read: true },
+      profileUrls: [],
+      eventTriggerCount: 0,
+      nlSearchSynonyms: [],
+      embeddingEnabled: false,
+    });
+    vi.mocked(getAssetBusinessRules).mockResolvedValue([]);
+
+    render(<DataAssetsPage />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View the Encounter data asset example',
+      }),
+    );
+
+    expect(
+      screen
+        .getByRole('tab', { name: 'Data Assets' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      await screen.findByRole('heading', { name: 'Encounter' }),
+    ).toBeTruthy();
+    expect(getConfiguredAsset).toHaveBeenCalledWith('Encounter');
+  });
+
   it('returns from the resource catalog to the same configured asset detail', async () => {
     const asset = {
       resourceType: 'Encounter',

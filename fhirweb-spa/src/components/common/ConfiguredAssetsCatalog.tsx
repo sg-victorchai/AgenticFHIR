@@ -253,8 +253,12 @@ function AiActionLabel({ children }: { children: string }) {
 
 export default function ConfiguredAssetsCatalog({
   onViewResource,
+  initialResourceType,
+  onInitialResourceOpened,
 }: {
   onViewResource?: (resourceType: string) => void;
+  initialResourceType?: string | null;
+  onInitialResourceOpened?: () => void;
 }) {
   const [canManage, setCanManage] = useState(false);
   const [canDeleteAssets, setCanDeleteAssets] = useState(false);
@@ -300,6 +304,13 @@ export default function ConfiguredAssetsCatalog({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!initialResourceType) return;
+    setSelected(initialResourceType);
+    setView('detail');
+    onInitialResourceOpened?.();
+  }, [initialResourceType, onInitialResourceOpened]);
 
   useEffect(() => {
     let active = true;

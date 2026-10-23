@@ -324,6 +324,9 @@ const StructureDefinitionTable: React.FC<{ tree: StructureTreeNode }> = ({
 const DataAssetsPage: React.FC = () => {
   const [tab, setTab] = useState<'resources' | 'configured'>('resources');
   const [returnToAsset, setReturnToAsset] = useState<string | null>(null);
+  const [configuredAssetToOpen, setConfiguredAssetToOpen] = useState<
+    string | null
+  >(null);
   const [resources, setResources] = useState<CapabilityResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -493,6 +496,8 @@ const DataAssetsPage: React.FC = () => {
           hidden={tab !== 'configured'}
         >
           <ConfiguredAssetsCatalog
+            initialResourceType={configuredAssetToOpen}
+            onInitialResourceOpened={() => setConfiguredAssetToOpen(null)}
             onViewResource={(resourceType) => {
               setReturnToAsset(resourceType);
               setSelected(
@@ -530,7 +535,17 @@ const DataAssetsPage: React.FC = () => {
               documentation. As your Data Assets are defined, their
               specifications become a shared enterprise knowledge base that
               helps teams and AI agents understand, discover, and confidently
-              build on the data your organization depends on.
+              build on the data your organization depends on.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setConfiguredAssetToOpen('Encounter');
+                  setTab('configured');
+                }}
+                className="font-semibold text-cyan-800 underline decoration-cyan-300 underline-offset-2 hover:text-cyan-950 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                View the Encounter data asset example
+              </button>
             </ExpandableIntro>
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="min-w-0 flex-1">

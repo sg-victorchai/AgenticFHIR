@@ -1,6 +1,6 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
-export default function ExpandableIntro({ children }: { children: string }) {
+export default function ExpandableIntro({ children }: { children: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const paragraphId = useId();
 
