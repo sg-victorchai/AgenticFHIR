@@ -214,7 +214,7 @@ describe('DataAssetsPage', () => {
     ).toBeTruthy();
   });
 
-  it('opens the Encounter data asset detail from the Resource Catalog intro link', async () => {
+  it('opens the Encounter data asset detail from the Data Assets intro link', async () => {
     const encounterAsset = {
       resourceType: 'Encounter',
       authoringSource: 'platform',
@@ -223,7 +223,6 @@ describe('DataAssetsPage', () => {
       businessRuleCount: 0,
       workflowName: null,
     };
-    serviceMocks.listDataAssets.mockResolvedValue([{ type: 'Encounter' }]);
     vi.mocked(listConfiguredAssets).mockResolvedValue([encounterAsset]);
     vi.mocked(getConfiguredAsset).mockResolvedValue({
       ...encounterAsset,
@@ -236,6 +235,8 @@ describe('DataAssetsPage', () => {
     vi.mocked(getAssetBusinessRules).mockResolvedValue([]);
 
     render(<DataAssetsPage />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Data Assets' }));
+    await screen.findByText('1 data assets');
     fireEvent.click(
       await screen.findByRole('button', {
         name: 'View the Encounter data asset example',

@@ -253,12 +253,8 @@ function AiActionLabel({ children }: { children: string }) {
 
 export default function ConfiguredAssetsCatalog({
   onViewResource,
-  initialResourceType,
-  onInitialResourceOpened,
 }: {
   onViewResource?: (resourceType: string) => void;
-  initialResourceType?: string | null;
-  onInitialResourceOpened?: () => void;
 }) {
   const [canManage, setCanManage] = useState(false);
   const [canDeleteAssets, setCanDeleteAssets] = useState(false);
@@ -304,13 +300,6 @@ export default function ConfiguredAssetsCatalog({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!initialResourceType) return;
-    setSelected(initialResourceType);
-    setView('detail');
-    onInitialResourceOpened?.();
-  }, [initialResourceType, onInitialResourceOpened]);
 
   useEffect(() => {
     let active = true;
@@ -720,7 +709,17 @@ export default function ConfiguredAssetsCatalog({
             terminology to create a semantic ontology layer that helps AI agents
             understand how data concepts relate across resources and systems—all
             without forcing a wholesale migration or custom integration for
-            every system.
+            every system.{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setSelected('Encounter');
+                setView('detail');
+              }}
+              className="font-semibold text-cyan-800 underline decoration-cyan-300 underline-offset-2 hover:text-cyan-950 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+            >
+              View the Encounter data asset example
+            </button>
           </ExpandableIntro>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex min-w-0 items-center gap-3 sm:flex-1">
