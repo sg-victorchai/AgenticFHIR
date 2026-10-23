@@ -17,7 +17,7 @@ import {
 } from '../../services/configuredAssetsService';
 
 type ChatMessage = { role: 'assistant' | 'user' | 'system'; content: string };
-const phases = ['Model', 'APIs', 'Workflow'];
+const phases = ['Model', 'APIs', 'Workflow', 'Data Sources'];
 const storageSkill = 'fhir4java-map-entity-storage';
 const ruleSkill = 'fhir4java-author-business-rule';
 const defaultSkill = 'fhir4java-model-resource-entity';
@@ -32,7 +32,7 @@ const reconcilePhases = [
   { skill: 'fhir4java-model-resource-entity', label: 'Model' },
   { skill: 'fhir4java-define-entity-apis', label: 'APIs' },
   { skill: 'fhir4java-model-business-workflow', label: 'Workflow' },
-  { skill: storageSkill, label: 'Storage' },
+  { skill: storageSkill, label: 'Data Sources' },
 ];
 
 const contextForSkill = (entrySkill?: string | null) =>
@@ -827,22 +827,14 @@ export default function ServiceOnboarding({
             </button>
           </div>
         </header>
-        {isStorage ? (
-          <div className="mb-2 border-y border-slate-200 py-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-900">
-              ④ Storage {isReconcile ? '↻ Updating' : ''}
-            </span>
-          </div>
-        ) : isRuleAuthoring ? null : (
+        {isRuleAuthoring ? null : (
           <nav
             aria-label="Onboarding phases"
-            className="mb-2 flex items-center gap-2 border-y border-slate-200 py-2"
+            className="mb-2 flex items-center gap-2 overflow-x-auto border-y border-slate-200 py-2"
           >
             {phaseItems.map(({ label }, index) => {
               const number = index + 1;
-              const completedPhase = isReconcile
-                ? number < activePhase
-                : number < activePhase;
+              const completedPhase = number < activePhase;
               const active = number === activePhase;
               return (
                 <div key={label} className="flex flex-1 items-center gap-1.5">

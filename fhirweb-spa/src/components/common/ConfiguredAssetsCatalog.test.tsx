@@ -513,6 +513,10 @@ describe('configured assets catalog', () => {
     expect(
       await screen.findByRole('heading', { name: 'AI-assisted Setup' }),
     ).toBeTruthy();
+    const phaseStepper = screen.getByRole('navigation', {
+      name: 'Onboarding phases',
+    });
+    expect(within(phaseStepper).getByText('Data Sources')).toBeTruthy();
     expect(createOnboardingSession).not.toHaveBeenCalled();
     const resizeHandle = screen.getByRole('separator', {
       name: 'Resize message input',
