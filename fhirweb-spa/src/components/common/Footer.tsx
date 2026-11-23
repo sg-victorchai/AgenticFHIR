@@ -14,7 +14,7 @@ const Footer: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex space-x-6">
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
             <Link
               to="/about"
               className="text-sm text-gray-300 hover:text-white transition-colors"
@@ -34,10 +34,10 @@ const Footer: React.FC = () => {
               Terms of Service
             </Link>
             <Link
-              to="https://www.linkedin.com/in/victorchai/"
+              to="/contact"
               className="text-sm text-gray-300 hover:text-white transition-colors"
             >
-              Contact Us
+              Contact
             </Link>
           </div>
         </div>

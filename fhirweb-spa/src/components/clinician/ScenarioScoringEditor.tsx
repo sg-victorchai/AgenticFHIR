@@ -1,0 +1,559 @@
+import React, { useEffect, useState } from 'react';
+import { agentBuilderService } from '../../services/agentBuilderService';
+
+const SearchParameterSelect: React.FC<{
+  resourceType: string;
+  value: string;
+  onChange: (value: string) => void;
+  className: string;
+}> = ({ resourceType, value, onChange, className }) => {
+  const [parameters, setParameters] = useState<
+    Array<{ code: string; description?: string }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setParameters([]);
+    setError(null);
+    void agentBuilderService
+      .getSearchParameters(resourceType)
+      .then(
+        (result) => {
+          if (active) setParameters(result);
+        },
+        (failure: unknown) => {
+          if (active)
+            setError(
+              failure instanceof Error
+                ? failure.message
+                : 'Unable to load search parameters.',
+            );
+        },
+      )
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [resourceType, retry]);
+  return (
+    <>
+      <select
+        required
+        value={value}
+        disabled={loading || Boolean(error)}
+        className={className}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">
+          {loading
+            ? 'Loading parameters...'
+            : error
+              ? 'Parameters unavailable'
+              : parameters.length
+                ? 'Select parameter'
+                : 'No parameters available'}
+        </option>
+        {value && !parameters.some((parameter) => parameter.code === value) && (
+          <option value={value}>{value} (saved)</option>
+        )}
+        {parameters.map((parameter) => (
+          <option
+            key={parameter.code}
+            value={parameter.code}
+            title={parameter.description}
+          >
+            {parameter.code}
+          </option>
+        ))}
+      </select>
+      {error && (
+        <span role="alert" className="mt-1 block text-xs text-rose-700">
+          {error}{' '}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => setRetry((current) => current + 1)}
+          >
+            Retry
+          </button>
+        </span>
+      )}
+    </>
+  );
+};
+
+export interface QueryPatternDraft {
+  resourceType: string;
+  filters: Array<{ name: string; value: string }>;
+}
+
+export interface ScenarioScoringDraft {
+  generateRubric: boolean;
+  criteria: string;
+  queries: QueryPatternDraft[];
+  expectedWriteTypes: string[];
+}
+
+export const newScenarioScoring = (): ScenarioScoringDraft => ({
+  generateRubric: true,
+  criteria: '',
+  queries: [],
+  expectedWriteTypes: [],
+});
+
+export const expectedWriteTypesFromBundle = (bundle: unknown): string[] => {
+  if (typeof bundle === 'string') {
+    try {
+      bundle = JSON.parse(bundle) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!bundle || typeof bundle !== 'object') return [];
+  const entries = (bundle as { entry?: unknown }).entry;
+  if (!Array.isArray(entries)) return [];
+  return [
+    ...new Set(
+      entries
+        .map(
+          (entry) =>
+            (entry as { resource?: { resourceType?: unknown } })?.resource
+              ?.resourceType,
+        )
+        .filter(
+          (type): type is string =>
+            typeof type === 'string' && type !== 'Bundle',
+        ),
+    ),
+  ];
+};
+
+export const duplicateQueryParameters = (query: QueryPatternDraft) => {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const filter of query.filters) {
+    const name = filter.name.trim();
+    if (!name) continue;
+    const normalized = name.toLowerCase();
+    if (seen.has(normalized)) duplicates.add(name);
+    seen.add(normalized);
+  }
+  return [...duplicates];
+};
+
+export const buildScenarioScoring = (draft: ScenarioScoringDraft) => {
+  const responseCriteria = draft.criteria
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!draft.generateRubric && !responseCriteria.length) {
+    throw new Error(
+      'Add at least one response criterion or enable automatic criteria.',
+    );
+  }
+  const expectedQueryPatterns = draft.queries.map((query) => {
+    const expectedParams: Record<string, string> = {};
+    for (const filter of query.filters) {
+      const name = filter.name.trim();
+      const value = filter.value.trim();
+      if (!name || !value)
+        throw new Error(
+          'Each query filter needs a parameter name and an expected value.',
+        );
+      if (
+        Object.keys(expectedParams).some(
+          (existing) => existing.toLowerCase() === name.toLowerCase(),
+        )
+      )
+        throw new Error(
+          `Query parameter "${name}" is repeated. Use a single expected value per parameter.`,
+        );
+      expectedParams[name] = value;
+    }
+    return { resourceType: query.resourceType, expectedParams };
+  });
+  return {
+    generateRubric: draft.generateRubric,
+    ...(responseCriteria.length ? { responseCriteria } : {}),
+    expectedQueryPatterns,
+    ...(draft.expectedWriteTypes.length
+      ? {
+          expectedWrites: {
+            resourceType: 'Bundle',
+            type: 'collection',
+            entry: [...new Set(draft.expectedWriteTypes)].map(
+              (resourceType) => ({
+                resource: { resourceType },
+              }),
+            ),
+          },
+        }
+      : {}),
+  };
+};
+
+const resourceTypes = [
+  ['Patient', 'Patient demographics'],
+  ['Observation', 'Measurements and lab results'],
+  ['Condition', 'Diagnoses'],
+  ['MedicationRequest', 'Medication orders'],
+  ['AllergyIntolerance', 'Allergies'],
+  ['Procedure', 'Procedures'],
+  ['ServiceRequest', 'Service orders'],
+  ['Encounter', 'Visits'],
+  ['CarePlan', 'Care plans'],
+  ['DiagnosticReport', 'Diagnostic reports'],
+];
+const inputClass =
+  'mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm';
+const buttonClass =
+  'rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium hover:bg-slate-50';
+
+const ScenarioScoringEditor: React.FC<{
+  value: ScenarioScoringDraft;
+  onChange: (value: ScenarioScoringDraft) => void;
+  showExpectedWrites?: boolean;
+}> = ({ value, onChange, showExpectedWrites = false }) => {
+  const changeQuery = (index: number, query: QueryPatternDraft) =>
+    onChange({
+      ...value,
+      queries: value.queries.map((current, position) =>
+        position === index ? query : current,
+      ),
+    });
+  return (
+    <fieldset className="space-y-4 border-t border-slate-200 pt-4 xl:col-span-2">
+      <legend className="text-sm font-semibold text-slate-900">
+        4. Scoring configuration
+      </legend>
+      <section className="space-y-3 border-b border-slate-200 pb-4">
+        <h3 className="text-base font-semibold text-slate-900">
+          Automatic response baseline
+        </h3>
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+          <input
+            type="checkbox"
+            checked={value.generateRubric}
+            onChange={(event) =>
+              onChange({ ...value, generateRubric: event.target.checked })
+            }
+          />
+          Generate baseline response criteria automatically
+        </label>
+        <details>
+          <summary className="cursor-pointer text-xs font-semibold text-cyan-800">
+            About automatic criteria
+          </summary>
+          <aside
+            aria-label="Automatic criteria guidance"
+            className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm leading-relaxed text-cyan-950"
+          >
+            <p className="font-semibold">A quick baseline for a new persona</p>
+            <p className="mt-1">
+              The server asks AI to generate 3–5 criteria using approximately
+              the first 800 characters of the persona definition. These criteria
+              can be generic because the AI does not see all clinical rules. Use
+              this for an initial run, then review the generated rubric in the
+              saved scenario and create a new scenario with specific criteria
+              for meaningful version comparisons.
+            </p>
+          </aside>
+        </details>
+      </section>
+      <section className="space-y-3 border-b border-slate-200 pb-4">
+        <h3 className="text-base font-semibold text-slate-900">
+          Response quality criteria
+        </h3>
+        <label className="block text-sm font-medium text-slate-700">
+          What should a good response include?
+          <textarea
+            required={!value.generateRubric}
+            rows={5}
+            value={value.criteria}
+            onChange={(event) =>
+              onChange({ ...value, criteria: event.target.value })
+            }
+            className={`${inputClass} block resize-y font-normal leading-relaxed placeholder:font-normal placeholder:text-slate-400`}
+            placeholder="e.g. States the patient's most recent blood pressure numerically"
+          />
+        </label>
+        <p className="text-xs text-slate-500">
+          One criterion per line.{' '}
+          {value.generateRubric
+            ? 'Optional with automatic generation enabled.'
+            : 'At least one criterion is required.'}
+        </p>
+        <details>
+          <summary className="cursor-pointer text-xs font-semibold text-cyan-800">
+            About response quality scoring
+          </summary>
+          <aside
+            aria-label="Response quality guidance"
+            className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700"
+          >
+            <p className="font-semibold">
+              Specific criteria make scores useful
+            </p>
+            <p className="mt-1">
+              For manual criteria, enter one measurable statement per line. The
+              AI judge scores each statement from 0 to 1 and averages them into
+              Response Quality. Prefer “States the systolic value numerically”
+              to “Provides blood pressure information,” and “Does not fabricate
+              lab values” to “Is accurate.” Include expected facts, thresholds,
+              actions, and guardrails relevant to this scenario.
+            </p>
+          </aside>
+        </details>
+      </section>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Query correctness
+            </h3>
+          </div>
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={() =>
+              onChange({
+                ...value,
+                queries: [
+                  ...value.queries,
+                  { resourceType: 'Patient', filters: [] },
+                ],
+              })
+            }
+          >
+            Add expected data source
+          </button>
+        </div>
+        <details>
+          <summary className="cursor-pointer text-xs font-semibold text-cyan-800">
+            About expected data queries
+          </summary>
+          <aside
+            aria-label="Query correctness guidance"
+            className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-relaxed text-amber-950"
+          >
+            <p className="font-semibold">
+              Check that the agent queries the right records
+            </p>
+            <p className="mt-1">
+              Choose each FHIR data source the agent must query. Optional
+              filters require specific search parameters: for blood pressure
+              observations, add parameter “code” with value “85354-9”; for
+              hypertension diagnoses, use “code” with “38341003”. Leave filters
+              empty when any query to that data source is sufficient. Use each
+              parameter only once per data source; to check another value for
+              the same parameter, add a separate data source row. A matching
+              query must include every filter; expected values use substring
+              matching. Ask a data engineer to confirm unfamiliar parameter
+              names or clinical codes.
+            </p>
+            <p className="mt-2">
+              Query Correctness is the percentage of expected queries covered.
+              Three of four matches scores 75%. With no expected queries, the
+              score stays at a neutral 50% and does not indicate whether the
+              agent queried correctly.
+            </p>
+          </aside>
+        </details>
+        {value.queries.map((query, index) => (
+          <div key={index} className="space-y-3 border-b border-slate-200 pb-3">
+            <div className="flex items-end gap-2">
+              <label className="min-w-0 flex-1 text-xs font-medium text-slate-700">
+                Expected data source {index + 1}
+                <select
+                  value={query.resourceType}
+                  onChange={(event) =>
+                    changeQuery(index, {
+                      ...query,
+                      resourceType: event.target.value,
+                      filters: query.filters.map((filter) => ({
+                        ...filter,
+                        name: '',
+                      })),
+                    })
+                  }
+                  className={inputClass}
+                >
+                  {resourceTypes.map(([type]) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`${buttonClass} shrink-0`}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    queries: value.queries.filter(
+                      (_, position) => position !== index,
+                    ),
+                  })
+                }
+              >
+                Remove
+              </button>
+            </div>
+            {query.filters.map((filter, filterIndex) => (
+              <div
+                key={filterIndex}
+                className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+              >
+                <label className="min-w-0 text-xs text-slate-700">
+                  Search parameter
+                  <SearchParameterSelect
+                    resourceType={query.resourceType}
+                    value={filter.name}
+                    className={inputClass}
+                    onChange={(name) =>
+                      changeQuery(index, {
+                        ...query,
+                        filters: query.filters.map((current, position) =>
+                          position === filterIndex
+                            ? { ...current, name }
+                            : current,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <label className="min-w-0 flex-1 text-xs text-slate-700">
+                  Expected value
+                  <input
+                    required
+                    value={filter.value}
+                    placeholder="e.g. 85354-9"
+                    className={inputClass}
+                    onChange={(event) =>
+                      changeQuery(index, {
+                        ...query,
+                        filters: query.filters.map((current, position) =>
+                          position === filterIndex
+                            ? { ...current, value: event.target.value }
+                            : current,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={() =>
+                    changeQuery(index, {
+                      ...query,
+                      filters: query.filters.filter(
+                        (_, position) => position !== filterIndex,
+                      ),
+                    })
+                  }
+                >
+                  Remove filter
+                </button>
+              </div>
+            ))}
+            {duplicateQueryParameters(query).length > 0 && (
+              <p
+                role="alert"
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+              >
+                Search parameter
+                {duplicateQueryParameters(query).length > 1 ? 's' : ''}{' '}
+                <strong>{duplicateQueryParameters(query).join(', ')}</strong>{' '}
+                {duplicateQueryParameters(query).length > 1 ? 'are' : 'is'}{' '}
+                repeated in this data source. Keep one value per parameter, or
+                add another expected data source for the additional code.
+              </p>
+            )}
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() =>
+                changeQuery(index, {
+                  ...query,
+                  filters: [...query.filters, { name: '', value: '' }],
+                })
+              }
+            >
+              Add query filter
+            </button>
+          </div>
+        ))}
+      </section>
+      {showExpectedWrites && (
+        <section className="space-y-3 border-t border-slate-200 pt-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Expected writes
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              Optional on the first run. Selecting expected resource types lets
+              Data Accuracy measure whether the agent wrote them. One entry per
+              type is the baseline: at least one matching resource earns full
+              credit for that type; extra resources are not penalized.
+            </p>
+          </div>
+          <details>
+            <summary className="cursor-pointer text-xs font-semibold text-cyan-800">
+              About expected writes
+            </summary>
+            <aside className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm leading-relaxed text-cyan-950">
+              <p>
+                You can skip this before the first run, discover what the agent
+                actually created, then set those types as the gold bundle from
+                the run details. Edit the bundle later as the scenario changes.
+                Data Accuracy is only one part of the overall score; query and
+                response scores are evaluated independently.
+              </p>
+            </aside>
+          </details>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {resourceTypes
+              .filter(([type]) => type !== 'Patient')
+              .map(([type, label]) => (
+                <label
+                  key={type}
+                  className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-xs text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={value.expectedWriteTypes.includes(type)}
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        expectedWriteTypes: event.target.checked
+                          ? [...value.expectedWriteTypes, type]
+                          : value.expectedWriteTypes.filter(
+                              (current) => current !== type,
+                            ),
+                      })
+                    }
+                  />
+                  {label} ({type})
+                </label>
+              ))}
+          </div>
+          {value.expectedWriteTypes.length > 0 && (
+            <p className="text-xs font-medium text-slate-700">
+              Agent must create at least one of each:{' '}
+              {value.expectedWriteTypes.join(', ')}
+            </p>
+          )}
+        </section>
+      )}
+    </fieldset>
+  );
+};
+
+export default ScenarioScoringEditor;

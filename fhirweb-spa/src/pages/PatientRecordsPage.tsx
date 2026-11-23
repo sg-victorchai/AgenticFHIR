@@ -610,13 +610,17 @@ const AiProvenancePanel: React.FC<{ resource: any }> = ({ resource }) => {
   );
 
   return (
-    <div className="mt-3 rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+    <div className="mt-3 w-full min-w-0 rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
       <p className="font-semibold">AI-generated resource provenance</p>
       <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label} className="min-w-0 py-1">
             <dt className="font-medium text-red-800">{label}</dt>
-            <dd className="break-words text-red-900">{String(value)}</dd>
+            <dd
+              className={`${label === 'Mission ID' ? 'break-all' : 'break-words'} min-w-0 text-red-900`}
+            >
+              {String(value)}
+            </dd>
           </div>
         ))}
       </dl>
@@ -1744,6 +1748,7 @@ const PatientRecordsPage: React.FC = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ── Agent conversation modal state ──
   const [showAgentModal, setShowAgentModal] = useState(false);
@@ -1804,6 +1809,8 @@ const PatientRecordsPage: React.FC = () => {
   const [harmonizerIgnoreReason, setHarmonizerIgnoreReason] = useState('');
   const [harmonizerReviewActionError, setHarmonizerReviewActionError] =
     useState<string | null>(null);
+  const [showRevisionFeedback, setShowRevisionFeedback] = useState(false);
+  const [revisionFeedback, setRevisionFeedback] = useState('');
   const [pendingHarmonizerMissions, setPendingHarmonizerMissions] = useState<
     HarmonizerPendingMission[]
   >([]);
@@ -2425,13 +2432,11 @@ const PatientRecordsPage: React.FC = () => {
     }
   };
 
-  const rejectHarmonizerReview = async (mode: 'REVISE' | 'DISCARD') => {
+  const submitHarmonizerRejection = async (
+    mode: 'REVISE' | 'DISCARD',
+    instructions: string,
+  ) => {
     if (!noteUploadJobId) return;
-    const instructions =
-      mode === 'REVISE'
-        ? window.prompt('Describe the changes required:', '')?.trim()
-        : 'Discard this document import.';
-    if (mode === 'REVISE' && !instructions) return;
     setHarmonizerReviewActionError(null);
     try {
       await harmonizerReviewService.reject(
@@ -2454,6 +2459,15 @@ const PatientRecordsPage: React.FC = () => {
         error?.message || 'Unable to submit the review decision.',
       );
     }
+  };
+
+  const rejectHarmonizerReview = async (mode: 'REVISE' | 'DISCARD') => {
+    if (mode === 'REVISE') {
+      setRevisionFeedback('');
+      setShowRevisionFeedback(true);
+      return;
+    }
+    await submitHarmonizerRejection(mode, 'Discard this document import.');
   };
 
   const pollHarmonizerJobStatus = async (
@@ -2891,7 +2905,7 @@ const PatientRecordsPage: React.FC = () => {
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const query = searchInput.trim();
-    if (query.length < 6) return;
+    if (query.length < 3) return;
     setIsSearching(true);
     setSearchError(null);
     setShowSearchResults(true);
@@ -2940,7 +2954,11 @@ const PatientRecordsPage: React.FC = () => {
     setSearchResults(null);
     setSearchError(null);
     setShowSearchResults(false);
-    setShowGlobalSearch(false);
+  };
+
+  const toggleGlobalSearch = () => {
+    clearSearch();
+    setShowGlobalSearch((visible) => !visible);
   };
 
   useEffect(() => {
@@ -3496,7 +3514,7 @@ const PatientRecordsPage: React.FC = () => {
                     <React.Fragment key={cond.id}>
                       <tr
                         id={`record-${cond.id}`}
-                        className={`cursor-pointer transition-colors ${highlightId === cond.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        className={`cursor-pointer transition-colors ${expandedId === cond.id || highlightId === cond.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                         onClick={() => toggle(cond.id)}
                       >
                         <TD>{fmt(cond.onsetDateTime || cond.recordedDate)}</TD>
@@ -3529,7 +3547,7 @@ const PatientRecordsPage: React.FC = () => {
                         <tr>
                           <td
                             colSpan={7}
-                            className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                            className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
                           >
                             <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                               <div>
@@ -3621,7 +3639,7 @@ const PatientRecordsPage: React.FC = () => {
               {conditions.map((cond: any) => (
                 <div
                   key={cond.id}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className={`border rounded-lg shadow-sm hover:shadow-md transition-shadow ${expandedId === cond.id || highlightId === cond.id ? 'bg-blue-50 border-blue-400' : 'bg-white border-gray-200'}`}
                 >
                   <div
                     onClick={() => toggle(cond.id)}
@@ -3681,7 +3699,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
                   </div>
                   {expandedId === cond.id && (
-                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                    <div className="bg-blue-50 border-t border-blue-200 px-4 py-4 text-sm text-gray-700">
                       <div className="space-y-3">
                         <div>
                           <span className="font-medium">ID:</span> {cond.id}
@@ -3815,7 +3833,7 @@ const PatientRecordsPage: React.FC = () => {
                     <React.Fragment key={enc.id}>
                       <tr
                         id={`record-${enc.id}`}
-                        className={`cursor-pointer transition-colors ${highlightId === enc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                        className={`cursor-pointer transition-colors ${expandedId === enc.id || highlightId === enc.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                         onClick={() => toggle(enc.id)}
                       >
                         <TD>
@@ -3843,7 +3861,7 @@ const PatientRecordsPage: React.FC = () => {
                         <tr>
                           <td
                             colSpan={6}
-                            className="bg-gray-50 px-6 py-4 text-sm"
+                            className="bg-blue-50 px-6 py-4 text-sm border-l-4 border-blue-400 border-b border-b-blue-200"
                           >
                             <div className="grid grid-cols-2 gap-2 text-gray-700">
                               <div>
@@ -3903,7 +3921,7 @@ const PatientRecordsPage: React.FC = () => {
               {encounters.map((enc: any) => (
                 <div
                   key={enc.id}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className={`border rounded-lg shadow-sm hover:shadow-md transition-shadow ${expandedId === enc.id || highlightId === enc.id ? 'bg-blue-50 border-blue-400' : 'bg-white border-gray-200'}`}
                 >
                   <div
                     onClick={() => toggle(enc.id)}
@@ -3953,7 +3971,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
                   </div>
                   {expandedId === enc.id && (
-                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                    <div className="bg-blue-50 border-t border-blue-200 px-4 py-4 text-sm text-gray-700">
                       <div className="space-y-3">
                         <div>
                           <span className="font-medium">Encounter ID:</span>{' '}
@@ -4089,7 +4107,7 @@ const PatientRecordsPage: React.FC = () => {
                       <React.Fragment key={obs.id}>
                         <tr
                           id={`record-${obs.id}`}
-                          className={`cursor-pointer transition-colors ${expandedId === obs.id ? 'bg-blue-50 border-l-4 border-blue-400' : highlightId === obs.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          className={`cursor-pointer transition-colors ${expandedId === obs.id || highlightId === obs.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                           onClick={() => toggle(obs.id)}
                         >
                           <TD>
@@ -4269,7 +4287,7 @@ const PatientRecordsPage: React.FC = () => {
               {observations.map((obs: any) => (
                 <div
                   key={obs.id}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className={`border rounded-lg shadow-sm hover:shadow-md transition-shadow ${expandedId === obs.id || highlightId === obs.id ? 'bg-blue-50 border-blue-400' : 'bg-white border-gray-200'}`}
                 >
                   <div
                     onClick={() => toggle(obs.id)}
@@ -4294,7 +4312,6 @@ const PatientRecordsPage: React.FC = () => {
                         <div className="mt-1">
                           <StatusBadge status={obs.status} />
                         </div>
-                        <AiProvenancePanel resource={obs} />
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">
@@ -4334,7 +4351,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
                   </div>
                   {expandedId === obs.id && (
-                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                    <div className="bg-blue-50 border-t border-blue-200 px-4 py-4 text-sm text-gray-700">
                       <div className="space-y-3">
                         <div>
                           <span className="font-medium">ID:</span> {obs.id}
@@ -4378,6 +4395,7 @@ const PatientRecordsPage: React.FC = () => {
                           {obs.note?.[0]?.text || '—'}
                         </div>
                       </div>
+                      <AiProvenancePanel resource={obs} />
                     </div>
                   )}
                 </div>
@@ -4448,7 +4466,7 @@ const PatientRecordsPage: React.FC = () => {
                   <React.Fragment key={sr.id}>
                     <tr
                       id={`record-${sr.id}`}
-                      className={`cursor-pointer transition-colors ${highlightId === sr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      className={`cursor-pointer transition-colors ${expandedId === sr.id || highlightId === sr.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                       onClick={() => toggle(sr.id)}
                     >
                       <TD>{fmt(sr.authoredOn)}</TD>
@@ -4473,7 +4491,7 @@ const PatientRecordsPage: React.FC = () => {
                       <tr>
                         <td
                           colSpan={7}
-                          className="bg-gray-50 px-6 py-4 text-sm"
+                          className="bg-blue-50 px-6 py-4 text-sm border-l-4 border-blue-400 border-b border-b-blue-200"
                         >
                           <div className="grid grid-cols-2 gap-2 text-gray-700">
                             <div>
@@ -4570,7 +4588,7 @@ const PatientRecordsPage: React.FC = () => {
                   <React.Fragment key={dr.id}>
                     <tr
                       id={`record-${dr.id}`}
-                      className={`cursor-pointer transition-colors ${expandedId === dr.id ? 'bg-blue-50 border-l-4 border-blue-400' : highlightId === dr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      className={`cursor-pointer transition-colors ${expandedId === dr.id || highlightId === dr.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                       onClick={() => toggle(dr.id)}
                     >
                       <TD>{fmt(dr.effectiveDateTime || dr.issued)}</TD>
@@ -4707,7 +4725,7 @@ const PatientRecordsPage: React.FC = () => {
                       <React.Fragment key={mr.id}>
                         <tr
                           id={`record-${mr.id}`}
-                          className={`cursor-pointer transition-colors ${highlightId === mr.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          className={`cursor-pointer transition-colors ${expandedId === mr.id || highlightId === mr.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                           onClick={() => toggle(mr.id)}
                         >
                           <TD>{fmt(mr.authoredOn)}</TD>
@@ -4744,7 +4762,7 @@ const PatientRecordsPage: React.FC = () => {
                           <tr>
                             <td
                               colSpan={7}
-                              className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                              className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
                             >
                               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                                 <div>
@@ -4876,8 +4894,8 @@ const PatientRecordsPage: React.FC = () => {
                   <div
                     key={mr.id}
                     className={`rounded-lg border transition-all cursor-pointer ${
-                      expandedId === mr.id
-                        ? 'bg-amber-50 border-amber-300 shadow-md'
+                      expandedId === mr.id || highlightId === mr.id
+                        ? 'bg-blue-50 border-blue-400 shadow-md'
                         : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
                     }`}
                     onClick={() => toggle(mr.id)}
@@ -4946,7 +4964,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
 
                     {expandedId === mr.id && (
-                      <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3 text-sm">
+                      <div className="bg-blue-50 border-t border-blue-200 p-4 space-y-3 text-sm">
                         <div>
                           <span className="font-medium text-gray-700">ID:</span>
                           <p className="text-gray-600">{mr.id || '—'}</p>
@@ -5130,7 +5148,7 @@ const PatientRecordsPage: React.FC = () => {
                       <React.Fragment key={md.id}>
                         <tr
                           id={`record-${md.id}`}
-                          className={`cursor-pointer transition-colors ${highlightId === md.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          className={`cursor-pointer transition-colors ${expandedId === md.id || highlightId === md.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                           onClick={() => toggle(md.id)}
                         >
                           <TD>{fmt(md.whenHandedOver || md.whenPrepared)}</TD>
@@ -5156,7 +5174,7 @@ const PatientRecordsPage: React.FC = () => {
                           <tr>
                             <td
                               colSpan={6}
-                              className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                              className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
                             >
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
@@ -5188,8 +5206,8 @@ const PatientRecordsPage: React.FC = () => {
                   <div
                     key={md.id}
                     className={`rounded-lg border transition-all cursor-pointer ${
-                      expandedId === md.id
-                        ? 'bg-amber-50 border-amber-300 shadow-md'
+                      expandedId === md.id || highlightId === md.id
+                        ? 'bg-blue-50 border-blue-400 shadow-md'
                         : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
                     }`}
                     onClick={() => toggle(md.id)}
@@ -5230,7 +5248,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
 
                     {expandedId === md.id && (
-                      <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3 text-sm">
+                      <div className="bg-blue-50 border-t border-blue-200 p-4 space-y-3 text-sm">
                         <div>
                           <span className="font-medium text-gray-700">ID:</span>
                           <p className="text-gray-600">{md.id}</p>
@@ -5317,7 +5335,7 @@ const PatientRecordsPage: React.FC = () => {
                       <React.Fragment key={ms.id}>
                         <tr
                           id={`record-${ms.id}`}
-                          className={`cursor-pointer transition-colors ${highlightId === ms.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          className={`cursor-pointer transition-colors ${expandedId === ms.id || highlightId === ms.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                           onClick={() => toggle(ms.id)}
                         >
                           <TD>{fmt(ms.dateAsserted)}</TD>
@@ -5343,7 +5361,7 @@ const PatientRecordsPage: React.FC = () => {
                           <tr>
                             <td
                               colSpan={6}
-                              className="bg-gray-50 px-6 py-4 text-sm text-gray-700"
+                              className="bg-blue-50 px-6 py-4 text-sm text-gray-700 border-l-4 border-blue-400 border-b border-b-blue-200"
                             >
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
@@ -5371,8 +5389,8 @@ const PatientRecordsPage: React.FC = () => {
                   <div
                     key={ms.id}
                     className={`rounded-lg border transition-all cursor-pointer ${
-                      expandedId === ms.id
-                        ? 'bg-amber-50 border-amber-300 shadow-md'
+                      expandedId === ms.id || highlightId === ms.id
+                        ? 'bg-blue-50 border-blue-400 shadow-md'
                         : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
                     }`}
                     onClick={() => toggle(ms.id)}
@@ -5417,7 +5435,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
 
                     {expandedId === ms.id && (
-                      <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3 text-sm">
+                      <div className="bg-blue-50 border-t border-blue-200 p-4 space-y-3 text-sm">
                         <div>
                           <span className="font-medium text-gray-700">ID:</span>
                           <p className="text-gray-600">{ms.id}</p>
@@ -5532,7 +5550,7 @@ const PatientRecordsPage: React.FC = () => {
                   <React.Fragment key={proc.id}>
                     <tr
                       id={`record-${proc.id}`}
-                      className={`cursor-pointer transition-colors ${highlightId === proc.id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                      className={`cursor-pointer transition-colors ${expandedId === proc.id || highlightId === proc.id ? 'bg-blue-50 border-l-4 border-blue-400' : 'hover:bg-gray-50'}`}
                       onClick={() => toggle(proc.id)}
                     >
                       <TD>
@@ -5572,7 +5590,7 @@ const PatientRecordsPage: React.FC = () => {
                       <tr>
                         <td
                           colSpan={7}
-                          className="bg-gray-50 px-6 py-4 text-sm"
+                          className="bg-blue-50 px-6 py-4 text-sm border-l-4 border-blue-400 border-b border-b-blue-200"
                         >
                           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
                             <div>
@@ -5775,10 +5793,10 @@ const PatientRecordsPage: React.FC = () => {
               <div
                 key={cp.id}
                 id={`record-${cp.id}`}
-                className={`bg-white rounded-lg shadow-sm border overflow-hidden cursor-pointer transition-colors ${
-                  highlightId === cp.id
-                    ? 'border-amber-400 bg-amber-50'
-                    : 'border-gray-200'
+                className={`rounded-lg shadow-sm border overflow-hidden cursor-pointer transition-colors ${
+                  expandedId === cp.id || highlightId === cp.id
+                    ? 'border-blue-400 bg-blue-50'
+                    : 'border-gray-200 bg-white'
                 }`}
                 onClick={() => toggle(cp.id)}
               >
@@ -5837,7 +5855,7 @@ const PatientRecordsPage: React.FC = () => {
                   <ExpandToggle open={expandedId === cp.id} />
                 </div>
                 {expandedId === cp.id && (
-                  <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
+                  <div className="border-t border-blue-200 px-6 py-4 bg-blue-50">
                     {cp.description && (
                       <div className="mb-5">
                         <CarePlanDisplay
@@ -5867,6 +5885,64 @@ const PatientRecordsPage: React.FC = () => {
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
+      {showRevisionFeedback && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget)
+              setShowRevisionFeedback(false);
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="revision-feedback-title"
+            className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const instructions = revisionFeedback.trim();
+              if (!instructions) return;
+              setShowRevisionFeedback(false);
+              void submitHarmonizerRejection('REVISE', instructions);
+            }}
+          >
+            <h2
+              id="revision-feedback-title"
+              className="text-base font-semibold text-slate-900"
+            >
+              Request changes
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Describe what should be changed in the generated resources.
+            </p>
+            <textarea
+              autoFocus
+              required
+              rows={5}
+              value={revisionFeedback}
+              onChange={(event) => setRevisionFeedback(event.target.value)}
+              className="mt-4 w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRevisionFeedback(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!revisionFeedback.trim() || isNoteUploadPolling}
+                className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50"
+              >
+                Submit changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
@@ -6006,7 +6082,7 @@ const PatientRecordsPage: React.FC = () => {
                     <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
                       <button
                         onClick={() => {
-                          setShowGlobalSearch((s) => !s);
+                          toggleGlobalSearch();
                           setShowMoreMenu(false);
                         }}
                         className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-200 last:border-b-0"
@@ -6025,7 +6101,7 @@ const PatientRecordsPage: React.FC = () => {
                             d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                           />
                         </svg>
-                        Global Search
+                        Semantic Search
                       </button>
                     </div>
                   )}
@@ -6107,9 +6183,9 @@ const PatientRecordsPage: React.FC = () => {
                   </button>
                 )}
 
-                {/* Desktop: Global Search Button */}
+                {/* Desktop: Semantic Search Button */}
                 <button
-                  onClick={() => setShowGlobalSearch((s) => !s)}
+                  onClick={toggleGlobalSearch}
                   className={`hidden md:flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                     showGlobalSearch
                       ? 'bg-blue-600 text-white border-blue-600'
@@ -6130,7 +6206,7 @@ const PatientRecordsPage: React.FC = () => {
                       d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                     />
                   </svg>
-                  Global Search
+                  Semantic Search
                 </button>
 
                 {/* Mobile: More Menu Button */}
@@ -6157,7 +6233,7 @@ const PatientRecordsPage: React.FC = () => {
                     <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
                       <button
                         onClick={() => {
-                          setShowGlobalSearch((s) => !s);
+                          toggleGlobalSearch();
                           setShowMoreMenu(false);
                         }}
                         className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-200 last:border-b-0"
@@ -6176,7 +6252,7 @@ const PatientRecordsPage: React.FC = () => {
                             d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                           />
                         </svg>
-                        Global Search
+                        Semantic Search
                       </button>
                     </div>
                   )}
@@ -6206,6 +6282,7 @@ const PatientRecordsPage: React.FC = () => {
                       <input
                         type="text"
                         placeholder='e.g. "medications for hypertension"'
+                        ref={searchInputRef}
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
                         onFocus={() => {
@@ -6218,7 +6295,11 @@ const PatientRecordsPage: React.FC = () => {
                       {searchInput && (
                         <button
                           type="button"
-                          onClick={clearSearch}
+                          aria-label="Clear search"
+                          onClick={() => {
+                            clearSearch();
+                            searchInputRef.current?.focus();
+                          }}
                           className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-lg leading-none"
                         >
                           ×
@@ -6227,7 +6308,7 @@ const PatientRecordsPage: React.FC = () => {
                     </div>
                     <button
                       type="submit"
-                      disabled={isSearching || searchInput.trim().length < 6}
+                      disabled={isSearching || searchInput.trim().length < 3}
                       className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
                     >
                       {isSearching ? 'Searching…' : 'Search'}

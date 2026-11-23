@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from './store';
+import { hasRealmRole } from './services/auth/oidc';
 import LoginPage from './pages/LoginPage';
 import RoleSelectionPage from './pages/RoleSelectionPage';
 import PatientQueuePage from './pages/PatientQueuePage';
@@ -33,6 +34,22 @@ import AuthCallbackPage from './pages/AuthCallbackPage';
 import SilentRenewPage from './pages/SilentRenewPage';
 import RoleGuard from './components/common/RoleGuard';
 import { isSMARTContext } from './services/fhir/smartClient';
+import AgentBuilderPage from './pages/AgentBuilderPage';
+import InformationPage from './pages/InformationPage';
+import DataAssetsPage from './pages/DataAssetsPage';
+
+export const AgentBuilderRoute: React.FC<{ children?: React.ReactNode }> = ({
+  children,
+}) => {
+  const { isAuthenticated, token } = useSelector(
+    (state: RootState) => state.auth,
+  );
+  return isAuthenticated && hasRealmRole(token, 'agentbuilder') ? (
+    <>{children ?? <AgentBuilderPage />}</>
+  ) : (
+    <Navigate to="/" replace />
+  );
+};
 
 const AppRoutes: React.FC = () => {
   const isAuthenticated = useSelector(
@@ -77,6 +94,19 @@ const AppRoutes: React.FC = () => {
 
           {/* Shared */}
           <Route path="/queue" element={<PatientQueuePage />} />
+          <Route
+            path="/data-assets"
+            element={
+              <AgentBuilderRoute>
+                <DataAssetsPage />
+              </AgentBuilderRoute>
+            }
+          />
+          <Route path="/agent-builder" element={<AgentBuilderRoute />} />
+          <Route path="/about" element={<InformationPage kind="about" />} />
+          <Route path="/privacy" element={<InformationPage kind="privacy" />} />
+          <Route path="/terms" element={<InformationPage kind="terms" />} />
+          <Route path="/contact" element={<InformationPage kind="contact" />} />
           <Route path="/webhooks" element={<WebhookManagementPage />} />
           <Route path="/events" element={<EventMonitorPage />} />
           <Route path="/patient-portal" element={<PatientPortalPage />} />

@@ -8,6 +8,7 @@ import {
 } from '../../services/fhir/client';
 import { CarePlan } from 'fhir/r5';
 import { getOperationOutcomeMessage } from '../../utils/fhirError';
+import ConfirmationDialog from '../../components/common/ConfirmationDialog';
 
 const CarePlanCrudPage: React.FC = () => {
   const { id: patientId, resourceId } = useParams<{
@@ -20,6 +21,7 @@ const CarePlanCrudPage: React.FC = () => {
   // Track whether we're in view mode or edit mode
   // Default to edit mode for new resources, view mode for existing ones
   const [isEditMode, setIsEditMode] = useState(!resourceId);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   // State for form
   const [formData, setFormData] = useState<Partial<CarePlan>>({
@@ -126,12 +128,7 @@ const CarePlanCrudPage: React.FC = () => {
 
   // Delete handler
   const handleDelete = async () => {
-    if (
-      !resourceId ||
-      !window.confirm('Are you sure you want to delete this care plan?')
-    ) {
-      return;
-    }
+    if (!resourceId) return;
 
     try {
       await deleteResource({
@@ -252,7 +249,7 @@ const CarePlanCrudPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirmation(true)}
                 disabled={isDeleting}
                 className="ml-3 px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
               >
@@ -415,7 +412,7 @@ const CarePlanCrudPage: React.FC = () => {
               {resourceId && isEditMode && (
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteConfirmation(true)}
                   disabled={isDeleting}
                   className="ml-3 px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                 >
@@ -437,6 +434,17 @@ const CarePlanCrudPage: React.FC = () => {
             </button>
           </div>
         </form>
+      )}
+      {showDeleteConfirmation && (
+        <ConfirmationDialog
+          title="Delete care plan?"
+          message="This will permanently delete this care plan from the patient record."
+          confirmLabel="Delete care plan"
+          tone="danger"
+          busy={isDeleting}
+          onCancel={() => setShowDeleteConfirmation(false)}
+          onConfirm={handleDelete}
+        />
       )}
     </div>
   );

@@ -13,6 +13,7 @@ import {
 } from '../../services/fhir/client';
 import { Encounter, Practitioner } from 'fhir/r5';
 import { getOperationOutcomeMessage } from '../../utils/fhirError';
+import ConfirmationDialog from '../../components/common/ConfirmationDialog';
 
 // Interface for form group structure
 interface FormGroup {
@@ -259,6 +260,7 @@ const EncounterCrudPage: React.FC = () => {
 
   // State to control view/edit mode - new records start in edit mode, existing in view mode
   const [isEditMode, setIsEditMode] = useState<boolean>(!resourceId);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   // State for form groups - using the required 6 groups for Encounter
   const [formGroups] = useState<FormGroup[]>([
@@ -1108,12 +1110,7 @@ const EncounterCrudPage: React.FC = () => {
 
   // Delete handler
   const handleDelete = async () => {
-    if (
-      !resourceId ||
-      !window.confirm('Are you sure you want to delete this encounter?')
-    ) {
-      return;
-    }
+    if (!resourceId) return;
 
     try {
       await deleteResource({
@@ -2729,7 +2726,7 @@ const EncounterCrudPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirmation(true)}
                 disabled={isDeleting}
                 className="ml-3 px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
               >
@@ -2772,7 +2769,7 @@ const EncounterCrudPage: React.FC = () => {
               {resourceId && (
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteConfirmation(true)}
                   disabled={isDeleting}
                   className="ml-3 px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                 >
@@ -2793,6 +2790,17 @@ const EncounterCrudPage: React.FC = () => {
             </button>
           </div>
         </form>
+      )}
+      {showDeleteConfirmation && (
+        <ConfirmationDialog
+          title="Delete encounter?"
+          message="This will permanently delete this encounter from the patient record."
+          confirmLabel="Delete encounter"
+          tone="danger"
+          busy={isDeleting}
+          onCancel={() => setShowDeleteConfirmation(false)}
+          onConfirm={handleDelete}
+        />
       )}
     </div>
   );

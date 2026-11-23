@@ -7,6 +7,7 @@ import {
   loginSuccess,
 } from '../../store/slices/authSlice';
 import { getOidcUserName, oidcUserManager } from '../../services/auth/oidc';
+import SessionTimeoutManager from './SessionTimeoutManager';
 
 const OidcAuthBootstrap: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -58,16 +59,35 @@ const OidcAuthBootstrap: React.FC<{ children: React.ReactNode }> = ({
     const handleUserUnloaded = () => {
       if (mounted) dispatch(loginFailure('Not authenticated'));
     };
-    const handleTokenExpired = () => {
+    const forceLogout = () => {
       void oidcUserManager.removeUser();
       if (mounted) {
         dispatch(loginFailure('Session expired. Please sign in again.'));
         window.location.assign('/smartapp/login');
       }
     };
+    // Inactivity sign-out is handled by SessionTimeoutManager. A token expiry
+    // or a failed background renewal while the user is active should retry
+    // renewal and only sign out if the identity provider session is gone.
+    let renewing = false;
+    const retryRenewal = async () => {
+      if (renewing) return;
+      renewing = true;
+      try {
+        await oidcUserManager.signinSilent();
+      } catch (error) {
+        console.error('OIDC session renewal failed:', error);
+        forceLogout();
+      } finally {
+        renewing = false;
+      }
+    };
+    const handleTokenExpired = () => {
+      void retryRenewal();
+    };
     const handleSilentRenewError = (error: Error) => {
-      console.error('OIDC silent renewal failed:', error);
-      handleTokenExpired();
+      console.warn('OIDC background renewal failed, retrying:', error);
+      void retryRenewal();
     };
 
     oidcUserManager.events.addUserLoaded(handleUserLoaded);
@@ -86,7 +106,12 @@ const OidcAuthBootstrap: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [dispatch]);
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <SessionTimeoutManager />
+    </>
+  );
 };
 
 export default OidcAuthBootstrap;

@@ -33,6 +33,24 @@ export const oidcUserManager = new UserManager(oidcSettings);
 export const getOidcUser = (): Promise<User | null> =>
   oidcUserManager.getUser();
 
+export const hasRealmRole = (
+  accessToken: string | null,
+  role: string,
+): boolean => {
+  if (!accessToken) return false;
+  try {
+    const payload = accessToken.split('.')[1];
+    if (!payload) return false;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(normalized)) as {
+      realm_access?: { roles?: string[] };
+    };
+    return claims.realm_access?.roles?.includes(role) ?? false;
+  } catch {
+    return false;
+  }
+};
+
 const isAccessTokenExpired = (accessToken: string): boolean => {
   try {
     const payload = accessToken.split('.')[1];

@@ -4,12 +4,15 @@ import {
   Webhook,
   CreateWebhookRequest,
 } from '../services/fhir/webhookService';
+import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
 export const WebhookManagementPage: React.FC = () => {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [webhookToDelete, setWebhookToDelete] = useState<string | null>(null);
+  const [isDeletingWebhook, setIsDeletingWebhook] = useState(false);
 
   // Form state
   const [callbackUrl, setCallbackUrl] = useState('');
@@ -105,17 +108,18 @@ export const WebhookManagementPage: React.FC = () => {
     }
   };
 
-  const handleDeleteWebhook = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this webhook?')) {
-      return;
-    }
-
+  const handleDeleteWebhook = async () => {
+    if (!webhookToDelete) return;
+    setIsDeletingWebhook(true);
     try {
-      await webhookService.deleteWebhook(id);
+      await webhookService.deleteWebhook(webhookToDelete);
       await loadWebhooks();
+      setWebhookToDelete(null);
       alert('Webhook deleted successfully!');
     } catch (err) {
       alert(`Failed to delete webhook: ${(err as Error).message}`);
+    } finally {
+      setIsDeletingWebhook(false);
     }
   };
 
@@ -337,7 +341,7 @@ export const WebhookManagementPage: React.FC = () => {
                       {webhook.enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button
-                      onClick={() => handleDeleteWebhook(webhook.id)}
+                      onClick={() => setWebhookToDelete(webhook.id)}
                       className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm font-medium hover:bg-red-200 transition"
                     >
                       Delete
@@ -374,6 +378,17 @@ export const WebhookManagementPage: React.FC = () => {
           </li>
         </ul>
       </div>
+      {webhookToDelete && (
+        <ConfirmationDialog
+          title="Delete webhook?"
+          message="This webhook will stop receiving events and cannot be restored."
+          confirmLabel="Delete webhook"
+          tone="danger"
+          busy={isDeletingWebhook}
+          onCancel={() => setWebhookToDelete(null)}
+          onConfirm={handleDeleteWebhook}
+        />
+      )}
     </div>
   );
 };

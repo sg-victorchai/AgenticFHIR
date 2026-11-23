@@ -4,15 +4,18 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { logout } from '../../store/slices/authSlice';
 import { clearRole } from '../../store/slices/uiSlice';
-import { signOut } from '../../services/auth/oidc';
+import { hasRealmRole, signOut } from '../../services/auth/oidc';
 
 const Header: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useSelector(
+  const { isAuthenticated, user, token } = useSelector(
     (state: RootState) => state.auth,
   );
+  const canUseAgentBuilder =
+    isAuthenticated && hasRealmRole(token, 'agentbuilder');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -33,7 +36,7 @@ const Header: React.FC = () => {
               to="/"
               className="text-white text-lg md:text-xl font-bold whitespace-nowrap"
             >
-              HealthConnect
+              AgentiFHIR Platform
             </Link>
             {isAuthenticated && (
               <span className="text-white text-xs md:text-sm font-medium truncate">
@@ -50,32 +53,28 @@ const Header: React.FC = () => {
                   Home
                 </Link>
               </li>
-              <li>
-                <Link
-                  to="/events"
-                  className="hover:text-blue-200 transition-colors"
-                >
-                  Events
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/webhooks"
-                  className="hover:text-blue-200 transition-colors"
-                >
-                  Webhooks
-                </Link>
-              </li>
+              {canUseAgentBuilder && (
+                <li>
+                  <Link
+                    to="/data-assets"
+                    className="hover:text-blue-200 transition-colors"
+                  >
+                    Data Foundry Service
+                  </Link>
+                </li>
+              )}
+              {canUseAgentBuilder && (
+                <li>
+                  <Link
+                    to="/agent-builder"
+                    className="hover:text-blue-200 transition-colors"
+                  >
+                    Agent Marketplace
+                  </Link>
+                </li>
+              )}
               {isAuthenticated ? (
                 <>
-                  <li>
-                    <Link
-                      to="/dashboard"
-                      className="hover:text-blue-200 transition-colors"
-                    >
-                      Dashboard
-                    </Link>
-                  </li>
                   <li>
                     <button
                       onClick={handleLogout}
@@ -83,6 +82,45 @@ const Header: React.FC = () => {
                     >
                       Logout
                     </button>
+                  </li>
+                  <li className="relative">
+                    <button
+                      type="button"
+                      aria-label="More navigation links"
+                      aria-expanded={moreMenuOpen}
+                      title="More navigation links"
+                      onClick={() => setMoreMenuOpen((open) => !open)}
+                      className="rounded p-1 hover:bg-blue-700 hover:text-blue-100"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="h-5 w-5"
+                        aria-hidden="true"
+                      >
+                        <circle cx="5" cy="12" r="1.7" />
+                        <circle cx="12" cy="12" r="1.7" />
+                        <circle cx="19" cy="12" r="1.7" />
+                      </svg>
+                    </button>
+                    {moreMenuOpen && (
+                      <div className="absolute right-0 top-full z-50 mt-2 w-40 rounded-lg bg-blue-700 py-1 shadow-lg">
+                        <Link
+                          to="/events"
+                          onClick={() => setMoreMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-white hover:bg-blue-800"
+                        >
+                          Events
+                        </Link>
+                        <Link
+                          to="/webhooks"
+                          onClick={() => setMoreMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-white hover:bg-blue-800"
+                        >
+                          Webhooks
+                        </Link>
+                      </div>
+                    )}
                   </li>
                 </>
               ) : (
@@ -133,29 +171,26 @@ const Header: React.FC = () => {
                     >
                       Home
                     </Link>
-                    <Link
-                      to="/events"
-                      onClick={() => setMenuOpen(false)}
-                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
-                    >
-                      Events
-                    </Link>
-                    <Link
-                      to="/webhooks"
-                      onClick={() => setMenuOpen(false)}
-                      className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
-                    >
-                      Webhooks
-                    </Link>
+                    {canUseAgentBuilder && (
+                      <Link
+                        to="/data-assets"
+                        onClick={() => setMenuOpen(false)}
+                        className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                      >
+                        Data Foundry Service
+                      </Link>
+                    )}
+                    {canUseAgentBuilder && (
+                      <Link
+                        to="/agent-builder"
+                        onClick={() => setMenuOpen(false)}
+                        className="px-4 py-2 text-white hover:bg-blue-800 transition-colors"
+                      >
+                        Agent Marketplace
+                      </Link>
+                    )}
                     {isAuthenticated && (
                       <>
-                        <Link
-                          to="/dashboard"
-                          onClick={() => setMenuOpen(false)}
-                          className="px-4 py-2 text-white hover:bg-blue-800 transition-colors border-t border-blue-600"
-                        >
-                          Dashboard
-                        </Link>
                         <button
                           onClick={() => {
                             setMenuOpen(false);
@@ -165,6 +200,49 @@ const Header: React.FC = () => {
                         >
                           Logout
                         </button>
+                        <button
+                          type="button"
+                          aria-label="More navigation links"
+                          aria-expanded={moreMenuOpen}
+                          onClick={() => setMoreMenuOpen((open) => !open)}
+                          className="flex w-full items-center justify-between px-4 py-2 text-left text-white hover:bg-blue-800 transition-colors"
+                        >
+                          More
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="h-5 w-5"
+                            aria-hidden="true"
+                          >
+                            <circle cx="5" cy="12" r="1.7" />
+                            <circle cx="12" cy="12" r="1.7" />
+                            <circle cx="19" cy="12" r="1.7" />
+                          </svg>
+                        </button>
+                        {moreMenuOpen && (
+                          <div className="border-t border-blue-600 py-1">
+                            <Link
+                              to="/events"
+                              onClick={() => {
+                                setMenuOpen(false);
+                                setMoreMenuOpen(false);
+                              }}
+                              className="block px-6 py-2 text-sm text-white hover:bg-blue-800"
+                            >
+                              Events
+                            </Link>
+                            <Link
+                              to="/webhooks"
+                              onClick={() => {
+                                setMenuOpen(false);
+                                setMoreMenuOpen(false);
+                              }}
+                              className="block px-6 py-2 text-sm text-white hover:bg-blue-800"
+                            >
+                              Webhooks
+                            </Link>
+                          </div>
+                        )}
                       </>
                     )}
                   </nav>
